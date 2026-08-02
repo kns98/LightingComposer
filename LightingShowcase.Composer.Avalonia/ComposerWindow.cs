@@ -636,19 +636,25 @@ internal sealed class ComposerWindow : Window
 
         try
         {
+            // Capture every Avalonia control value while still on the UI thread.
+            // The background worker must receive plain immutable data only; reading
+            // nameBox/visibleBox inside Task.Run throws "Call from invalid thread".
             ComposerTransformRequest request = ComposerTransformRequest.Parse(
                 positionX.Text, positionY.Text, positionZ.Text,
                 rotationX.Text, rotationY.Text, rotationZ.Text,
                 scaleX.Text, scaleY.Text, scaleZ.Text);
+            ComposerTransformWorkItem workItem = new(
+                id,
+                nameBox.Text ?? string.Empty,
+                visibleBox.IsChecked ?? true,
+                request);
 
             ComposerModelEvidence? beforeEvidence = session.GetModelEvidence(id);
             await StopCurrentRenderAsync();
             SetBusy(true, "Baking transform into the selected geometry…");
-            bool updated = await Task.Run(() => request.Apply(
-                session,
-                id,
-                nameBox.Text ?? string.Empty,
-                visibleBox.IsChecked ?? true), lifetimeCancellation.Token);
+            bool updated = await Task.Run(
+                () => workItem.Apply(session),
+                lifetimeCancellation.Token);
             if (!updated)
                 throw new InvalidOperationException("The selected scene node no longer exists.");
 
@@ -686,7 +692,7 @@ internal sealed class ComposerWindow : Window
         }
         catch (Exception ex)
         {
-            statusText.Text = $"Transform update failed: {ex.Message}";
+            ReportOperationFailure("Transform update failed", ex);
         }
         finally
         {
@@ -1770,6 +1776,14 @@ internal sealed class ComposerWindow : Window
         }
         if (!string.IsNullOrWhiteSpace(message))
             statusText.Text = message;
+    }
+
+    private void ReportOperationFailure(string operation, Exception exception)
+    {
+        string message = $"{operation}: {exception.Message}";
+        statusText.Text = message;
+        Trace.WriteLine($"{message}{Environment.NewLine}{exception}");
+        Console.Error.WriteLine($"{message}{Environment.NewLine}{exception}");
     }
 
     private void DisposeWindowResources()

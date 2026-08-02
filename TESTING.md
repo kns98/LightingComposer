@@ -62,3 +62,9 @@ LIGHTINGSHOWCASE_RUN_GPU_TESTS=1 dotnet test \
 ```
 
 These render the same Scene instance before and after a baked transform, assert that the Vulkan output pixels differ, and verify that Vulkan raster reports an in-place vertex refresh rather than a complete texture/pipeline rebuild when topology and materials are unchanged.
+
+## Avalonia UI-thread regression
+
+`InspectorThreadSafetyTests` verifies that the transform worker payload contains no
+Avalonia objects and that the same work item used by the Apply button can execute
+on a worker thread while modifying authoritative model geometry.
