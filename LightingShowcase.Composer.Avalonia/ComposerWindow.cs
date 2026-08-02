@@ -68,7 +68,6 @@ internal sealed class ComposerWindow : Window
     private readonly Button insertButton;
     private readonly Button saveButton;
     private readonly Button exportButton;
-    private readonly ComboBox exportFormatBox;
     private readonly Button undoButton;
     private readonly Button redoButton;
     private readonly Button duplicateButton;
@@ -123,12 +122,6 @@ internal sealed class ComposerWindow : Window
         insertButton = NewButton("Insert model…");
         saveButton = NewButton("Save scene…");
         exportButton = NewButton("Export package…");
-        exportFormatBox = new ComboBox
-        {
-            ItemsSource = SceneExportFormats.All,
-            SelectedIndex = 0,
-            MinWidth = 210
-        };
         undoButton = NewButton("Undo");
         redoButton = NewButton("Redo");
         duplicateButton = NewButton("Duplicate");
@@ -225,7 +218,7 @@ internal sealed class ComposerWindow : Window
 
         Grid toolbar = new()
         {
-            ColumnDefinitions = new ColumnDefinitions("Auto,Auto,Auto,Auto,Auto,Auto,*,Auto,Auto,Auto"),
+            ColumnDefinitions = new ColumnDefinitions("Auto,Auto,Auto,Auto,Auto,Auto,*,Auto,Auto"),
             ColumnSpacing = 8,
             Margin = new Thickness(10)
         };
@@ -243,12 +236,10 @@ internal sealed class ComposerWindow : Window
         Grid.SetColumn(redoButton, 5);
         toolbar.Children.Add(pathText);
         Grid.SetColumn(pathText, 6);
-        toolbar.Children.Add(exportFormatBox);
-        Grid.SetColumn(exportFormatBox, 7);
         toolbar.Children.Add(exportButton);
-        Grid.SetColumn(exportButton, 8);
+        Grid.SetColumn(exportButton, 7);
         toolbar.Children.Add(rendererBox);
-        Grid.SetColumn(rendererBox, 9);
+        Grid.SetColumn(rendererBox, 8);
         root.Children.Add(toolbar);
 
         Grid content = new()
@@ -618,9 +609,6 @@ internal sealed class ComposerWindow : Window
         }
     }
 
-    private SceneExportFormat SelectedExportFormat =>
-        exportFormatBox.SelectedItem as SceneExportFormat ?? SceneExportFormats.All[0];
-
     private async Task ExportPackageAsync()
     {
         if (!session.HasRenderableScene)
@@ -636,16 +624,19 @@ internal sealed class ComposerWindow : Window
 
         try
         {
+            SceneExportFormat? format = await new ExportFormatDialog().ShowDialog<SceneExportFormat?>(this);
+            if (format == null)
+                return;
+
             IReadOnlyList<IStorageFolder> folders = await StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
             {
-                Title = $"Choose parent folder for {SelectedExportFormat.DisplayName}",
+                Title = $"Choose parent folder for {format.DisplayName}",
                 AllowMultiple = false
             });
             string? parentDirectory = folders.Count == 0 ? null : folders[0].TryGetLocalPath();
             if (string.IsNullOrWhiteSpace(parentDirectory))
                 return;
 
-            SceneExportFormat format = SelectedExportFormat;
             SetBusy(true, $"Exporting {format.DisplayName} package…");
             SceneExportPackageResult result = await Task.Run(
                 () => session.ExportPackage(parentDirectory, format, lifetimeCancellation.Token),
@@ -1847,7 +1838,6 @@ internal sealed class ComposerWindow : Window
         insertButton.IsEnabled = !busy;
         saveButton.IsEnabled = !busy;
         exportButton.IsEnabled = !busy;
-        exportFormatBox.IsEnabled = !busy;
         rendererBox.IsEnabled = !busy;
         objectTree.IsEnabled = !busy;
         if (selectedObjectId.HasValue)

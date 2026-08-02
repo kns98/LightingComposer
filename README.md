@@ -160,14 +160,16 @@ See `TESTING.md` for the optional Vulkan tests.
 
 ## Self-contained scenes and portable exports
 
-`.lscene` version 10 embeds decoded RGBA texture pixels together with geometry,
-materials, lights, hierarchy, and baked transforms. Reopening the scene does not
-require the original PNG/JPEG files.
+`.lscene` version 11 embeds decoded RGBA texture pixels during normal **Save
+scene…**, together with geometry, materials, lights, hierarchy, and baked
+transforms. Reopening a normally saved scene does not require the original image
+files.
 
-Use **Export package…** to choose an export format and a parent folder. The
-composer always creates a new uniquely named directory containing the primary
-model file, companion files such as OBJ/MTL or glTF/BIN, a `textures` directory,
-and `export-manifest.json`.
+Use **Export package…** to open an explicit format-selection dialog and then
+choose a parent folder. The composer creates a new uniquely named directory.
+Export resources are external in the package root and use deterministic numbered
+names such as `res_0001.bin`, `res_0002.png`, and `res_0003.mtl`. The primary
+model keeps the composition name.
 
 Command line:
 

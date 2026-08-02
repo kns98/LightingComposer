@@ -334,9 +334,9 @@ public static class GltfSceneIO
     {
         ExportBuild build = BuildExport(scene, options?.TexturePathResolver);
         if (binary)
-            WriteGlb(build, filePath);
+            WriteGlb(build, filePath, options?.BufferFileName);
         else
-            WriteGltf(build, filePath);
+            WriteGltf(build, filePath, options?.BufferFileName);
     }
 
     private static ExportBuild BuildExport(Scene scene, Func<TextureMap, string?>? texturePathResolver)
@@ -626,9 +626,11 @@ public static class GltfSceneIO
         return new ExportBuild(root, bin.ToArray());
     }
 
-    private static void WriteGltf(ExportBuild build, string filePath)
+    private static void WriteGltf(ExportBuild build, string filePath, string? bufferFileName)
     {
-        string binName = Path.GetFileNameWithoutExtension(filePath) + ".bin";
+        string binName = string.IsNullOrWhiteSpace(bufferFileName)
+            ? Path.GetFileNameWithoutExtension(filePath) + ".bin"
+            : Path.GetFileName(bufferFileName);
         byte[] bin = build.Bin;
         Dictionary<string, object?> root = new(build.Root)
         {
@@ -639,12 +641,28 @@ public static class GltfSceneIO
         File.WriteAllBytes(Path.Combine(Path.GetDirectoryName(filePath) ?? string.Empty, binName), bin);
     }
 
-    private static void WriteGlb(ExportBuild build, string filePath)
+    private static void WriteGlb(ExportBuild build, string filePath, string? bufferFileName)
     {
-        byte[] jsonBytes = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(build.Root, JsonOptions()));
+        bool useExternalBuffer = !string.IsNullOrWhiteSpace(bufferFileName);
+        string? binName = useExternalBuffer ? Path.GetFileName(bufferFileName) : null;
+        Dictionary<string, object?> root = useExternalBuffer
+            ? new Dictionary<string, object?>(build.Root)
+            {
+                ["buffers"] = new[]
+                {
+                    new Dictionary<string, object?>
+                    {
+                        ["byteLength"] = build.Bin.Length,
+                        ["uri"] = binName
+                    }
+                }
+            }
+            : build.Root;
+
+        byte[] jsonBytes = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(root, JsonOptions()));
         jsonBytes = Pad(jsonBytes, 0x20);
-        byte[] binBytes = Pad(build.Bin, 0x00);
-        uint length = (uint)(12 + 8 + jsonBytes.Length + 8 + binBytes.Length);
+        byte[] binBytes = useExternalBuffer ? Array.Empty<byte>() : Pad(build.Bin, 0x00);
+        uint length = (uint)(12 + 8 + jsonBytes.Length + (binBytes.Length > 0 ? 8 + binBytes.Length : 0));
         using BinaryWriter writer = new(File.Create(filePath), Encoding.UTF8);
         writer.Write(GlbMagic);
         writer.Write((uint)2);
@@ -652,9 +670,18 @@ public static class GltfSceneIO
         writer.Write((uint)jsonBytes.Length);
         writer.Write(JsonChunkType);
         writer.Write(jsonBytes);
-        writer.Write((uint)binBytes.Length);
-        writer.Write(BinChunkType);
-        writer.Write(binBytes);
+        if (binBytes.Length > 0)
+        {
+            writer.Write((uint)binBytes.Length);
+            writer.Write(BinChunkType);
+            writer.Write(binBytes);
+        }
+
+        if (useExternalBuffer)
+        {
+            string outputDirectory = Path.GetDirectoryName(filePath) ?? string.Empty;
+            File.WriteAllBytes(Path.Combine(outputDirectory, binName!), build.Bin);
+        }
     }
 
     private static GltfDocument ReadDocument(string filePath)

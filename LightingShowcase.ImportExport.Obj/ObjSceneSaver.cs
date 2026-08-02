@@ -16,7 +16,9 @@ public static class ObjSceneSaver
 
         string objDirectory = Path.GetDirectoryName(fullPath) ?? Environment.CurrentDirectory;
         string objName = Path.GetFileNameWithoutExtension(fullPath);
-        string mtlFileName = objName + ".mtl";
+        string mtlFileName = string.IsNullOrWhiteSpace(options?.MaterialFileName)
+            ? objName + ".mtl"
+            : Path.GetFileName(options!.MaterialFileName!);
         string mtlPath = Path.Combine(objDirectory, mtlFileName);
 
         List<SceneObjectGroup> groups = scene.ObjectGroups.Where(g => g.Visible && g.BuildWorldTriangles().Any()).ToList();

@@ -34,6 +34,12 @@ public sealed class SceneSaveOptions
 
     /// <summary>Directory containing the primary export and related resources.</summary>
     public string? PackageDirectory { get; init; }
+
+    /// <summary>Optional package-relative name for the glTF binary buffer.</summary>
+    public string? BufferFileName { get; init; }
+
+    /// <summary>Optional package-relative name for the OBJ material library.</summary>
+    public string? MaterialFileName { get; init; }
 }
 
 public interface ISceneFormatPlugin

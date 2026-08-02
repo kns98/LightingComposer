@@ -8,11 +8,10 @@ See the repository-level `README.md` and `TESTING.md` for usage and verification
 
 ## Export package
 
-Select a format in the toolbar and choose **Export package…**. The selected
-folder is used only as the parent; the composer creates a new directory for each
-export. Textures are emitted as portable PNG files. OBJ, glTF/GLB, and Prop XML
-use relative paths to those resources. Formats that do not carry texture channels
-still receive the related textures and an export manifest beside the primary file.
+Choose **Export package…**, select the format in the dialog, and then select the
+parent folder. The composer creates a new directory for each export. Every related
+resource is external and numbered in the package root (`res_0001.ext`,
+`res_0002.ext`, and so on). Normal **Save scene…** remains self-contained.
 
 ## Save responsiveness
 

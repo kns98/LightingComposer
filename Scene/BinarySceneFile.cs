@@ -16,10 +16,19 @@ using LightingShowcase.Math3D;
 namespace LightingShowcase.SceneGraph;
 
 /// <summary>Saves and loads the compact Lighting Showcase binary scene format.</summary>
+public sealed class BinarySceneSaveOptions
+{
+    /// <summary>Embed decoded RGBA texture pixels in the scene file.</summary>
+    public bool EmbedTexturePixels { get; init; } = true;
+
+    /// <summary>Resolves a texture to a path relative to the scene file when pixels are external.</summary>
+    public Func<TextureMap, string?>? TexturePathResolver { get; init; }
+}
+
 public static class BinarySceneFile
 {
     private const string Magic = "LSCN";
-    private const int Version = 10;
+    private const int Version = 11;
 
     private enum GeometryKind : byte
     {
@@ -30,9 +39,13 @@ public static class BinarySceneFile
         Mesh = 4
     }
 
-    public static void Save(Scene scene, string filePath)
+    public static void Save(Scene scene, string filePath) =>
+        Save(scene, filePath, new BinarySceneSaveOptions());
+
+    public static void Save(Scene scene, string filePath, BinarySceneSaveOptions options)
     {
         if (scene == null) throw new ArgumentNullException(nameof(scene));
+        if (options == null) throw new ArgumentNullException(nameof(options));
         if (string.IsNullOrWhiteSpace(filePath)) throw new ArgumentException("A save path is required.", nameof(filePath));
 
         string fullPath = Path.GetFullPath(filePath);
@@ -74,7 +87,7 @@ public static class BinarySceneFile
 
                     TextureWriteTable textureTable = TextureWriteTable.Build(scene);
                     MaterialWriteTable materialTable = MaterialWriteTable.Build(scene, textureTable);
-                    WriteTextureTable(writer, textureTable);
+                    WriteTextureTable(writer, textureTable, options);
                     WriteMaterialTable(writer, materialTable, textureTable);
 
                     writer.Write(scene.Lights.Count);
@@ -658,11 +671,11 @@ public static class BinarySceneFile
             clearcoatUsesTransmissionTexture);
     }
 
-    private static void WriteTextureTable(BinaryWriter writer, TextureWriteTable textureTable)
+    private static void WriteTextureTable(BinaryWriter writer, TextureWriteTable textureTable, BinarySceneSaveOptions options)
     {
         writer.Write(textureTable.Textures.Count);
         foreach (TextureMap texture in textureTable.Textures)
-            WriteTextureRecord(writer, texture);
+            WriteTextureRecord(writer, texture, options);
     }
 
     private static TextureReadTable ReadTextureTable(BinaryReader reader, string sceneFilePath, int version)
@@ -674,12 +687,16 @@ public static class BinarySceneFile
         return new TextureReadTable(textures);
     }
 
-    private static void WriteTextureRecord(BinaryWriter writer, TextureMap texture)
+    private static void WriteTextureRecord(BinaryWriter writer, TextureMap texture, BinarySceneSaveOptions options)
     {
+        string sourcePath = options.EmbedTexturePixels
+            ? texture.SourcePath ?? string.Empty
+            : options.TexturePathResolver?.Invoke(texture) ?? texture.SourcePath ?? string.Empty;
+
         writer.Write(texture.Name ?? string.Empty);
         writer.Write(texture.Width);
         writer.Write(texture.Height);
-        writer.Write(texture.SourcePath ?? string.Empty);
+        writer.Write(sourcePath);
         writer.Write(texture.IsBuiltInChecker);
         writer.Write((int)texture.WrapU);
         writer.Write((int)texture.WrapV);
@@ -689,12 +706,13 @@ public static class BinarySceneFile
         writer.Write(texture.ScaleV);
         writer.Write(texture.Rotation);
 
-        // Version 10 embeds the decoded RGBA pixels for every texture.  The
-        // complete scene body is already Deflate-compressed, so this remains
-        // compact while removing all runtime dependencies on source image files.
-        byte[] rgba = texture.ToRgbaBytes();
-        writer.Write(rgba.Length);
-        writer.Write(rgba);
+        writer.Write(options.EmbedTexturePixels);
+        if (options.EmbedTexturePixels)
+        {
+            byte[] rgba = texture.ToRgbaBytes();
+            writer.Write(rgba.Length);
+            writer.Write(rgba);
+        }
     }
 
     private static TextureMap? ReadTextureRecord(BinaryReader reader, string sceneFilePath, int version)
@@ -720,6 +738,24 @@ public static class BinarySceneFile
             scaleU = reader.ReadDouble();
             scaleV = reader.ReadDouble();
             rotation = reader.ReadDouble();
+        }
+
+        if (version >= 11)
+        {
+            bool embeddedPixels = reader.ReadBoolean();
+            if (!embeddedPixels)
+                return ResolveTexture(name, width, height, sourcePath, checker, sceneFilePath, wrapU, wrapV, offsetU, offsetV, scaleU, scaleV, rotation);
+
+            int expectedLength = checked(width * height * 4);
+            int embeddedLength = reader.ReadInt32();
+            if (embeddedLength != expectedLength)
+                throw new InvalidDataException($"Embedded texture '{name}' has {embeddedLength} bytes; expected {expectedLength}.");
+            byte[] rgba = reader.ReadBytes(embeddedLength);
+            if (rgba.Length != embeddedLength)
+                throw new EndOfStreamException($"Embedded texture '{name}' ended before all pixel bytes were read.");
+
+            TextureMap embedded = TextureMap.FromRgbaBytes(name, width, height, rgba, sourcePath, checker);
+            return ApplyTextureMetadata(embedded, wrapU, wrapV, offsetU, offsetV, scaleU, scaleV, rotation);
         }
 
         if (version >= 10)

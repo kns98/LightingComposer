@@ -1,5 +1,3 @@
-using System.Text.Json;
-
 namespace LightingShowcase.SceneGraph;
 
 /// <summary>One format/variant offered by the portable export workflow.</summary>
@@ -31,7 +29,7 @@ public static class SceneExportFormats
         new("fbx-binary", "Binary FBX (.fbx)", ".fbx", "binary"),
         new("fbx-ascii", "ASCII FBX (.fbx)", ".fbx", "ascii"),
         new("gltf", "glTF JSON (.gltf)", ".gltf", "gltf"),
-        new("glb", "GLB binary (.glb)", ".glb", "glb")
+        new("glb", "GLB (.glb with external resources)", ".glb", "glb")
     ];
 
     public static SceneExportFormat Find(string id) =>
@@ -68,39 +66,41 @@ public sealed class SceneExportPackageService
         string safeBaseName = SanitizeFileName(baseName, "scene");
         string directory = CreateUniqueDirectory(parent, $"{safeBaseName}-{format.Id}");
         string primaryPath = Path.Combine(directory, safeBaseName + format.Extension);
+        ResourceNameAllocator resourceNames = new();
 
-        // Native .lscene/.lsb files already embed decoded texture resources.
-        // External PNGs are only required for interchange formats.
-        IReadOnlyList<TextureMap> textures = format.IsNativeScene
-            ? Array.Empty<TextureMap>()
-            : SceneTextureResources.Enumerate(scene);
+        // Allocate format-specific companion resources before textures so the
+        // numbering is deterministic and every non-primary asset follows the
+        // res_0001.ext convention.
+        string? materialFileName = string.Equals(format.Id, "obj", StringComparison.OrdinalIgnoreCase)
+            ? resourceNames.Next(".mtl")
+            : null;
+        string? bufferFileName =
+            string.Equals(format.Id, "gltf", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(format.Id, "glb", StringComparison.OrdinalIgnoreCase)
+                ? resourceNames.Next(".bin")
+                : null;
+
+        IReadOnlyList<TextureMap> textures = SceneTextureResources.Enumerate(scene);
         Dictionary<TextureMap, string> relativeTexturePaths = new(ReferenceEqualityComparer.Instance);
         List<string> textureFiles = new();
-        if (textures.Count > 0)
+        foreach (TextureMap texture in textures)
         {
-            string textureDirectory = Path.Combine(directory, "textures");
-            Directory.CreateDirectory(textureDirectory);
-            HashSet<string> usedNames = new(StringComparer.OrdinalIgnoreCase);
-            for (int i = 0; i < textures.Count; i++)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                TextureMap texture = textures[i];
-                string? preferred = Path.GetFileNameWithoutExtension(texture.SourcePath);
-                if (string.IsNullOrWhiteSpace(preferred))
-                    preferred = texture.Name;
-                string fileName = UniqueFileName(SanitizeFileName(preferred, $"texture-{i + 1:000}"), usedNames) + ".png";
-                string absolutePath = Path.Combine(textureDirectory, fileName);
-                texture.SavePng(absolutePath);
-                string relativePath = Path.Combine("textures", fileName).Replace('\\', '/');
-                relativeTexturePaths[texture] = relativePath;
-                textureFiles.Add(relativePath);
-            }
+            cancellationToken.ThrowIfCancellationRequested();
+            string fileName = resourceNames.Next(TextureExtension(texture));
+            string absolutePath = Path.Combine(directory, fileName);
+            texture.SavePng(absolutePath);
+            relativeTexturePaths[texture] = fileName;
+            textureFiles.Add(fileName);
         }
 
         cancellationToken.ThrowIfCancellationRequested();
         if (format.IsNativeScene)
         {
-            BinarySceneFile.Save(scene, primaryPath);
+            BinarySceneFile.Save(scene, primaryPath, new BinarySceneSaveOptions
+            {
+                EmbedTexturePixels = false,
+                TexturePathResolver = texture => relativeTexturePaths.TryGetValue(texture, out string? relative) ? relative : null
+            });
         }
         else
         {
@@ -108,29 +108,13 @@ public sealed class SceneExportPackageService
             {
                 Variant = format.Variant,
                 PackageDirectory = directory,
-                TexturePathResolver = texture => relativeTexturePaths.TryGetValue(texture, out string? relative) ? relative : null
+                TexturePathResolver = texture => relativeTexturePaths.TryGetValue(texture, out string? relative) ? relative : null,
+                BufferFileName = bufferFileName,
+                MaterialFileName = materialFileName
             });
         }
 
         cancellationToken.ThrowIfCancellationRequested();
-        string[] filesBeforeManifest = Directory.EnumerateFiles(directory, "*", SearchOption.AllDirectories)
-            .Select(path => Path.GetRelativePath(directory, path).Replace('\\', '/'))
-            .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-
-        string manifestPath = Path.Combine(directory, "export-manifest.json");
-        File.WriteAllText(manifestPath, JsonSerializer.Serialize(new
-        {
-            format = format.Id,
-            formatName = format.DisplayName,
-            primaryFile = Path.GetFileName(primaryPath),
-            textureFiles,
-            files = filesBeforeManifest,
-            note = format.IsNativeScene
-                ? "Texture resources are embedded in the native scene file."
-                : "Textures are included for portability. Formats without texture channels retain geometry and include the texture files as related resources."
-        }, new JsonSerializerOptions { WriteIndented = true }));
-
         string[] allFiles = Directory.EnumerateFiles(directory, "*", SearchOption.AllDirectories)
             .Select(path => Path.GetRelativePath(directory, path).Replace('\\', '/'))
             .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
@@ -139,20 +123,19 @@ public sealed class SceneExportPackageService
         return new SceneExportPackageResult(directory, primaryPath, allFiles, textureFiles);
     }
 
+    private static string TextureExtension(TextureMap texture)
+    {
+        // TextureMap currently exposes decoded RGBA pixels, so PNG is the
+        // lossless portable representation regardless of the original source.
+        return ".png";
+    }
+
     private static string CreateUniqueDirectory(string parent, string preferredName)
     {
         string candidate = Path.Combine(parent, preferredName);
         for (int suffix = 2; Directory.Exists(candidate) || File.Exists(candidate); suffix++)
             candidate = Path.Combine(parent, $"{preferredName}-{suffix}");
         Directory.CreateDirectory(candidate);
-        return candidate;
-    }
-
-    private static string UniqueFileName(string preferred, HashSet<string> used)
-    {
-        string candidate = preferred;
-        for (int suffix = 2; !used.Add(candidate); suffix++)
-            candidate = $"{preferred}-{suffix}";
         return candidate;
     }
 
@@ -167,5 +150,16 @@ public sealed class SceneExportPackageService
                 ? ch
                 : '_').ToArray()).Trim('_');
         return string.IsNullOrWhiteSpace(sanitized) ? fallback : sanitized;
+    }
+
+    private sealed class ResourceNameAllocator
+    {
+        private int nextNumber = 1;
+
+        public string Next(string extension)
+        {
+            string normalized = extension.StartsWith(".", StringComparison.Ordinal) ? extension : "." + extension;
+            return $"res_{nextNumber++:0000}{normalized.ToLowerInvariant()}";
+        }
     }
 }
