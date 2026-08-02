@@ -20,18 +20,32 @@ internal sealed record ComposerObjectState(
     int? ParentId,
     int HighestAncestorId);
 
+internal sealed record ComposerModelEvidence(
+    int ObjectId,
+    long SceneRevision,
+    Vec3 Position,
+    Vec3 Rotation,
+    Vec3 Scale,
+    Aabb WorldBounds,
+    ulong WorldGeometryHash,
+    ulong LocalGeometryHash,
+    int TriangleCount);
+
+internal sealed record ComposerTriangleInfo(int Index, string Label);
+
 internal sealed class ComposerSceneSession : IDisposable
 {
     private readonly SemaphoreSlim sceneGate = new(1, 1);
     private Scene scene;
     private SceneDocument document;
+    private readonly ComposerEditHistory editHistory = new();
     private ShadowRasterRenderer.PreviewCache? rasterCache;
     private int? selectedObjectId;
-
-    private static readonly Material SelectionMaterial = new(
-        new Vec3(1.0, 0.34, 0.04),
-        emission: 0.08,
-        roughness: 0.48);
+    private int? selectedTriangleGroupId;
+    private int? selectedTriangleIndex;
+    private Aabb? selectedOverlayBounds;
+    private IReadOnlyList<Triangle> selectedOverlayTriangles = Array.Empty<Triangle>();
+    private const int MaximumCachedSelectionTriangles = 256;
 
     public ComposerSceneSession()
     {
@@ -47,8 +61,40 @@ internal sealed class ComposerSceneSession : IDisposable
     public int LightCount => scene.Lights.Count;
     public int ObjectCount => scene.ObjectGroups.SelectMany(group => group.SelfAndDescendants()).Count();
     public bool HasRenderableScene => scene.Triangles.Count > 0;
+    public bool CanUndo => editHistory.CanUndo;
+    public bool CanRedo => editHistory.CanRedo;
+    public string? UndoDescription => editHistory.UndoDescription;
+    public string? RedoDescription => editHistory.RedoDescription;
+    public string LastGeometryRefreshDetails { get; private set; } = string.Empty;
 
     public IReadOnlyList<SceneObjectInfo> GetObjectInfos() => document.GetObjectInfos();
+
+    public IReadOnlyList<ComposerTriangleInfo> GetTriangleInfos(int groupId, int offset, int count)
+    {
+        sceneGate.Wait();
+        try
+        {
+            SceneObjectGroup? group = scene.GroupById(groupId);
+            if (group == null || count <= 0)
+                return Array.Empty<ComposerTriangleInfo>();
+
+            int start = Math.Clamp(offset, 0, group.LocalTriangles.Count);
+            int end = Math.Min(group.LocalTriangles.Count, start + count);
+            List<ComposerTriangleInfo> result = new(end - start);
+            for (int i = start; i < end; i++)
+            {
+                Triangle triangle = group.LocalTriangles[i];
+                result.Add(new ComposerTriangleInfo(
+                    i,
+                    $"Triangle {i + 1:N0}  [centroid {triangle.Centroid.X:F3}, {triangle.Centroid.Y:F3}, {triangle.Centroid.Z:F3}]"));
+            }
+            return result;
+        }
+        finally
+        {
+            sceneGate.Release();
+        }
+    }
 
     public ComposerObjectState? GetObjectState(int id)
     {
@@ -77,22 +123,126 @@ internal sealed class ComposerSceneSession : IDisposable
 
     public int? SelectedObjectId => selectedObjectId;
 
+    public ComposerObjectState? GetTransformTargetState(int selectedId)
+    {
+        sceneGate.Wait();
+        try
+        {
+            SceneObjectGroup? target = scene.GroupById(selectedId);
+            if (target == null)
+                return null;
+
+            return new ComposerObjectState(
+                target.Id,
+                target.Name,
+                target.Visible,
+                target.Position,
+                target.Rotation,
+                target.Scale,
+                target.Parent?.Id,
+                target.Id);
+        }
+        finally
+        {
+            sceneGate.Release();
+        }
+    }
+
+    public Aabb? GetTransformTargetBounds(int selectedId)
+    {
+        sceneGate.Wait();
+        try
+        {
+            return scene.GroupById(selectedId)?.GetWorldBounds(includeHidden: true);
+        }
+        finally
+        {
+            sceneGate.Release();
+        }
+    }
+
+    public ComposerModelEvidence? GetModelEvidence(int objectId)
+    {
+        sceneGate.Wait();
+        try
+        {
+            SceneObjectGroup? group = scene.GroupById(objectId);
+            if (group == null)
+                return null;
+
+            List<Triangle> triangles = group.BuildWorldTriangles(includeHidden: true).ToList();
+            return new ComposerModelEvidence(
+                group.Id,
+                scene.Revision,
+                group.Position,
+                group.Rotation,
+                group.Scale,
+                group.GetWorldBounds(includeHidden: true),
+                ComputeGeometryHash(triangles),
+                ComputeGeometryHash(group.SelfAndDescendants().SelectMany(node => node.LocalTriangles)),
+                triangles.Count);
+        }
+        finally
+        {
+            sceneGate.Release();
+        }
+    }
+
+    internal SceneCacheStamp CaptureSceneCacheStampForTests()
+    {
+        sceneGate.Wait();
+        try
+        {
+            return SceneCacheStamp.Capture(scene);
+        }
+        finally
+        {
+            sceneGate.Release();
+        }
+    }
+
     public bool SetSelectedObject(int? id)
     {
         sceneGate.Wait();
         try
         {
             int? normalized = id.HasValue && scene.GroupById(id.Value) != null ? id : null;
-            if (selectedObjectId == normalized)
+            bool changed = selectedObjectId != normalized || selectedTriangleIndex.HasValue;
+            if (!changed)
                 return false;
 
-            ClearSelectionHighlight();
             selectedObjectId = normalized;
-            if (selectedObjectId is int selectedId && scene.GroupById(selectedId) is SceneObjectGroup group)
-                group.PreviewColorOverride = SelectionMaterial;
+            selectedTriangleGroupId = null;
+            selectedTriangleIndex = null;
+            RebuildSelectionOverlayCache();
+            return true;
+        }
+        finally
+        {
+            sceneGate.Release();
+        }
+    }
 
-            scene.RebuildWorldGeometry();
-            InvalidateRendererCaches();
+    /// <summary>
+    /// Selects one triangle as a virtual hierarchy leaf without creating a scene
+    /// object. Editing commands continue to target its owning group, while the
+    /// overlay highlights only the chosen triangle.
+    /// </summary>
+    public bool SetSelectedTriangle(int groupId, int localTriangleIndex)
+    {
+        sceneGate.Wait();
+        try
+        {
+            SceneObjectGroup? group = scene.GroupById(groupId);
+            if (group == null || localTriangleIndex < 0 || localTriangleIndex >= group.LocalTriangles.Count)
+                return false;
+
+            selectedObjectId = groupId;
+            selectedTriangleGroupId = groupId;
+            selectedTriangleIndex = localTriangleIndex;
+            Triangle worldTriangle = TransformTriangleToWorld(group, group.LocalTriangles[localTriangleIndex]);
+            selectedOverlayTriangles = new[] { worldTriangle };
+            selectedOverlayBounds = BoundsOf(worldTriangle);
             return true;
         }
         finally
@@ -109,7 +259,8 @@ internal sealed class ComposerSceneSession : IDisposable
             ReleaseRendererCaches();
             scene = CreateEmptyScene();
             document = new SceneDocument(scene);
-            selectedObjectId = null;
+            editHistory.Clear();
+            ClearSelectionState();
             ScenePath = null;
             Camera.Reset(scene);
         }
@@ -132,7 +283,8 @@ internal sealed class ComposerSceneSession : IDisposable
             TextureMap.ConfigureAssetRoots([assetDirectory]);
 
             Scene loaded = new();
-            if (ComposerFileTypes.IsBinaryScenePath(path))
+            bool isComposerScene = ComposerFileTypes.IsBinaryScenePath(path);
+            if (isComposerScene)
             {
                 loaded.SetDescription(BinarySceneFile.LoadIntoScene(loaded, path));
             }
@@ -145,10 +297,19 @@ internal sealed class ComposerSceneSession : IDisposable
             if (loaded.Triangles.Count == 0)
                 throw new InvalidDataException("The scene contains no renderable triangles.");
 
+            List<int> loadedRootIds = loaded.ObjectGroups.Select(group => group.Id).ToList();
+            if (!isComposerScene && loadedRootIds.Count > 0)
+            {
+                loaded.WrapRootGroups(
+                    loadedRootIds,
+                    Path.GetFileNameWithoutExtension(path));
+            }
+
             scene = loaded;
             document = new SceneDocument(scene);
+            editHistory.Clear();
             ScenePath = path;
-            selectedObjectId = null;
+            ClearSelectionState();
             Camera.Reset(scene);
         }
         finally
@@ -181,6 +342,7 @@ internal sealed class ComposerSceneSession : IDisposable
             SceneObjectGroup wrapper = scene.WrapRootGroups(
                 insertedRootIds,
                 Path.GetFileNameWithoutExtension(path));
+            editHistory.Clear();
             ScenePath = null;
             InvalidateRendererCaches();
             if (wasEmpty && scene.Triangles.Count > 0)
@@ -231,19 +393,141 @@ internal sealed class ComposerSceneSession : IDisposable
         sceneGate.Wait();
         try
         {
-            SceneObjectGroup? group = scene.GroupById(id);
-            if (group == null)
+            SceneObjectGroup? selectedGroup = scene.GroupById(id);
+            if (selectedGroup == null)
                 return false;
 
-            group.Name = string.IsNullOrWhiteSpace(name) ? group.Name : name.Trim();
-            group.Visible = visible;
-            group.Position = position;
-            group.Rotation = rotationRadians;
-            group.Scale = scale;
-            Scene.RecalculatePivotsToRoot(group.Parent);
+            // Canonicalize any temporary gizmo preview first, then bake the new
+            // inspector transform into the actual triangle positions and normals.
+            selectedGroup.BakeCurrentTransform();
+            BakedGeometryState beforeGeometry = BakedGeometryState.Capture(selectedGroup);
+            Vec3 fixedPivot = selectedGroup.Pivot;
+            string beforeName = selectedGroup.Name;
+            bool beforeVisible = selectedGroup.Visible;
+            string afterName = string.IsNullOrWhiteSpace(name) ? beforeName : name.Trim();
+
+            selectedGroup.BakeTransform(position, rotationRadians, scale);
+            selectedGroup.Name = afterName;
+            selectedGroup.Visible = visible;
+            Scene.RecalculatePivotsToRoot(selectedGroup.Parent);
             scene.RebuildWorldGeometry();
+            RebuildSelectionOverlayCache();
+
+            editHistory.PushApplied(new BakedTransformEditCommand(
+                selectedGroup.Id,
+                beforeGeometry,
+                fixedPivot,
+                position,
+                rotationRadians,
+                scale,
+                beforeName,
+                afterName,
+                beforeVisible,
+                visible));
+
             ScenePath = null;
-            InvalidateRendererCaches();
+            RefreshRendererCachesAfterGeometryBake(CancellationToken.None);
+            return true;
+        }
+        finally
+        {
+            sceneGate.Release();
+        }
+    }
+
+    /// <summary>
+    /// Updates temporary gizmo transform metadata while dragging. The final mouse
+    /// release calls <see cref="CommitPendingTransform"/> to bake it into geometry.
+    /// </summary>
+    public bool UpdateTransformTarget(
+        int selectedId,
+        Vec3 position,
+        Vec3 rotationRadians,
+        Vec3 scale)
+    {
+        ValidateFinite(position, nameof(position));
+        ValidateFinite(rotationRadians, nameof(rotationRadians));
+        ValidateFinite(scale, nameof(scale));
+        if (scale.X <= 0 || scale.Y <= 0 || scale.Z <= 0)
+            throw new ArgumentOutOfRangeException(nameof(scale), "Scale values must be greater than zero.");
+
+        sceneGate.Wait();
+        try
+        {
+            SceneObjectGroup? target = scene.GroupById(selectedId);
+            if (target == null)
+                return false;
+
+            // Gizmo movement is intentionally metadata-only until mouse release.
+            // This avoids rebuilding every world triangle and reuploading the
+            // Vulkan vertex buffers on every pointer-move event. CommitPendingTransform
+            // bakes once and triggers one renderer refresh.
+            target.Position = position;
+            target.Rotation = rotationRadians;
+            target.Scale = scale;
+            ScenePath = null;
+            return true;
+        }
+        finally
+        {
+            sceneGate.Release();
+        }
+    }
+
+    public bool CancelPendingTransform(int selectedId)
+    {
+        sceneGate.Wait();
+        try
+        {
+            SceneObjectGroup? target = scene.GroupById(selectedId);
+            if (target == null)
+                return false;
+            target.Position = Vec3.Zero;
+            target.Rotation = Vec3.Zero;
+            target.Scale = new Vec3(1, 1, 1);
+            return true;
+        }
+        finally
+        {
+            sceneGate.Release();
+        }
+    }
+
+    /// <summary>Bakes the current gizmo preview into geometry and records one undo step.</summary>
+    public bool CommitPendingTransform(int selectedId)
+    {
+        sceneGate.Wait();
+        try
+        {
+            SceneObjectGroup? target = scene.GroupById(selectedId);
+            if (target == null)
+                return false;
+
+            Vec3 position = target.Position;
+            Vec3 rotation = target.Rotation;
+            Vec3 scale = target.Scale;
+            if (IsIdentityTransform(position, rotation, scale))
+                return true;
+
+            Vec3 fixedPivot = target.Pivot;
+            BakedGeometryState beforeGeometry = BakedGeometryState.Capture(target);
+            target.BakeCurrentTransform();
+            Scene.RecalculatePivotsToRoot(target.Parent);
+            scene.RebuildWorldGeometry();
+            RebuildSelectionOverlayCache();
+            editHistory.PushApplied(new BakedTransformEditCommand(
+                target.Id,
+                beforeGeometry,
+                fixedPivot,
+                position,
+                rotation,
+                scale,
+                target.Name,
+                target.Name,
+                target.Visible,
+                target.Visible));
+            ScenePath = null;
+            RefreshRendererCachesAfterGeometryBake(CancellationToken.None);
             return true;
         }
         finally
@@ -264,11 +548,94 @@ internal sealed class ComposerSceneSession : IDisposable
             group.Position = Vec3.Zero;
             group.Rotation = Vec3.Zero;
             group.Scale = new Vec3(1, 1, 1);
-            Scene.RecalculatePivotsToRoot(group.Parent);
             scene.RebuildWorldGeometry();
+            RebuildSelectionOverlayCache();
+            ScenePath = null;
+            RefreshRendererCachesAfterGeometryBake(CancellationToken.None);
+            return true;
+        }
+        finally
+        {
+            sceneGate.Release();
+        }
+    }
+
+    public bool CanUngroupObject(int id)
+    {
+        sceneGate.Wait();
+        try
+        {
+            return scene.CanUngroup(id);
+        }
+        finally
+        {
+            sceneGate.Release();
+        }
+    }
+
+    public IReadOnlyList<int> UngroupObject(int id)
+    {
+        sceneGate.Wait();
+        try
+        {
+            if (!scene.CanUngroup(id))
+                return Array.Empty<int>();
+
+            SceneSnapshot before = scene.CreateSnapshot();
+            IReadOnlyList<SceneObjectGroup> promoted = scene.Ungroup(id);
+            SceneSnapshot after = scene.CreateSnapshot();
+            int? preferred = promoted.FirstOrDefault()?.Id;
+            editHistory.PushApplied(new SceneSnapshotEditCommand("Ungroup", before, after, id, preferred));
+            if (selectedObjectId == id)
+                selectedObjectId = preferred;
+            selectedTriangleGroupId = null;
+            selectedTriangleIndex = null;
+            RebuildSelectionOverlayCache();
             ScenePath = null;
             InvalidateRendererCaches();
-            return true;
+            return promoted.Select(group => group.Id).ToList();
+        }
+        finally
+        {
+            sceneGate.Release();
+        }
+    }
+
+    public int? Undo()
+    {
+        sceneGate.Wait();
+        try
+        {
+            int? preferred = editHistory.Undo(scene);
+            selectedObjectId = preferred.HasValue && scene.GroupById(preferred.Value) != null ? preferred : null;
+            ApplySelectionHighlightAndRebuild();
+            selectedTriangleGroupId = null;
+            selectedTriangleIndex = null;
+            RebuildSelectionOverlayCache();
+            ScenePath = null;
+            RefreshRendererCachesAfterGeometryBake(CancellationToken.None);
+            return selectedObjectId;
+        }
+        finally
+        {
+            sceneGate.Release();
+        }
+    }
+
+    public int? Redo()
+    {
+        sceneGate.Wait();
+        try
+        {
+            int? preferred = editHistory.Redo(scene);
+            selectedObjectId = preferred.HasValue && scene.GroupById(preferred.Value) != null ? preferred : null;
+            ApplySelectionHighlightAndRebuild();
+            selectedTriangleGroupId = null;
+            selectedTriangleIndex = null;
+            RebuildSelectionOverlayCache();
+            ScenePath = null;
+            RefreshRendererCachesAfterGeometryBake(CancellationToken.None);
+            return selectedObjectId;
         }
         finally
         {
@@ -282,6 +649,7 @@ internal sealed class ComposerSceneSession : IDisposable
         try
         {
             SceneObjectGroup duplicate = scene.DuplicateGroup(id);
+            editHistory.Clear();
             ScenePath = null;
             InvalidateRendererCaches();
             return duplicate.Id;
@@ -304,8 +672,11 @@ internal sealed class ComposerSceneSession : IDisposable
                                      (selectedObjectId.Value == id ||
                                       scene.GroupById(id)?.ContainsDescendant(selectedObjectId.Value) == true);
             scene.DeleteGroup(id);
+            editHistory.Clear();
             if (deletingSelection)
-                selectedObjectId = null;
+                ClearSelectionState();
+            else
+                RebuildSelectionOverlayCache();
             ScenePath = null;
             InvalidateRendererCaches();
             return true;
@@ -322,6 +693,7 @@ internal sealed class ComposerSceneSession : IDisposable
         try
         {
             int created = scene.DuplicateGroupGrid(id, copyCount, spacing, cancellationToken);
+            editHistory.Clear();
             ScenePath = null;
             InvalidateRendererCaches();
             return created;
@@ -399,6 +771,7 @@ internal sealed class ComposerSceneSession : IDisposable
             {
                 case ComposerRendererKind.VulkanRaster:
                     VulkanSceneComputeRenderer.ReleasePreparedScene();
+                    VulkanRasterRenderer.TryRefreshPreparedGeometry(scene, cancellationToken, out _);
                     break;
                 case ComposerRendererKind.VulkanCompute:
                     VulkanRasterRenderer.ReleasePreparedScene();
@@ -409,12 +782,18 @@ internal sealed class ComposerSceneSession : IDisposable
                     break;
             }
 
+            if (renderer == ComposerRendererKind.Raster &&
+                (rasterCache == null || !rasterCache.IsCurrent(scene)))
+            {
+                rasterCache = ShadowRasterRenderer.BuildCache(scene, cancellationToken);
+            }
+
             Stopwatch stopwatch = Stopwatch.StartNew();
             string details;
             RenderImage image = renderer switch
             {
                 ComposerRendererKind.Raster => ShadowRasterRenderer.Render(
-                    rasterCache ??= ShadowRasterRenderer.BuildCache(scene, cancellationToken),
+                    rasterCache ?? throw new InvalidOperationException("Raster cache was not prepared."),
                     camera.Position,
                     camera.ToBasis(),
                     width,
@@ -467,12 +846,13 @@ internal sealed class ComposerSceneSession : IDisposable
                 _ => throw new ArgumentOutOfRangeException(nameof(renderer), renderer, "Unknown renderer.")
             };
 
-            if (selectedObjectId is int selectedId && scene.GroupById(selectedId) is SceneObjectGroup selectedGroup)
+            if (selectedOverlayBounds is Aabb overlayBounds)
             {
                 ComposerOverlayRenderer.DrawSelection(
                     image,
                     camera,
-                    selectedGroup.GetWorldBounds(includeHidden: true));
+                    overlayBounds,
+                    selectedOverlayTriangles);
             }
 
             stopwatch.Stop();
@@ -500,7 +880,7 @@ internal sealed class ComposerSceneSession : IDisposable
             ReleaseRendererCaches();
             scene = CreateEmptyScene();
             document = new SceneDocument(scene);
-            selectedObjectId = null;
+            ClearSelectionState();
         }
         finally
         {
@@ -519,10 +899,145 @@ internal sealed class ComposerSceneSession : IDisposable
         return result;
     }
 
+    private void ClearSelectionState()
+    {
+        selectedObjectId = null;
+        selectedTriangleGroupId = null;
+        selectedTriangleIndex = null;
+        selectedOverlayBounds = null;
+        selectedOverlayTriangles = Array.Empty<Triangle>();
+    }
+
+    private void RebuildSelectionOverlayCache()
+    {
+        if (selectedObjectId is not int selectedId || scene.GroupById(selectedId) is not SceneObjectGroup group)
+        {
+            selectedOverlayBounds = null;
+            selectedOverlayTriangles = Array.Empty<Triangle>();
+            return;
+        }
+
+        if (selectedTriangleGroupId == selectedId &&
+            selectedTriangleIndex is int triangleIndex &&
+            triangleIndex >= 0 && triangleIndex < group.LocalTriangles.Count)
+        {
+            Triangle worldTriangle = TransformTriangleToWorld(group, group.LocalTriangles[triangleIndex]);
+            selectedOverlayTriangles = new[] { worldTriangle };
+            selectedOverlayBounds = BoundsOf(worldTriangle);
+            return;
+        }
+
+        List<Triangle> reservoir = new(MaximumCachedSelectionTriangles);
+        Random random = new(0x51EC710);
+        bool hasBounds = false;
+        Vec3 min = Vec3.Zero;
+        Vec3 max = Vec3.Zero;
+        int seen = 0;
+
+        foreach (Triangle triangle in group.BuildWorldTriangles(includeHidden: true))
+        {
+            ExpandBounds(triangle.A);
+            ExpandBounds(triangle.B);
+            ExpandBounds(triangle.C);
+
+            seen++;
+            if (reservoir.Count < MaximumCachedSelectionTriangles)
+            {
+                reservoir.Add(triangle);
+            }
+            else
+            {
+                int replacement = random.Next(seen);
+                if (replacement < MaximumCachedSelectionTriangles)
+                    reservoir[replacement] = triangle;
+            }
+        }
+
+        selectedOverlayBounds = hasBounds ? new Aabb(min, max) : null;
+        selectedOverlayTriangles = reservoir;
+        return;
+
+        void ExpandBounds(Vec3 point)
+        {
+            if (!hasBounds)
+            {
+                min = point;
+                max = point;
+                hasBounds = true;
+                return;
+            }
+
+            min = new Vec3(Math.Min(min.X, point.X), Math.Min(min.Y, point.Y), Math.Min(min.Z, point.Z));
+            max = new Vec3(Math.Max(max.X, point.X), Math.Max(max.Y, point.Y), Math.Max(max.Z, point.Z));
+        }
+    }
+
+    private static Triangle TransformTriangleToWorld(SceneObjectGroup group, Triangle triangle)
+    {
+        Vec3 a = triangle.A;
+        Vec3 b = triangle.B;
+        Vec3 c = triangle.C;
+        Vec3 normalA = triangle.NormalA;
+        Vec3 normalB = triangle.NormalB;
+        Vec3 normalC = triangle.NormalC;
+
+        for (SceneObjectGroup? current = group; current != null; current = current.Parent)
+        {
+            a = current.TransformPoint(a);
+            b = current.TransformPoint(b);
+            c = current.TransformPoint(c);
+            normalA = current.TransformNormal(normalA);
+            normalB = current.TransformNormal(normalB);
+            normalC = current.TransformNormal(normalC);
+        }
+
+        Material material = group.PreviewColorOverride ?? group.ColorOverride ?? triangle.Material;
+        return new Triangle(
+            a, b, c,
+            triangle.UvA, triangle.UvB, triangle.UvC,
+            normalA, normalB, normalC,
+            material,
+            group.Id);
+    }
+
+    private static Aabb BoundsOf(Triangle triangle)
+    {
+        Vec3 min = new(
+            Math.Min(triangle.A.X, Math.Min(triangle.B.X, triangle.C.X)),
+            Math.Min(triangle.A.Y, Math.Min(triangle.B.Y, triangle.C.Y)),
+            Math.Min(triangle.A.Z, Math.Min(triangle.B.Z, triangle.C.Z)));
+        Vec3 max = new(
+            Math.Max(triangle.A.X, Math.Max(triangle.B.X, triangle.C.X)),
+            Math.Max(triangle.A.Y, Math.Max(triangle.B.Y, triangle.C.Y)),
+            Math.Max(triangle.A.Z, Math.Max(triangle.B.Z, triangle.C.Z)));
+        return new Aabb(min, max);
+    }
+
     private void ClearSelectionHighlight()
     {
         foreach (SceneObjectGroup group in scene.ObjectGroups.SelectMany(root => root.SelfAndDescendants()))
             group.PreviewColorOverride = null;
+    }
+
+    private void ApplySelectionHighlightAndRebuild()
+    {
+        // Kept as a single history hook. Selection is rendered as a post-process
+        // overlay, so no scene rebuild or renderer cache invalidation is required.
+        ClearSelectionHighlight();
+    }
+
+    private void RefreshRendererCachesAfterGeometryBake(CancellationToken cancellationToken)
+    {
+        rasterCache = null;
+        VulkanSceneComputeRenderer.ReleasePreparedScene();
+        if (VulkanRasterRenderer.TryRefreshPreparedGeometry(scene, cancellationToken, out string details))
+        {
+            LastGeometryRefreshDetails = details;
+            return;
+        }
+
+        VulkanRasterRenderer.ReleasePreparedScene();
+        LastGeometryRefreshDetails = details;
     }
 
     private void InvalidateRendererCaches()
@@ -530,6 +1045,7 @@ internal sealed class ComposerSceneSession : IDisposable
         rasterCache = null;
         VulkanSceneComputeRenderer.ReleasePreparedScene();
         VulkanRasterRenderer.ReleasePreparedScene();
+        LastGeometryRefreshDetails = "Renderer scene caches were invalidated because topology or materials changed.";
     }
 
     private void ReleaseRendererCaches()
@@ -562,6 +1078,45 @@ internal sealed class ComposerSceneSession : IDisposable
         }
         return path;
     }
+
+    private static ulong ComputeGeometryHash(IEnumerable<Triangle> triangles)
+    {
+        const ulong offset = 14695981039346656037UL;
+        const ulong prime = 1099511628211UL;
+        ulong hash = offset;
+
+        foreach (Triangle triangle in triangles)
+        {
+            AddLong(triangle.GroupId);
+            AddVec(triangle.A); AddVec(triangle.B); AddVec(triangle.C);
+            AddVec(triangle.NormalA); AddVec(triangle.NormalB); AddVec(triangle.NormalC);
+        }
+
+        return hash;
+
+        void AddVec(Vec3 value)
+        {
+            AddLong(BitConverter.DoubleToInt64Bits(value.X));
+            AddLong(BitConverter.DoubleToInt64Bits(value.Y));
+            AddLong(BitConverter.DoubleToInt64Bits(value.Z));
+        }
+
+        void AddLong(long value)
+        {
+            unchecked
+            {
+                hash ^= (ulong)value;
+                hash *= prime;
+            }
+        }
+    }
+
+    private static bool IsIdentityTransform(Vec3 position, Vec3 rotation, Vec3 scale) =>
+        position.Length() <= 1e-12 &&
+        rotation.Length() <= 1e-12 &&
+        Math.Abs(scale.X - 1.0) <= 1e-12 &&
+        Math.Abs(scale.Y - 1.0) <= 1e-12 &&
+        Math.Abs(scale.Z - 1.0) <= 1e-12;
 
     private static void ValidateFinite(Vec3 value, string name)
     {

@@ -8,10 +8,12 @@ A standalone, platform-neutral scene composer and renderer built with Avalonia a
 - Insert multiple glTF/GLB, FBX, OBJ, 3DS, PLY, STL, and PropXML assets.
 - Browse objects in a recursive scene tree and select them from the tree or rendered viewport.
 - Orbit, pan, and zoom the preview on every rendering backend.
-- Highlight the selected object and draw overlaid selection bounds plus X/Y/Z transform axes.
-- Edit position, rotation, and scale numerically; Enter or **Apply transform** commits changes.
+- Highlight the selected object and draw overlaid selection bounds plus draggable X/Y/Z translation axes.
+- Edit position, rotation, and scale numerically; Enter or **Apply transform** bakes the change into vertex positions and normals, clears the fields, and redraws the active renderer.
 - Inserted assets are wrapped in one top-level group while retaining their imported child hierarchy.
-- Rename, show/hide, duplicate, delete, reset, and frame groups or child nodes.
+- Rename, show/hide, duplicate, delete, reset, frame, or ungroup any non-terminal group or mesh node.
+- Undo and redo baked transforms and ungroup operations with toolbar buttons or `Ctrl+Z` / `Ctrl+Y`.
+- Expand a mesh through a lazy `… show triangles` row. Triangle leaves are virtual and paged 200 at a time until explicitly ungrouped, so browsing them does not enlarge the scene or GPU buffers.
 - Generate object grids for performance stress testing.
 - Save and reopen `.lscene` compositions.
 - Preview with software raster, Vulkan raster, Vulkan compute, or CPU ray rendering.
@@ -26,7 +28,7 @@ A standalone, platform-neutral scene composer and renderer built with Avalonia a
 
 ## Visual Studio and cross-platform development
 
-Open `LightingShowcase.Composer.sln` in Visual Studio 2022 17.8 or newer on Windows. The solution is organized into Application, Core Libraries, Importers, and Object Libraries folders. Set `LightingShowcase.Composer.Avalonia` as the startup project if Visual Studio does not select it automatically.
+Extract the ZIP to a normal writable folder, then open `LightingShowcase.Composer.sln` in Visual Studio 2022 17.8 or newer on Windows. The solution uses the standard SDK-style C# project GUID, Windows CRLF line endings, and includes every referenced project. Set `LightingShowcase.Composer.Avalonia` as the startup project if Visual Studio does not select it automatically.
 
 Three launch profiles are included:
 
@@ -65,6 +67,7 @@ A path may also be passed without the `compose` verb:
 ## Viewport controls
 
 - Left click: select the highest imported object group under the pointer.
+- Drag a red, green, or blue gizmo axis: stage a translation along X, Y, or Z. The geometry is baked once and Vulkan is refreshed when the pointer is released; pointer moves do not rebuild or reupload the scene.
 - Right drag: orbit.
 - Middle drag or Shift+right drag: pan.
 - Mouse wheel: zoom.
@@ -72,8 +75,10 @@ A path may also be passed without the `compose` verb:
 - `F`: frame the selected tree node.
 - `Ctrl+D`: duplicate the selected node.
 - `Delete`: delete the selected node.
+- `Ctrl+Z` / `Ctrl+Y`: undo or redo.
+- Use a disclosure arrow to open group nodes. Use the lazy `…` row to page triangle leaves without creating thousands of scene nodes.
 
-Viewport selection intentionally resolves to the highest top-level asset group so numeric transforms move the complete inserted object. Child nodes remain directly selectable from the scene tree when a lower-level edit is needed.
+Viewport selection resolves to the highest top-level asset group, so clicking a model moves the complete inserted asset by default. The hierarchy panel has separate disclosure arrows for expanding and collapsing nodes. Selecting a child explicitly in the hierarchy makes position, rotation, scale, visibility, name, framing, and gizmo operations target that child node.
 
 ## Command-line rendering
 
@@ -102,6 +107,12 @@ Show all command-line options:
 ./run.sh --help
 ```
 
+Run the built-in hierarchy and transform regression check:
+
+```bash
+./run.sh self-test-transforms
+```
+
 ## Publish for Linux
 
 ```bash
@@ -121,6 +132,28 @@ LightingShowcase.ImportExport.*/      Model and scene importers
 LightingShowcase.ObjectLibrary.*/     Built-in scene objects
 ```
 
-## Current scope
+## Transform and Vulkan behavior
 
-The current release provides hierarchical composition, numeric group transforms, navigation, selection highlighting, and non-interactive overlaid transform axes. Direct mouse dragging of individual gizmo axes, undo/redo, GPU ID picking, and detailed benchmark export remain future extensions.
+Transforms are authored as temporary editor values only until they are committed. A commit rewrites the selected subtree's triangle positions and inverse-transpose transformed normals, converts transformed procedural primitives to mesh authoring data, resets the node transform to identity, increments the scene revision, and refreshes the existing Vulkan raster vertex buffers in place. Textures, descriptor sets, pipelines, and render-target allocations remain cached. This means the commit has a one-time vertex upload cost, but there is no extra matrix or scene-graph transform cost on later frames.
+
+Selection is a cached post-process overlay and does not change scene materials or invalidate Vulkan geometry. At most 256 sampled triangles are retained for the orange wire overlay; the complete selected mesh is not traversed on every frame.
+
+Rotation and scale gizmo modes, GPU ID picking, and detailed benchmark export remain future extensions.
+
+
+## Automated tests
+
+Run the cross-platform test suite with:
+
+```bash
+./run-tests.sh
+```
+
+On Windows:
+
+```powershell
+.\run-tests.ps1
+```
+
+The suite verifies baked local-geometry mutation, identity transform metadata after commit, exact undo/redo hashes, deferred gizmo commits, Vulkan cache revision handling, rendered-pixel changes, lazy triangle browsing without object growth, root/nested ungroup behavior, hierarchy expansion, and Visual Studio solution integrity.
+See `TESTING.md` for the optional Vulkan tests.

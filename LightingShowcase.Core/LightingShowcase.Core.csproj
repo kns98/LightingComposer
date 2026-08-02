@@ -56,6 +56,7 @@
     <Compile Include="../Rendering/Ray.cs" Link="Rendering/Ray.cs" />
     <Compile Include="../Rendering/RayTracer.cs" Link="Rendering/RayTracer.cs" />
     <Compile Include="../Rendering/RenderImage.cs" Link="Rendering/RenderImage.cs" />
+    <Compile Include="../Rendering/SceneCacheStamp.cs" Link="Rendering/SceneCacheStamp.cs" />
     <Compile Include="../Rendering/PngWriter.cs" Link="Rendering/PngWriter.cs" />
     <Compile Include="../Rendering/ShadowRasterRenderer.cs" Link="Rendering/ShadowRasterRenderer.cs" />
     <Compile Include="../Rendering/VulkanRasterRenderer.cs" Link="Rendering/VulkanRasterRenderer.cs" />

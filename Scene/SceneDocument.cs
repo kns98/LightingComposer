@@ -55,10 +55,12 @@ public sealed class SceneDocument
             group.Name,
             group.Visible,
             group.IsSelectable,
+            group.Parent?.Id,
             depth,
             triangleCount,
             GetObjectKind(group, triangleCount),
-            group.Children.Count));
+            group.Children.Count,
+            group.LocalTriangles.Count));
 
         foreach (SceneObjectGroup child in group.Children)
             AddObjectInfo(infos, child, depth + 1);
@@ -141,10 +143,12 @@ public sealed record SceneObjectInfo(
     string Name,
     bool Visible,
     bool IsSelectable,
+    int? ParentId,
     int Depth,
     int TriangleCount,
     string Kind,
-    int ChildCount);
+    int ChildCount,
+    int LocalTriangleCount);
 
 public sealed record MaterialSummary(
     string Id,

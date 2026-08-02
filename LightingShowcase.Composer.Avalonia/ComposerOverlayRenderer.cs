@@ -10,9 +10,25 @@ namespace LightingShowcase.Composer;
 /// renderer output. Keeping this as a post-process makes the overlay identical
 /// for software, Vulkan raster, Vulkan compute, and CPU previews.
 /// </summary>
+internal enum ComposerGizmoAxis
+{
+    None,
+    X,
+    Y,
+    Z
+}
+
+internal readonly record struct ComposerGizmoHit(
+    ComposerGizmoAxis Axis,
+    double ScreenDirectionX,
+    double ScreenDirectionY,
+    double WorldUnitsPerPixel);
+
 internal static class ComposerOverlayRenderer
 {
     private const uint BoundsColor = 0xff40c8ffu;
+    private const uint SelectionWireColor = 0xff2080ffu;
+    private const int MaximumSelectionWireTriangles = 2500;
     private const uint OriginColor = 0xffffffffu;
     private const uint XAxisColor = 0xff4545f4u;
     private const uint YAxisColor = 0xff55c96bu;
@@ -20,7 +36,11 @@ internal static class ComposerOverlayRenderer
 
     private readonly record struct ProjectedPoint(double X, double Y, double Depth);
 
-    public static void DrawSelection(RenderImage image, CameraDefinition camera, Aabb bounds)
+    public static void DrawSelection(
+        RenderImage image,
+        CameraDefinition camera,
+        Aabb bounds,
+        IEnumerable<Triangle>? selectedTriangles = null)
     {
         if (image == null) throw new ArgumentNullException(nameof(image));
         if (camera == null) throw new ArgumentNullException(nameof(camera));
@@ -29,6 +49,9 @@ internal static class ComposerOverlayRenderer
         Vec3 extent = bounds.Max - bounds.Min;
         if (!IsFinite(center) || !IsFinite(extent))
             return;
+
+        if (selectedTriangles != null)
+            DrawSelectedGeometryWireframe(image, camera, selectedTriangles);
 
         Vec3[] corners =
         [
@@ -69,6 +92,140 @@ internal static class ComposerOverlayRenderer
 
         if (TryProject(center, camera, image.Width, image.Height, out ProjectedPoint projectedCenter))
             DrawHandle(image, projectedCenter.X, projectedCenter.Y, OriginColor, radius: 4);
+    }
+
+
+    private static void DrawSelectedGeometryWireframe(
+        RenderImage image,
+        CameraDefinition camera,
+        IEnumerable<Triangle> triangles)
+    {
+        int drawn = 0;
+        foreach (Triangle triangle in triangles)
+        {
+            if (drawn++ >= MaximumSelectionWireTriangles)
+                break;
+
+            if (!TryProject(triangle.A, camera, image.Width, image.Height, out ProjectedPoint a) ||
+                !TryProject(triangle.B, camera, image.Width, image.Height, out ProjectedPoint b) ||
+                !TryProject(triangle.C, camera, image.Width, image.Height, out ProjectedPoint c))
+            {
+                continue;
+            }
+
+            DrawLine(image, a.X, a.Y, b.X, b.Y, SelectionWireColor, thickness: 1);
+            DrawLine(image, b.X, b.Y, c.X, c.Y, SelectionWireColor, thickness: 1);
+            DrawLine(image, c.X, c.Y, a.X, a.Y, SelectionWireColor, thickness: 1);
+        }
+    }
+
+
+    public static bool TryHitTranslationAxis(
+        CameraDefinition camera,
+        Aabb bounds,
+        int width,
+        int height,
+        double imageX,
+        double imageY,
+        out ComposerGizmoHit hit)
+    {
+        hit = default;
+        if (!TryCreateAxisGeometry(camera, bounds, width, height, out AxisGeometry geometry))
+            return false;
+
+        const double hitRadius = 12.0;
+        ComposerGizmoHit best = default;
+        double bestDistance = double.PositiveInfinity;
+
+        TestAxis(ComposerGizmoAxis.X, geometry.Center, geometry.XEnd);
+        TestAxis(ComposerGizmoAxis.Y, geometry.Center, geometry.YEnd);
+        TestAxis(ComposerGizmoAxis.Z, geometry.Center, geometry.ZEnd);
+
+        if (bestDistance > hitRadius)
+            return false;
+
+        hit = best;
+        return true;
+
+        void TestAxis(ComposerGizmoAxis axis, ProjectedPoint start, ProjectedPoint end)
+        {
+            double dx = end.X - start.X;
+            double dy = end.Y - start.Y;
+            double length = Math.Sqrt(dx * dx + dy * dy);
+            if (!double.IsFinite(length) || length < 8.0)
+                return;
+
+            double distance = DistanceToSegment(imageX, imageY, start.X, start.Y, end.X, end.Y);
+            if (distance >= bestDistance)
+                return;
+
+            bestDistance = distance;
+            best = new ComposerGizmoHit(
+                axis,
+                dx / length,
+                dy / length,
+                geometry.AxisWorldLength / length);
+        }
+    }
+
+    private readonly record struct AxisGeometry(
+        ProjectedPoint Center,
+        ProjectedPoint XEnd,
+        ProjectedPoint YEnd,
+        ProjectedPoint ZEnd,
+        double AxisWorldLength);
+
+    private static bool TryCreateAxisGeometry(
+        CameraDefinition camera,
+        Aabb bounds,
+        int width,
+        int height,
+        out AxisGeometry geometry)
+    {
+        Vec3 center = (bounds.Min + bounds.Max) * 0.5;
+        Vec3 extent = bounds.Max - bounds.Min;
+        if (!IsFinite(center) || !IsFinite(extent))
+        {
+            geometry = default;
+            return false;
+        }
+
+        double maximumExtent = Math.Max(extent.X, Math.Max(extent.Y, extent.Z));
+        double distance = (center - camera.Position).Length();
+        double axisLength = Math.Max(maximumExtent * 0.45, distance * 0.075);
+        axisLength = Math.Max(axisLength, 0.05);
+
+        if (!TryProject(center, camera, width, height, out ProjectedPoint projectedCenter) ||
+            !TryProject(center + new Vec3(axisLength, 0, 0), camera, width, height, out ProjectedPoint xEnd) ||
+            !TryProject(center + new Vec3(0, axisLength, 0), camera, width, height, out ProjectedPoint yEnd) ||
+            !TryProject(center + new Vec3(0, 0, axisLength), camera, width, height, out ProjectedPoint zEnd))
+        {
+            geometry = default;
+            return false;
+        }
+
+        geometry = new AxisGeometry(projectedCenter, xEnd, yEnd, zEnd, axisLength);
+        return true;
+    }
+
+    private static double DistanceToSegment(
+        double px, double py,
+        double x0, double y0,
+        double x1, double y1)
+    {
+        double dx = x1 - x0;
+        double dy = y1 - y0;
+        double denominator = dx * dx + dy * dy;
+        if (denominator < 1e-12)
+            return Math.Sqrt((px - x0) * (px - x0) + (py - y0) * (py - y0));
+
+        double t = ((px - x0) * dx + (py - y0) * dy) / denominator;
+        t = Math.Clamp(t, 0.0, 1.0);
+        double nearestX = x0 + t * dx;
+        double nearestY = y0 + t * dy;
+        double offsetX = px - nearestX;
+        double offsetY = py - nearestY;
+        return Math.Sqrt(offsetX * offsetX + offsetY * offsetY);
     }
 
     private static void DrawAxis(

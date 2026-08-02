@@ -36,6 +36,7 @@ public static class ShadowRasterRenderer
     {
         internal PreviewCache(Scene scene, List<ShadowMap> shadowMaps, long buildMilliseconds)
         {
+            CacheStamp = SceneCacheStamp.Capture(scene);
             Scene = scene;
             ShadowMaps = shadowMaps;
             BuildMilliseconds = buildMilliseconds;
@@ -44,7 +45,9 @@ public static class ShadowRasterRenderer
             EnabledShadowMapCount = shadowMaps.Count(m => m.Enabled);
         }
 
+        public SceneCacheStamp CacheStamp { get; }
         public Scene Scene { get; }
+        public bool IsCurrent(Scene scene) => CacheStamp.Matches(scene);
         public int TriangleCount { get; }
         public int LightCount { get; }
         public int EnabledShadowMapCount { get; }
@@ -109,7 +112,7 @@ public static class ShadowRasterRenderer
         }
 
         stopwatch.Stop();
-        details = $"Shadow raster {(interactiveFast ? "20fps preview" : "OK")} - {width}x{height}, triangles={cache.TriangleCount}, lights={(interactiveFast ? lights.Length : cache.LightCount)}, shadowMaps={cache.EnabledShadowMapCount}, cache={cache.BuildMilliseconds}ms, frame={stopwatch.ElapsedMilliseconds}ms";
+        details = $"Shadow raster {(interactiveFast ? "20fps preview" : "OK")} - {width}x{height}, revision={cache.CacheStamp.Revision}, triangles={cache.TriangleCount}, lights={(interactiveFast ? lights.Length : cache.LightCount)}, shadowMaps={cache.EnabledShadowMapCount}, cache={cache.BuildMilliseconds}ms, frame={stopwatch.ElapsedMilliseconds}ms";
         return new RenderImage(width, height, pixels);
     }
 

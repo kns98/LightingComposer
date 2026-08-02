@@ -87,6 +87,7 @@ public static class VulkanSceneComputeRenderer
     private sealed class PreparedComputeScene : IDisposable
     {
         public required Scene Scene { get; init; }
+        public required SceneCacheStamp CacheStamp { get; init; }
         public required DeviceBuffer TriangleBuffer { get; init; }
         public required DeviceBuffer BvhBuffer { get; init; }
         public required DeviceBuffer LightBuffer { get; init; }
@@ -720,7 +721,7 @@ public static class VulkanSceneComputeRenderer
         RenderImage image = ReadBackOutputImage(gd, factory, outputBuffer, stagingBuffer, outputBytes, width, height, cancellationToken, "final readback");
         string triangleTruncated = sourceTriangleCount > uploadedTriangleCount ? $", triangles truncated from {sourceTriangleCount}" : string.Empty;
         string lightTruncated = sourceLightCount > uploadedLightCount ? $", lights truncated from {sourceLightCount}" : string.Empty;
-        details = $"VULKAN GPU COMPUTE BVH TRACE - {width}x{height}, {uploadedTriangleCount} triangles{triangleTruncated}, {uploadedBvhNodeCount} BVH nodes, {uploadedLightCount} lights{lightTruncated}, textures={prepared.TextureCount}, material=linear-srgb+pbr+smooth-normal+normal-map+occlusion+ibl, bounces={Math.Clamp(bounceCount, 0, 8)}, samples={sampleIndex + 1}-{sampleIndex + sampleCount}, fov={fieldOfViewDegrees:0.##}, exposure={settings.Exposure:0.###}, ambient={settings.AmbientStrength:0.###}, shadows={settings.UseShadows}, tileRows={tileRows}";
+        details = $"VULKAN GPU COMPUTE BVH TRACE - {width}x{height}, revision={prepared.CacheStamp.Revision}, {uploadedTriangleCount} triangles{triangleTruncated}, {uploadedBvhNodeCount} BVH nodes, {uploadedLightCount} lights{lightTruncated}, textures={prepared.TextureCount}, material=linear-srgb+pbr+smooth-normal+normal-map+occlusion+ibl, bounces={Math.Clamp(bounceCount, 0, 8)}, samples={sampleIndex + 1}-{sampleIndex + sampleCount}, fov={fieldOfViewDegrees:0.##}, exposure={settings.Exposure:0.###}, ambient={settings.AmbientStrength:0.###}, shadows={settings.UseShadows}, tileRows={tileRows}";
         Stage("Render completed successfully");
         return image;
     }
@@ -961,7 +962,7 @@ public static class VulkanSceneComputeRenderer
     {
         lock (DeviceSync)
         {
-            if (preparedScene != null && ReferenceEquals(preparedScene.Scene, scene))
+            if (preparedScene != null && preparedScene.CacheStamp.Matches(scene))
             {
                 Stage("Reuse cached Vulkan compute scene buffers");
                 return preparedScene;
@@ -1031,6 +1032,7 @@ public static class VulkanSceneComputeRenderer
                 preparedScene = new PreparedComputeScene
                 {
                     Scene = scene,
+                    CacheStamp = SceneCacheStamp.Capture(scene),
                     TriangleBuffer = triangleBuffer,
                     BvhBuffer = bvhBuffer,
                     LightBuffer = lightBuffer,

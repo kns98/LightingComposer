@@ -70,7 +70,7 @@ public static class VulkanRasterRenderer
     // Interactive and settled frames use different resolutions. Keep a small
     // LRU so orbit/release does not recreate color, depth, staging and sync
     // resources every time the viewer switches between those sizes.
-    private const int MaxCachedTargetSizes = 1;
+    private const int MaxCachedTargetSizes = 2;
     private static readonly Dictionary<(int Width, int Height), RasterTargets> sharedTargets = new();
     private static long targetUseSerial;
     private static bool preflightCompleted;
@@ -101,6 +101,8 @@ public static class VulkanRasterRenderer
     private sealed class PreparedRasterScene : IDisposable
     {
         public required Scene Scene { get; init; }
+        public required SceneCacheStamp CacheStamp { get; set; }
+        public required IReadOnlyDictionary<Material, int> MaterialIds { get; init; }
         public required DeviceBuffer OpaqueVertexBuffer { get; init; }
         public required DeviceBuffer TransparentVertexBuffer { get; init; }
         public required DeviceBuffer CameraBuffer { get; init; }
@@ -121,8 +123,8 @@ public static class VulkanRasterRenderer
         public required bool GpuTextureSamplingRequested { get; init; }
         public required bool UsesGpuTextureSampling { get; init; }
         public string? TextureFallbackReason { get; init; }
-        public required double BoundingRadius { get; init; }
-        public required Vec3 BoundingCenter { get; init; }
+        public required double BoundingRadius { get; set; }
+        public required Vec3 BoundingCenter { get; set; }
 
         public void Dispose()
         {
@@ -452,6 +454,81 @@ public static class VulkanRasterRenderer
         }
     }
 
+    /// <summary>
+    /// Reuploads only vertex positions, normals, UVs and material indices into an
+    /// already allocated Vulkan scene. This is the fast path for baked transforms:
+    /// textures, pipelines, descriptors, render targets and buffer allocations stay hot.
+    /// </summary>
+    public static bool TryRefreshPreparedGeometry(
+        Scene scene,
+        CancellationToken cancellationToken,
+        out string details)
+    {
+        if (scene == null) throw new ArgumentNullException(nameof(scene));
+
+        lock (RenderSync)
+        {
+            lock (DeviceSync)
+            {
+                PreparedRasterScene? prepared = preparedScene;
+                GraphicsDevice? gd = sharedGraphicsDevice;
+                if (prepared == null || gd == null || !ReferenceEquals(prepared.Scene, scene))
+                {
+                    details = "No compatible Vulkan raster scene cache is active.";
+                    return false;
+                }
+                if (prepared.CacheStamp.Matches(scene))
+                {
+                    details = "Vulkan raster geometry cache is already current.";
+                    return true;
+                }
+
+                int opaqueTriangles = 0;
+                int transparentTriangles = 0;
+                foreach (Triangle triangle in scene.Triangles)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    if (!IsFinite(triangle.A) || !IsFinite(triangle.B) || !IsFinite(triangle.C) || !IsFinite(triangle.Normal))
+                        continue;
+                    if (!prepared.MaterialIds.ContainsKey(triangle.Material))
+                    {
+                        details = "A material changed, so the Vulkan raster scene requires a full rebuild.";
+                        return false;
+                    }
+
+                    if (IsTransparentMaterial(triangle.Material))
+                        transparentTriangles++;
+                    else
+                        opaqueTriangles++;
+                }
+
+                if (opaqueTriangles * 3 != prepared.OpaqueVertexCount ||
+                    transparentTriangles * 3 != prepared.TransparentVertexCount)
+                {
+                    details = "Scene topology or transparency classification changed, so the Vulkan raster scene requires a full rebuild.";
+                    return false;
+                }
+
+                Stopwatch stopwatch = Stopwatch.StartNew();
+                UploadRasterGeometry(
+                    gd,
+                    prepared.OpaqueVertexBuffer,
+                    prepared.TransparentVertexBuffer,
+                    scene,
+                    prepared.MaterialIds,
+                    cancellationToken);
+                ComputeSceneBounds(scene, out Vec3 center, out double radius);
+                prepared.BoundingCenter = center;
+                prepared.BoundingRadius = radius;
+                prepared.CacheStamp = SceneCacheStamp.Capture(scene);
+                stopwatch.Stop();
+                details = $"Vulkan raster geometry refreshed in-place in {stopwatch.ElapsedMilliseconds} ms; allocations and textures were reused.";
+                Stage(details);
+                return true;
+            }
+        }
+    }
+
     /// <summary>Renders one hardware-rasterized preview frame into a cross-platform RGBA image.</summary>
     public static RenderImage Render(
         Scene scene,
@@ -557,7 +634,7 @@ public static class VulkanRasterRenderer
         string triangleMode = prepared.NearClippedTriangleCount > 0
             ? $"triangles={prepared.TotalTriangleCount}/{prepared.SourceTriangleCount} ({prepared.NearClippedTriangleCount} invalid skipped)"
             : $"triangles={prepared.TotalTriangleCount}";
-        details = $"VULKAN RASTER PBR CACHED - {width}x{height}, {triangleMode}, lights={prepared.LightCount}, {textureMode}, cache={(prepareMs == 0 ? "hot" : "ready")}, device={deviceMs}ms, targets={targetMs}ms, prepare={prepareMs}ms, uniform={uniformMs}ms, record={recordMs}ms, gpu+wait={gpuWaitMs}ms, readback={readbackMs}ms, total={total.ElapsedMilliseconds}ms";
+        details = $"VULKAN RASTER PBR CACHED - {width}x{height}, revision={prepared.CacheStamp.Revision}, {triangleMode}, lights={prepared.LightCount}, {textureMode}, cache={(prepareMs == 0 ? "hot" : "ready")}, device={deviceMs}ms, targets={targetMs}ms, prepare={prepareMs}ms, uniform={uniformMs}ms, record={recordMs}ms, gpu+wait={gpuWaitMs}ms, readback={readbackMs}ms, total={total.ElapsedMilliseconds}ms";
         Stage(details);
         return image;
     }
@@ -566,7 +643,7 @@ public static class VulkanRasterRenderer
     {
         bool gpuTextureSamplingRequested = UseGpuTextureSampling;
         if (preparedScene != null &&
-            ReferenceEquals(preparedScene.Scene, scene) &&
+            preparedScene.CacheStamp.Matches(scene) &&
             preparedScene.GpuTextureSamplingRequested == gpuTextureSamplingRequested)
             return preparedScene;
 
@@ -626,6 +703,8 @@ public static class VulkanRasterRenderer
             preparedScene = new PreparedRasterScene
             {
                 Scene = scene,
+                CacheStamp = SceneCacheStamp.Capture(scene),
+                MaterialIds = geometry.MaterialIds,
                 OpaqueVertexBuffer = opaque,
                 TransparentVertexBuffer = transparent,
                 CameraBuffer = camera,

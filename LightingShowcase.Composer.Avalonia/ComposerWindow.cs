@@ -1,7 +1,6 @@
 using System.Diagnostics;
 using Avalonia;
 using Avalonia.Controls;
-using Avalonia.Controls.Templates;
 using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
@@ -22,26 +21,23 @@ internal sealed class ComposerWindow : Window
         public override string ToString() => Label;
     }
 
-    private sealed class ObjectTreeNode
-    {
-        public ObjectTreeNode(int id, string label)
-        {
-            Id = id;
-            Label = label;
-        }
-
-        public int Id { get; }
-        public string Label { get; }
-        public List<ObjectTreeNode> Children { get; } = new();
-        public override string ToString() => Label;
-    }
-
     private enum ViewportDragMode
     {
         None,
         Orbit,
         Pan
     }
+
+    private sealed record GizmoDragState(
+        int SelectedId,
+        ComposerGizmoAxis Axis,
+        Point StartImagePoint,
+        Vec3 StartPosition,
+        Vec3 Rotation,
+        Vec3 Scale,
+        double ScreenDirectionX,
+        double ScreenDirectionY,
+        double WorldUnitsPerPixel);
 
     private readonly RendererChoice[] rendererChoices =
     [
@@ -59,14 +55,22 @@ internal sealed class ComposerWindow : Window
     private readonly TextBlock statusText;
     private readonly TextBlock detailsText;
     private readonly ComboBox rendererBox;
-    private readonly TreeView objectTree;
+    private readonly ScrollViewer objectTree;
+    private readonly StackPanel objectTreePanel;
+    private readonly HashSet<int> expandedObjectIds = new();
+    private readonly Dictionary<int, int> trianglePageOffsets = new();
+    private const int TrianglePageSize = 200;
+    private bool treeExpansionInitialized;
     private readonly Border viewport;
     private readonly Image image;
     private readonly Button newButton;
     private readonly Button openButton;
     private readonly Button insertButton;
     private readonly Button saveButton;
+    private readonly Button undoButton;
+    private readonly Button redoButton;
     private readonly Button duplicateButton;
+    private readonly Button ungroupButton;
     private readonly Button deleteButton;
     private readonly Button gridButton;
     private readonly Button applyButton;
@@ -88,9 +92,11 @@ internal sealed class ComposerWindow : Window
 
     private WriteableBitmap? bitmap;
     private int? selectedObjectId;
-    private bool refreshingObjectTree;
+    private int? selectedTriangleGroupId;
+    private int? selectedTriangleIndex;
     private ViewportDragMode viewportDragMode;
     private bool leftPressed;
+    private GizmoDragState? gizmoDrag;
     private Point previousPointer;
     private Point leftPressPoint;
     private bool rendering;
@@ -114,7 +120,10 @@ internal sealed class ComposerWindow : Window
         openButton = NewButton("Open…");
         insertButton = NewButton("Insert model…");
         saveButton = NewButton("Save scene…");
+        undoButton = NewButton("Undo");
+        redoButton = NewButton("Redo");
         duplicateButton = NewButton("Duplicate");
+        ungroupButton = NewButton("Ungroup");
         deleteButton = NewButton("Delete");
         gridButton = NewButton("Generate grid");
         applyButton = NewButton("Apply transform");
@@ -145,17 +154,15 @@ internal sealed class ComposerWindow : Window
             TextTrimming = TextTrimming.CharacterEllipsis
         };
 
-        objectTree = new TreeView
+        objectTreePanel = new StackPanel
         {
-            SelectionMode = SelectionMode.Single,
-            AutoScrollToSelectedItem = true,
-            ItemTemplate = new FuncTreeDataTemplate<ObjectTreeNode>(
-                (node, _) => new TextBlock
-                {
-                    Text = node.Label,
-                    TextTrimming = TextTrimming.CharacterEllipsis
-                },
-                node => node.Children)
+            Spacing = 2
+        };
+        objectTree = new ScrollViewer
+        {
+            Content = objectTreePanel,
+            HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto,
+            VerticalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto
         };
 
         nameBox = NewTextBox();
@@ -209,7 +216,7 @@ internal sealed class ComposerWindow : Window
 
         Grid toolbar = new()
         {
-            ColumnDefinitions = new ColumnDefinitions("Auto,Auto,Auto,Auto,*,Auto"),
+            ColumnDefinitions = new ColumnDefinitions("Auto,Auto,Auto,Auto,Auto,Auto,*,Auto"),
             ColumnSpacing = 8,
             Margin = new Thickness(10)
         };
@@ -221,10 +228,14 @@ internal sealed class ComposerWindow : Window
         Grid.SetColumn(insertButton, 2);
         toolbar.Children.Add(saveButton);
         Grid.SetColumn(saveButton, 3);
+        toolbar.Children.Add(undoButton);
+        Grid.SetColumn(undoButton, 4);
+        toolbar.Children.Add(redoButton);
+        Grid.SetColumn(redoButton, 5);
         toolbar.Children.Add(pathText);
-        Grid.SetColumn(pathText, 4);
+        Grid.SetColumn(pathText, 6);
         toolbar.Children.Add(rendererBox);
-        Grid.SetColumn(rendererBox, 5);
+        Grid.SetColumn(rendererBox, 7);
         root.Children.Add(toolbar);
 
         Grid content = new()
@@ -283,12 +294,14 @@ internal sealed class ComposerWindow : Window
 
         Grid objectButtons = new()
         {
-            ColumnDefinitions = new ColumnDefinitions("*,*"),
+            ColumnDefinitions = new ColumnDefinitions("*,*,*"),
             ColumnSpacing = 8
         };
         objectButtons.Children.Add(duplicateButton);
+        objectButtons.Children.Add(ungroupButton);
+        Grid.SetColumn(ungroupButton, 1);
         objectButtons.Children.Add(deleteButton);
-        Grid.SetColumn(deleteButton, 1);
+        Grid.SetColumn(deleteButton, 2);
         panel.Children.Add(objectButtons);
         Grid.SetRow(objectButtons, 2);
 
@@ -338,7 +351,7 @@ internal sealed class ComposerWindow : Window
         stack.Children.Add(resetTransformButton);
         stack.Children.Add(new TextBlock
         {
-            Text = "Viewport: left click selects; right drag orbits; middle drag or Shift+right drag pans; wheel zooms. Delete removes, Ctrl+D duplicates, and F frames the selection.",
+            Text = "Hierarchy: ▸/▾ expands group nodes. A … row lazily reveals triangle details in pages, so large meshes do not flood the tree. Ungroup promotes children or splits a mesh further. Apply bakes transforms into vertices; Ctrl+Z/Ctrl+Y undo and redo. Viewport: right drag orbits, middle drag pans, and wheel zooms.",
             TextWrapping = TextWrapping.Wrap,
             Opacity = 0.68,
             FontSize = 12,
@@ -358,21 +371,15 @@ internal sealed class ComposerWindow : Window
         openButton.Click += async (_, _) => await BrowseAndOpenAsync();
         insertButton.Click += async (_, _) => await BrowseAndInsertAsync();
         saveButton.Click += async (_, _) => await SaveSceneAsync();
+        undoButton.Click += async (_, _) => await UndoAsync();
+        redoButton.Click += async (_, _) => await RedoAsync();
         duplicateButton.Click += async (_, _) => await DuplicateSelectedAsync();
+        ungroupButton.Click += async (_, _) => await UngroupSelectedAsync();
         deleteButton.Click += async (_, _) => await DeleteSelectedAsync();
         gridButton.Click += async (_, _) => await GenerateGridAsync();
         applyButton.Click += async (_, _) => await ApplyInspectorAsync();
         frameButton.Click += (_, _) => FrameSelected();
         resetTransformButton.Click += async (_, _) => await ResetSelectedTransformAsync();
-
-        objectTree.SelectionChanged += (_, _) =>
-        {
-            if (refreshingObjectTree)
-                return;
-            selectedObjectId = (objectTree.SelectedItem as ObjectTreeNode)?.Id;
-            LoadInspectorFromSelection();
-            _ = UpdateSelectionPreviewAsync();
-        };
 
         rendererBox.SelectionChanged += (_, _) =>
         {
@@ -387,6 +394,12 @@ internal sealed class ComposerWindow : Window
         {
             viewportDragMode = ViewportDragMode.None;
             leftPressed = false;
+            if (gizmoDrag is GizmoDragState pending)
+            {
+                session.CancelPendingTransform(pending.SelectedId);
+                LoadInspectorFromSelection();
+            }
+            gizmoDrag = null;
         };
         viewport.PointerWheelChanged += (_, e) =>
         {
@@ -415,6 +428,10 @@ internal sealed class ComposerWindow : Window
             image.Source = null;
             pathText.Text = "Untitled composition";
             selectedObjectId = null;
+            ClearVirtualTriangleSelection();
+            expandedObjectIds.Clear();
+            trianglePageOffsets.Clear();
+            treeExpansionInitialized = false;
             RefreshObjectTree();
             SetInspectorEnabled(false);
             statusText.Text = "New empty composition. Insert a model to begin.";
@@ -478,6 +495,10 @@ internal sealed class ComposerWindow : Window
             await Task.Run(() => session.Load(path, lifetimeCancellation.Token), lifetimeCancellation.Token);
             pathText.Text = session.ScenePath ?? Path.GetFileName(path);
             selectedObjectId = null;
+            ClearVirtualTriangleSelection();
+            expandedObjectIds.Clear();
+            trianglePageOffsets.Clear();
+            treeExpansionInitialized = false;
             RefreshObjectTree();
             statusText.Text = $"Loaded {Path.GetFileName(path)} — {session.ObjectCount:N0} objects, {session.TriangleCount:N0} triangles.";
             await RequestRenderAsync(interactive: false);
@@ -506,6 +527,8 @@ internal sealed class ComposerWindow : Window
                 lifetimeCancellation.Token);
             pathText.Text = "Untitled composition (modified)";
             selectedObjectId = insertedId;
+            ClearVirtualTriangleSelection();
+            expandedObjectIds.Add(insertedId);
             RefreshObjectTree(insertedId);
             statusText.Text = $"Inserted {Path.GetFileName(path)} — {session.ObjectCount:N0} objects, {session.TriangleCount:N0} triangles.";
             await RequestRenderAsync(interactive: false);
@@ -613,26 +636,52 @@ internal sealed class ComposerWindow : Window
 
         try
         {
-            Vec3 position = ReadVector(positionX, positionY, positionZ, "Position");
-            Vec3 rotationDegrees = ReadVector(rotationX, rotationY, rotationZ, "Rotation");
-            Vec3 scale = ReadVector(scaleX, scaleY, scaleZ, "Scale");
-            Vec3 rotationRadians = rotationDegrees * (Math.PI / 180.0);
+            ComposerTransformRequest request = ComposerTransformRequest.Parse(
+                positionX.Text, positionY.Text, positionZ.Text,
+                rotationX.Text, rotationY.Text, rotationZ.Text,
+                scaleX.Text, scaleY.Text, scaleZ.Text);
 
-            CancelCurrentRender();
-            SetBusy(true, "Applying transform to the selected group…");
-            bool updated = await Task.Run(() => session.UpdateObject(
+            ComposerModelEvidence? beforeEvidence = session.GetModelEvidence(id);
+            await StopCurrentRenderAsync();
+            SetBusy(true, "Baking transform into the selected geometry…");
+            bool updated = await Task.Run(() => request.Apply(
+                session,
                 id,
                 nameBox.Text ?? string.Empty,
-                visibleBox.IsChecked ?? true,
-                position,
-                rotationRadians,
-                scale), lifetimeCancellation.Token);
+                visibleBox.IsChecked ?? true), lifetimeCancellation.Token);
             if (!updated)
                 throw new InvalidOperationException("The selected scene node no longer exists.");
 
             pathText.Text = "Untitled composition (modified)";
+            ComposerObjectState? appliedState = session.GetObjectState(id);
+            ComposerModelEvidence? afterEvidence = session.GetModelEvidence(id);
+            if (appliedState == null || afterEvidence == null)
+                throw new InvalidOperationException("The transformed scene node could not be verified.");
+
+            // Baked transforms leave the node transform fields at identity. The
+            // authoritative proof is that the underlying world geometry changed.
+            if (!NearlyEqual(appliedState.Position, Vec3.Zero) ||
+                !NearlyEqual(appliedState.Rotation, Vec3.Zero) ||
+                !NearlyEqual(appliedState.Scale, new Vec3(1, 1, 1)))
+            {
+                throw new InvalidOperationException("The transform was not fully baked into geometry.");
+            }
+            if (beforeEvidence != null && afterEvidence.SceneRevision <= beforeEvidence.SceneRevision)
+                throw new InvalidOperationException("The scene revision did not advance after the transform.");
+
+            bool nonIdentity = request.Position.Length() > 1e-12 ||
+                               request.RotationRadians.Length() > 1e-12 ||
+                               Math.Abs(request.Scale.X - 1.0) > 1e-12 ||
+                               Math.Abs(request.Scale.Y - 1.0) > 1e-12 ||
+                               Math.Abs(request.Scale.Z - 1.0) > 1e-12;
+            if (nonIdentity && beforeEvidence != null && beforeEvidence.WorldGeometryHash == afterEvidence.WorldGeometryHash)
+                throw new InvalidOperationException("The underlying triangle geometry did not change.");
+
+            ClearVirtualTriangleSelection();
             RefreshObjectTree(id);
-            statusText.Text = "Selected group transform updated.";
+            ClearTransformTextBoxes();
+            UpdateHistoryButtons();
+            statusText.Text = $"Baked transform into {appliedState.Name}; scene revision {afterEvidence.SceneRevision}. {session.LastGeometryRefreshDetails}";
             await RequestRenderAsync(interactive: false);
         }
         catch (Exception ex)
@@ -650,8 +699,8 @@ internal sealed class ComposerWindow : Window
         if (selectedObjectId is not int id)
             return;
 
-        CancelCurrentRender();
-        SetBusy(true, "Resetting the selected group transform…");
+        await StopCurrentRenderAsync();
+        SetBusy(true, "Resetting the selected node transform…");
         try
         {
             bool reset = await Task.Run(
@@ -660,15 +709,114 @@ internal sealed class ComposerWindow : Window
             if (!reset)
                 throw new InvalidOperationException("The selected scene node no longer exists.");
 
+            ClearVirtualTriangleSelection();
             RefreshObjectTree(id);
             LoadInspectorFromSelection();
             pathText.Text = "Untitled composition (modified)";
-            statusText.Text = "Selected group transform reset.";
+            statusText.Text = "Selected node transform reset.";
             await RequestRenderAsync(interactive: false);
         }
         catch (Exception ex)
         {
             statusText.Text = $"Transform reset failed: {ex.Message}";
+        }
+        finally
+        {
+            SetBusy(false);
+        }
+    }
+
+    private async Task UndoAsync()
+    {
+        if (!session.CanUndo)
+            return;
+
+        await StopCurrentRenderAsync();
+        SetBusy(true, "Undoing edit…");
+        try
+        {
+            int? preferred = await Task.Run(session.Undo, lifetimeCancellation.Token);
+            selectedObjectId = preferred;
+            pathText.Text = "Untitled composition (modified)";
+            ClearVirtualTriangleSelection();
+            RefreshObjectTree(preferred);
+            ClearTransformTextBoxes();
+            UpdateHistoryButtons();
+            statusText.Text = $"Undo complete. {session.LastGeometryRefreshDetails}";
+            if (session.HasRenderableScene)
+                await RequestRenderAsync(interactive: false);
+        }
+        catch (Exception ex)
+        {
+            statusText.Text = $"Undo failed: {ex.Message}";
+        }
+        finally
+        {
+            SetBusy(false);
+        }
+    }
+
+    private async Task RedoAsync()
+    {
+        if (!session.CanRedo)
+            return;
+
+        await StopCurrentRenderAsync();
+        SetBusy(true, "Redoing edit…");
+        try
+        {
+            int? preferred = await Task.Run(session.Redo, lifetimeCancellation.Token);
+            selectedObjectId = preferred;
+            pathText.Text = "Untitled composition (modified)";
+            ClearVirtualTriangleSelection();
+            RefreshObjectTree(preferred);
+            ClearTransformTextBoxes();
+            UpdateHistoryButtons();
+            statusText.Text = $"Redo complete. {session.LastGeometryRefreshDetails}";
+            if (session.HasRenderableScene)
+                await RequestRenderAsync(interactive: false);
+        }
+        catch (Exception ex)
+        {
+            statusText.Text = $"Redo failed: {ex.Message}";
+        }
+        finally
+        {
+            SetBusy(false);
+        }
+    }
+
+    private async Task UngroupSelectedAsync()
+    {
+        if (selectedObjectId is not int id)
+            return;
+        if (!session.CanUngroupObject(id))
+        {
+            statusText.Text = "The selected node is already a terminal triangle and cannot be ungrouped further.";
+            return;
+        }
+
+        await StopCurrentRenderAsync();
+        SetBusy(true, "Ungrouping selected node…");
+        try
+        {
+            IReadOnlyList<int> promoted = await Task.Run(() => session.UngroupObject(id), lifetimeCancellation.Token);
+            trianglePageOffsets.Remove(id);
+            expandedObjectIds.Remove(id);
+            selectedObjectId = promoted.FirstOrDefault();
+            if (selectedObjectId == 0)
+                selectedObjectId = null;
+            pathText.Text = "Untitled composition (modified)";
+            ClearVirtualTriangleSelection();
+            RefreshObjectTree(selectedObjectId);
+            UpdateHistoryButtons();
+            statusText.Text = $"Ungrouped into {promoted.Count:N0} node(s).";
+            if (session.HasRenderableScene)
+                await RequestRenderAsync(interactive: false);
+        }
+        catch (Exception ex)
+        {
+            statusText.Text = $"Ungroup failed: {ex.Message}";
         }
         finally
         {
@@ -687,6 +835,7 @@ internal sealed class ComposerWindow : Window
         {
             int? duplicateId = await Task.Run(() => session.DuplicateObject(id), lifetimeCancellation.Token);
             pathText.Text = "Untitled composition (modified)";
+            ClearVirtualTriangleSelection();
             RefreshObjectTree(duplicateId);
             statusText.Text = $"Duplicated object — {session.ObjectCount:N0} objects, {session.TriangleCount:N0} triangles.";
             await RequestRenderAsync(interactive: false);
@@ -709,6 +858,7 @@ internal sealed class ComposerWindow : Window
         CancelCurrentRender();
         await Task.Run(() => session.DeleteObject(id));
         selectedObjectId = null;
+        ClearVirtualTriangleSelection();
         pathText.Text = "Untitled composition (modified)";
         RefreshObjectTree();
         statusText.Text = $"Deleted object — {session.ObjectCount:N0} objects, {session.TriangleCount:N0} triangles.";
@@ -762,67 +912,225 @@ internal sealed class ComposerWindow : Window
 
     private void RefreshObjectTree(int? preferredSelection = null)
     {
-        refreshingObjectTree = true;
-        try
-        {
-            IReadOnlyList<SceneObjectInfo> infos = session.GetObjectInfos();
-            List<ObjectTreeNode> roots = BuildObjectTree(infos);
-            objectTree.ItemsSource = roots;
+        IReadOnlyList<SceneObjectInfo> infos = session.GetObjectInfos();
+        List<ObjectTreeNode> roots = ComposerObjectTree.Build(infos);
+        HashSet<int> validIds = infos.Select(info => info.Id).ToHashSet();
 
-            int? target = preferredSelection ?? selectedObjectId;
-            ObjectTreeNode? item = target.HasValue ? FindTreeNode(roots, target.Value) : null;
-            objectTree.SelectedItem = item;
-            selectedObjectId = item?.Id;
-        }
-        finally
-        {
-            refreshingObjectTree = false;
-        }
+        int? target = preferredSelection ?? selectedObjectId;
+        if (target.HasValue && ComposerObjectTree.Find(roots, target.Value) == null)
+            target = null;
+        selectedObjectId = target;
 
-        session.SetSelectedObject(selectedObjectId);
+        if (!treeExpansionInitialized)
+            treeExpansionInitialized = true;
+
+        expandedObjectIds.RemoveWhere(id => !validIds.Contains(id));
+        foreach (int staleId in trianglePageOffsets.Keys.Where(id => !validIds.Contains(id)).ToList())
+            trianglePageOffsets.Remove(staleId);
+
+        objectTreePanel.Children.Clear();
+        foreach (ObjectTreeNode root in roots)
+            objectTreePanel.Children.Add(BuildObjectTreeControl(root, depth: 0));
+
+        if (selectedTriangleGroupId is int triangleGroupId &&
+            selectedTriangleIndex is int triangleIndex &&
+            selectedObjectId == triangleGroupId &&
+            session.SetSelectedTriangle(triangleGroupId, triangleIndex))
+        {
+            // Virtual triangle selection is restored after rebuilding the UI tree.
+        }
+        else
+        {
+            selectedTriangleGroupId = null;
+            selectedTriangleIndex = null;
+            session.SetSelectedObject(selectedObjectId);
+        }
         LoadInspectorFromSelection();
+        UpdateHistoryButtons();
     }
 
-    private static List<ObjectTreeNode> BuildObjectTree(IReadOnlyList<SceneObjectInfo> infos)
+    private Control BuildObjectTreeControl(ObjectTreeNode node, int depth)
     {
-        List<ObjectTreeNode> roots = new();
-        List<ObjectTreeNode> ancestors = new();
-
-        foreach (SceneObjectInfo info in infos)
+        StackPanel branch = new() { Spacing = 2 };
+        Grid row = new()
         {
-            ObjectTreeNode node = new(
-                info.Id,
-                $"{(info.Visible ? "●" : "○")} {info.Name}  [{info.TriangleCount:N0}]");
+            ColumnDefinitions = new ColumnDefinitions("24,*"),
+            ColumnSpacing = 2,
+            Margin = new Thickness(depth * 14, 0, 0, 0)
+        };
 
-            int depth = Math.Min(Math.Max(0, info.Depth), ancestors.Count);
-            while (ancestors.Count > depth)
-                ancestors.RemoveAt(ancestors.Count - 1);
-
-            if (depth == 0)
-                roots.Add(node);
-            else
-                ancestors[depth - 1].Children.Add(node);
-
-            if (ancestors.Count == depth)
-                ancestors.Add(node);
-            else
-                ancestors[depth] = node;
+        bool hasTriangleDetails = node.LocalTriangleCount > 0;
+        bool hasExpandableContent = node.Children.Count > 0 || hasTriangleDetails;
+        if (hasExpandableContent)
+        {
+            bool expanded = expandedObjectIds.Contains(node.Id);
+            Button toggle = new()
+            {
+                Content = expanded ? "▾" : "▸",
+                Width = 22,
+                Height = 26,
+                Padding = new Thickness(0)
+            };
+            toggle.Click += (_, _) =>
+            {
+                ComposerObjectTree.ToggleExpanded(expandedObjectIds, node.Id);
+                RefreshObjectTree(selectedObjectId);
+            };
+            row.Children.Add(toggle);
+        }
+        else
+        {
+            row.Children.Add(new TextBlock
+            {
+                Text = "△",
+                Width = 22,
+                TextAlignment = TextAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+                Opacity = 0.55
+            });
         }
 
-        return roots;
+        Button select = new()
+        {
+            Content = new TextBlock
+            {
+                Text = node.Label,
+                TextTrimming = TextTrimming.CharacterEllipsis,
+                HorizontalAlignment = HorizontalAlignment.Left
+            },
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            MinHeight = 28,
+            Padding = new Thickness(6, 3),
+            BorderThickness = new Thickness(0),
+            Background = selectedObjectId == node.Id
+                ? new SolidColorBrush(Color.FromArgb(110, 255, 125, 40))
+                : Brushes.Transparent
+        };
+        select.Click += (_, _) => SelectObject(node.Id);
+        row.Children.Add(select);
+        Grid.SetColumn(select, 1);
+        branch.Children.Add(row);
+
+        if (hasExpandableContent && expandedObjectIds.Contains(node.Id))
+        {
+            foreach (ObjectTreeNode child in node.Children)
+                branch.Children.Add(BuildObjectTreeControl(child, depth + 1));
+
+            if (hasTriangleDetails)
+                AddLazyTriangleRows(branch, node, depth + 1);
+        }
+
+        return branch;
     }
 
-    private static ObjectTreeNode? FindTreeNode(IEnumerable<ObjectTreeNode> nodes, int id)
+    private void AddLazyTriangleRows(StackPanel branch, ObjectTreeNode node, int depth)
     {
-        foreach (ObjectTreeNode node in nodes)
+        bool open = trianglePageOffsets.TryGetValue(node.Id, out int pageOffset);
+        pageOffset = Math.Clamp(pageOffset, 0, Math.Max(0, node.LocalTriangleCount - 1));
+
+        if (!open)
         {
-            if (node.Id == id)
-                return node;
-            ObjectTreeNode? child = FindTreeNode(node.Children, id);
-            if (child != null)
-                return child;
+            Button show = new()
+            {
+                Content = $"… show triangles ({node.LocalTriangleCount:N0})",
+                HorizontalAlignment = HorizontalAlignment.Stretch,
+                HorizontalContentAlignment = HorizontalAlignment.Left,
+                Margin = new Thickness(depth * 14 + 20, 2, 4, 2),
+                Padding = new Thickness(8, 3),
+                MinHeight = 26
+            };
+            show.Click += (_, _) =>
+            {
+                trianglePageOffsets[node.Id] = 0;
+                RefreshObjectTree(selectedObjectId);
+            };
+            branch.Children.Add(show);
+            return;
         }
-        return null;
+
+        IReadOnlyList<ComposerTriangleInfo> page = session.GetTriangleInfos(
+            node.Id,
+            pageOffset,
+            TrianglePageSize);
+        foreach (ComposerTriangleInfo triangle in page)
+        {
+            bool selectedTriangle = selectedTriangleGroupId == node.Id &&
+                                    selectedTriangleIndex == triangle.Index;
+            Button triangleRow = new()
+            {
+                Content = new TextBlock
+                {
+                    Text = $"△ {triangle.Label}",
+                    TextTrimming = TextTrimming.CharacterEllipsis,
+                    FontSize = 12
+                },
+                HorizontalAlignment = HorizontalAlignment.Stretch,
+                HorizontalContentAlignment = HorizontalAlignment.Left,
+                Margin = new Thickness(depth * 14 + 20, 1, 4, 1),
+                Padding = new Thickness(8, 2),
+                MinHeight = 24,
+                BorderThickness = new Thickness(0),
+                Background = selectedTriangle
+                    ? new SolidColorBrush(Color.FromArgb(95, 255, 125, 40))
+                    : Brushes.Transparent
+            };
+            triangleRow.Click += (_, _) => SelectTriangle(node.Id, triangle.Index);
+            branch.Children.Add(triangleRow);
+        }
+
+        int pageEnd = pageOffset + page.Count;
+        Grid controls = new()
+        {
+            ColumnDefinitions = new ColumnDefinitions("Auto,Auto,*"),
+            ColumnSpacing = 6,
+            Margin = new Thickness(depth * 14 + 20, 2, 4, 2)
+        };
+
+        Button previous = new()
+        {
+            Content = "… previous",
+            IsEnabled = pageOffset > 0,
+            Padding = new Thickness(8, 3)
+        };
+        previous.Click += (_, _) =>
+        {
+            trianglePageOffsets[node.Id] = Math.Max(0, pageOffset - TrianglePageSize);
+            RefreshObjectTree(selectedObjectId);
+        };
+        controls.Children.Add(previous);
+
+        Button next = new()
+        {
+            Content = $"… next ({pageEnd:N0}/{node.LocalTriangleCount:N0})",
+            IsEnabled = pageEnd < node.LocalTriangleCount,
+            Padding = new Thickness(8, 3)
+        };
+        next.Click += (_, _) =>
+        {
+            trianglePageOffsets[node.Id] = Math.Min(
+                Math.Max(0, node.LocalTriangleCount - 1),
+                pageOffset + TrianglePageSize);
+            RefreshObjectTree(selectedObjectId);
+        };
+        controls.Children.Add(next);
+        Grid.SetColumn(next, 1);
+
+        Button hide = new()
+        {
+            Content = "… hide triangles",
+            HorizontalAlignment = HorizontalAlignment.Right,
+            Padding = new Thickness(8, 3)
+        };
+        hide.Click += (_, _) =>
+        {
+            trianglePageOffsets.Remove(node.Id);
+            if (selectedTriangleGroupId == node.Id)
+                ClearVirtualTriangleSelection();
+            RefreshObjectTree(selectedObjectId);
+        };
+        controls.Children.Add(hide);
+        Grid.SetColumn(hide, 2);
+        branch.Children.Add(controls);
     }
 
     private void LoadInspectorFromSelection()
@@ -833,12 +1141,14 @@ internal sealed class ComposerWindow : Window
             return;
         }
 
+        ComposerObjectState transformState = session.GetTransformTargetState(id) ?? state;
+
         SetInspectorEnabled(true);
         nameBox.Text = state.Name;
         visibleBox.IsChecked = state.Visible;
-        WriteVector(state.Position, positionX, positionY, positionZ);
-        WriteVector(state.Rotation * (180.0 / Math.PI), rotationX, rotationY, rotationZ);
-        WriteVector(state.Scale, scaleX, scaleY, scaleZ);
+        WriteVector(transformState.Position, positionX, positionY, positionZ);
+        WriteVector(transformState.Rotation * (180.0 / Math.PI), rotationX, rotationY, rotationZ);
+        WriteVector(transformState.Scale, scaleX, scaleY, scaleZ);
     }
 
     private void SetInspectorEnabled(bool enabled)
@@ -856,6 +1166,7 @@ internal sealed class ComposerWindow : Window
         frameButton.IsEnabled = enabled;
         resetTransformButton.IsEnabled = enabled;
         duplicateButton.IsEnabled = enabled;
+        ungroupButton.IsEnabled = enabled && selectedObjectId is int id && session.CanUngroupObject(id);
         deleteButton.IsEnabled = enabled;
         gridButton.IsEnabled = enabled;
     }
@@ -890,6 +1201,13 @@ internal sealed class ComposerWindow : Window
 
         if (point.Properties.IsLeftButtonPressed)
         {
+            if (TryBeginGizmoDrag(position))
+            {
+                e.Pointer.Capture(viewport);
+                e.Handled = true;
+                return;
+            }
+
             leftPressed = true;
             leftPressPoint = position;
             e.Pointer.Capture(viewport);
@@ -899,6 +1217,13 @@ internal sealed class ComposerWindow : Window
 
     private void OnViewportPointerMoved(object? sender, PointerEventArgs e)
     {
+        if (gizmoDrag != null)
+        {
+            UpdateGizmoDrag(e.GetPosition(viewport));
+            e.Handled = true;
+            return;
+        }
+
         if (viewportDragMode == ViewportDragMode.None)
             return;
 
@@ -922,6 +1247,32 @@ internal sealed class ComposerWindow : Window
     private async void OnViewportPointerReleased(object? sender, PointerReleasedEventArgs e)
     {
         Point releasePoint = e.GetPosition(viewport);
+        if (gizmoDrag != null)
+        {
+            UpdateGizmoDrag(releasePoint);
+            int commitId = gizmoDrag.SelectedId;
+            gizmoDrag = null;
+            e.Pointer.Capture(null);
+            await StopCurrentRenderAsync();
+            bool committed = await Task.Run(() => session.CommitPendingTransform(commitId), lifetimeCancellation.Token);
+            if (!committed)
+            {
+                statusText.Text = "The transform target no longer exists.";
+                e.Handled = true;
+                return;
+            }
+
+            ClearVirtualTriangleSelection();
+            RefreshObjectTree(commitId);
+            ClearTransformTextBoxes();
+            UpdateHistoryButtons();
+            pathText.Text = "Untitled composition (modified)";
+            statusText.Text = $"Baked gizmo move into geometry. {session.LastGeometryRefreshDetails}";
+            await RequestRenderAsync(interactive: false);
+            e.Handled = true;
+            return;
+        }
+
         if (viewportDragMode != ViewportDragMode.None)
         {
             viewportDragMode = ViewportDragMode.None;
@@ -936,10 +1287,10 @@ internal sealed class ComposerWindow : Window
             leftPressed = false;
             e.Pointer.Capture(null);
             Vector movement = releasePoint - leftPressPoint;
-            if (movement.Length <= 5.0 && viewport.Bounds.Width > 0 && viewport.Bounds.Height > 0)
+            if (movement.Length <= 5.0 && TryViewportToImagePoint(releasePoint, out Point imagePoint))
             {
-                double normalizedX = releasePoint.X / viewport.Bounds.Width;
-                double normalizedY = releasePoint.Y / viewport.Bounds.Height;
+                double normalizedX = imagePoint.X / Math.Max(1, lastRenderWidth);
+                double normalizedY = imagePoint.Y / Math.Max(1, lastRenderHeight);
                 CameraDefinition camera = session.Camera.Snapshot();
                 int? hitId = await Task.Run(() => session.PickObject(
                     camera,
@@ -954,18 +1305,150 @@ internal sealed class ComposerWindow : Window
         }
     }
 
+    private bool TryBeginGizmoDrag(Point viewportPoint)
+    {
+        if (selectedObjectId is not int selectedId ||
+            session.GetTransformTargetState(selectedId) is not ComposerObjectState state ||
+            session.GetTransformTargetBounds(selectedId) is not Aabb bounds ||
+            !TryViewportToImagePoint(viewportPoint, out Point imagePoint))
+        {
+            return false;
+        }
+
+        CameraDefinition camera = session.Camera.Snapshot();
+        if (!ComposerOverlayRenderer.TryHitTranslationAxis(
+                camera,
+                bounds,
+                lastRenderWidth,
+                lastRenderHeight,
+                imagePoint.X,
+                imagePoint.Y,
+                out ComposerGizmoHit hit))
+        {
+            return false;
+        }
+
+        gizmoDrag = new GizmoDragState(
+            selectedId,
+            hit.Axis,
+            imagePoint,
+            state.Position,
+            state.Rotation,
+            state.Scale,
+            hit.ScreenDirectionX,
+            hit.ScreenDirectionY,
+            hit.WorldUnitsPerPixel);
+        statusText.Text = $"Dragging {hit.Axis} translation axis…";
+        return true;
+    }
+
+    private void UpdateGizmoDrag(Point viewportPoint)
+    {
+        GizmoDragState? drag = gizmoDrag;
+        if (drag == null || !TryViewportToImagePoint(viewportPoint, out Point imagePoint))
+            return;
+
+        double deltaX = imagePoint.X - drag.StartImagePoint.X;
+        double deltaY = imagePoint.Y - drag.StartImagePoint.Y;
+        double pixelDistance = deltaX * drag.ScreenDirectionX + deltaY * drag.ScreenDirectionY;
+        double worldDistance = pixelDistance * drag.WorldUnitsPerPixel;
+        Vec3 axis = drag.Axis switch
+        {
+            ComposerGizmoAxis.X => new Vec3(1, 0, 0),
+            ComposerGizmoAxis.Y => new Vec3(0, 1, 0),
+            ComposerGizmoAxis.Z => new Vec3(0, 0, 1),
+            _ => Vec3.Zero
+        };
+        Vec3 updatedPosition = drag.StartPosition + axis * worldDistance;
+
+        CancelCurrentRender();
+        if (!session.UpdateTransformTarget(
+                drag.SelectedId,
+                updatedPosition,
+                drag.Rotation,
+                drag.Scale))
+        {
+            gizmoDrag = null;
+            statusText.Text = "The transform target no longer exists.";
+            return;
+        }
+
+        LoadInspectorFromSelection();
+        pathText.Text = "Untitled composition (modified)";
+        statusText.Text = $"Pending {drag.Axis} translation: release the mouse to bake once and refresh Vulkan.";
+    }
+
+    private bool TryViewportToImagePoint(Point viewportPoint, out Point imagePoint)
+    {
+        double viewportWidth = viewport.Bounds.Width;
+        double viewportHeight = viewport.Bounds.Height;
+        if (lastRenderWidth <= 0 || lastRenderHeight <= 0 || viewportWidth <= 0 || viewportHeight <= 0)
+        {
+            imagePoint = default;
+            return false;
+        }
+
+        double scale = Math.Min(viewportWidth / lastRenderWidth, viewportHeight / lastRenderHeight);
+        double displayedWidth = lastRenderWidth * scale;
+        double displayedHeight = lastRenderHeight * scale;
+        double offsetX = (viewportWidth - displayedWidth) * 0.5;
+        double offsetY = (viewportHeight - displayedHeight) * 0.5;
+        double localX = viewportPoint.X - offsetX;
+        double localY = viewportPoint.Y - offsetY;
+        if (localX < 0 || localY < 0 || localX > displayedWidth || localY > displayedHeight)
+        {
+            imagePoint = default;
+            return false;
+        }
+
+        imagePoint = new Point(localX / scale, localY / scale);
+        return true;
+    }
+
     private void SelectObject(int id)
     {
-        if (objectTree.ItemsSource is not IEnumerable<ObjectTreeNode> roots)
+        if (session.GetObjectState(id) == null)
             return;
-        ObjectTreeNode? item = FindTreeNode(roots, id);
-        if (item == null)
+
+        selectedObjectId = id;
+        ClearVirtualTriangleSelection();
+        RefreshObjectTree(id);
+        _ = RequestRenderAsync(interactive: false);
+    }
+
+    private void SelectTriangle(int groupId, int triangleIndex)
+    {
+        if (!session.SetSelectedTriangle(groupId, triangleIndex))
             return;
-        objectTree.SelectedItem = item;
+
+        selectedObjectId = groupId;
+        selectedTriangleGroupId = groupId;
+        selectedTriangleIndex = triangleIndex;
+        RefreshObjectTree(groupId);
+        statusText.Text = $"Selected virtual Triangle {triangleIndex + 1:N0}. It adds no scene node; transforms and ungroup target the owning mesh.";
+        _ = RequestRenderAsync(interactive: false);
+    }
+
+    private void ClearVirtualTriangleSelection()
+    {
+        selectedTriangleGroupId = null;
+        selectedTriangleIndex = null;
     }
 
     private void OnWindowKeyDown(object? sender, KeyEventArgs e)
     {
+        if (e.KeyModifiers.HasFlag(KeyModifiers.Control) && e.Key == Key.Z)
+        {
+            _ = UndoAsync();
+            e.Handled = true;
+            return;
+        }
+        if (e.KeyModifiers.HasFlag(KeyModifiers.Control) && e.Key == Key.Y)
+        {
+            _ = RedoAsync();
+            e.Handled = true;
+            return;
+        }
         if (e.KeyModifiers.HasFlag(KeyModifiers.Control) && e.Key == Key.D)
         {
             _ = DuplicateSelectedAsync();
@@ -1223,6 +1706,43 @@ internal sealed class ComposerWindow : Window
         }
     }
 
+    private async Task StopCurrentRenderAsync()
+    {
+        renderVersion++;
+        renderAgain = false;
+        pendingInteractive = false;
+        activeRenderCancellation?.Cancel();
+
+        while (rendering && !lifetimeCancellation.IsCancellationRequested)
+            await Task.Delay(8, lifetimeCancellation.Token);
+    }
+
+    private static bool NearlyEqual(Vec3 left, Vec3 right)
+    {
+        const double tolerance = 1e-8;
+        return Math.Abs(left.X - right.X) <= tolerance &&
+               Math.Abs(left.Y - right.Y) <= tolerance &&
+               Math.Abs(left.Z - right.Z) <= tolerance;
+    }
+
+    private void ClearTransformTextBoxes()
+    {
+        foreach (TextBox box in TransformTextBoxes())
+            box.Text = string.Empty;
+    }
+
+    private void UpdateHistoryButtons()
+    {
+        undoButton.IsEnabled = session.CanUndo;
+        redoButton.IsEnabled = session.CanRedo;
+        undoButton.Content = session.UndoDescription is string undoDescription
+            ? $"Undo {undoDescription}"
+            : "Undo";
+        redoButton.Content = session.RedoDescription is string redoDescription
+            ? $"Redo {redoDescription}"
+            : "Redo";
+    }
+
     private void CancelCurrentRender()
     {
         renderVersion++;
@@ -1239,6 +1759,15 @@ internal sealed class ComposerWindow : Window
         objectTree.IsEnabled = !busy;
         if (selectedObjectId.HasValue)
             SetInspectorEnabled(!busy);
+        if (busy)
+        {
+            undoButton.IsEnabled = false;
+            redoButton.IsEnabled = false;
+        }
+        else
+        {
+            UpdateHistoryButtons();
+        }
         if (!string.IsNullOrWhiteSpace(message))
             statusText.Text = message;
     }

@@ -16,7 +16,7 @@ internal static class Program
         if (args.Length > 0)
         {
             string command = args[0].ToLowerInvariant();
-            if (command is "render" or "headless" or "formats" or "help" or "--help" or "-h")
+            if (command is "render" or "headless" or "formats" or "self-test-transforms" or "help" or "--help" or "-h")
                 return RunCommandLineAsync(args).GetAwaiter().GetResult();
 
             if (command == "compose")
@@ -52,6 +52,9 @@ internal static class Program
                     Console.WriteLine(extension);
                 return 0;
             }
+
+            if (command == "self-test-transforms")
+                return TransformRegressionTest.Run();
 
             if (command is "help" or "--help" or "-h" ||
                 args.Length == 1 ||
@@ -111,6 +114,7 @@ Common render options:
 
 Other:
   LightingShowcase.Composer formats
+  LightingShowcase.Composer self-test-transforms
 """);
         return 0;
     }

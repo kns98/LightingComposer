@@ -24,6 +24,10 @@ public sealed class Scene
     private BvhNode? bvhRoot;
     private readonly Stack<SceneObjectGroup> activeGroups = new();
     private int nextGroupId = 1;
+    private long revision;
+
+    /// <summary>Monotonically increases whenever world geometry is rebuilt.</summary>
+    public long Revision => Interlocked.Read(ref revision);
 
     public string Description { get; private set; } = "Built-in room";
 
@@ -170,6 +174,7 @@ public sealed class Scene
         nextGroupId = 1;
         bvhRoot = null;
         Description = "Empty scene";
+        Interlocked.Increment(ref revision);
     }
 
     /// <summary>Begins a recursive scene object group. Nested calls attach completed children to the active parent.</summary>
@@ -882,6 +887,7 @@ public sealed class Scene
         foreach (SceneObjectGroup group in ObjectGroups)
             Triangles.AddRange(group.BuildWorldTriangles());
         RebuildAccelerationStructure();
+        Interlocked.Increment(ref revision);
     }
 
     /// <summary>Implements the rebuild acceleration structure operation for this file's subsystem.</summary>

@@ -237,9 +237,64 @@ public sealed class SceneObjectGroup
             child.BakeCurrentTransform();
 
         if (HasPendingTransform())
-            ApplyPointTransformRecursively(TransformPoint, TransformNormal);
+        {
+            Vec3 fixedPivot = Pivot;
+            Vec3 position = Position;
+            Vec3 rotation = Rotation;
+            Vec3 scale = Scale;
+            ApplyBakedTransform(fixedPivot, position, rotation, scale, inverse: false);
+        }
 
-        ResetTransform();
+        ResetTransformState();
+        foreach (SceneObjectGroup child in Children)
+            child.RecalculatePivot();
+        RecalculatePivot();
+    }
+
+    /// <summary>
+    /// Applies one transform directly to authored triangle positions and normals.
+    /// The group transform fields remain identity, so renderers consume ordinary
+    /// baked geometry and pay no per-frame transform cost.
+    /// </summary>
+    public void BakeTransform(Vec3 position, Vec3 rotation, Vec3 scale)
+    {
+        foreach (SceneObjectGroup child in Children)
+            child.BakeCurrentTransform();
+
+        if (!IsIdentityTransform(position, rotation, scale))
+            ApplyBakedTransform(Pivot, position, rotation, scale, inverse: false);
+
+        ResetTransformState();
+        foreach (SceneObjectGroup child in Children)
+            child.RecalculatePivot();
+        RecalculatePivot();
+    }
+
+    /// <summary>
+    /// Applies or reverses a previously baked transform around a fixed pivot.
+    /// This is used by the composer's undo/redo command without storing a second
+    /// copy of potentially very large meshes.
+    /// </summary>
+    public void ApplyBakedTransform(Vec3 fixedPivot, Vec3 position, Vec3 rotation, Vec3 scale, bool inverse)
+    {
+        if (inverse)
+        {
+            ApplyPointTransformRecursively(
+                point => TransformConverter.ApplyInverseSrt(point, fixedPivot, position, rotation, scale),
+                normal => TransformConverter.ApplyInverseSrtNormal(normal, rotation, scale));
+        }
+        else
+        {
+            ApplyPointTransformRecursively(
+                point => TransformConverter.ApplySrt(point, fixedPivot, position, rotation, scale),
+                normal => TransformConverter.ApplySrtNormal(normal, rotation, scale));
+        }
+
+        // The transformed triangles are now the authoring source of truth. Clear
+        // procedural metadata so save/load cannot regenerate the pre-transform
+        // primitive and discard the baked vertex positions.
+        ClearParametricMetadataRecursively();
+        ResetTransformState();
         foreach (SceneObjectGroup child in Children)
             child.RecalculatePivot();
         RecalculatePivot();
@@ -530,6 +585,15 @@ public sealed class SceneObjectGroup
             child.ApplyPointTransformRecursively(pointTransform, normalTransform);
     }
 
+    private void ClearParametricMetadataRecursively()
+    {
+        PrimitiveKind = null;
+        PrimitiveSourceName = null;
+        PrimitiveParameters.Clear();
+        foreach (SceneObjectGroup child in Children)
+            child.ClearParametricMetadataRecursively();
+    }
+
     private void ApplyMaterialRecursively(Func<Triangle, Triangle> transform)
     {
         for (int i = 0; i < LocalTriangles.Count; i++)
@@ -571,13 +635,19 @@ public sealed class SceneObjectGroup
     private static double SanitizeTileWorldUnits(double tileWorldUnits) =>
         double.IsFinite(tileWorldUnits) && tileWorldUnits > 1e-6 ? tileWorldUnits : TextureRepeatWorldUnits;
 
-    private void ResetTransform()
+    private void ResetTransformState()
     {
         Position = Vec3.Zero;
         Rotation = Vec3.Zero;
         Scale = new Vec3(1, 1, 1);
-        ColorOverride = null;
     }
+
+    private static bool IsIdentityTransform(Vec3 position, Vec3 rotation, Vec3 scale) =>
+        position.Length() <= 1e-12 &&
+        rotation.Length() <= 1e-12 &&
+        Math.Abs(scale.X - 1.0) <= 1e-12 &&
+        Math.Abs(scale.Y - 1.0) <= 1e-12 &&
+        Math.Abs(scale.Z - 1.0) <= 1e-12;
 
     private static Vec3 Rotate(Vec3 p, Vec3 r)
     {

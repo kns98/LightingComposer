@@ -54,6 +54,44 @@ public static class TransformConverter
         return double.IsFinite(length) && length > 1e-12 ? transformed / length : normal.Normalize();
     }
 
+
+    /// <summary>Applies the inverse of <see cref="ApplySrt"/> using the same fixed pivot.</summary>
+    public static Vec3 ApplyInverseSrt(Vec3 point, Vec3 pivot, Vec3 position, Vec3 rotation, Vec3 scale)
+    {
+        Vec3 safeScale = SanitizeScale(scale);
+        Vec3 q = point - pivot - position;
+        q = RotateEulerInverse(q, rotation);
+        q = new Vec3(q.X / safeScale.X, q.Y / safeScale.Y, q.Z / safeScale.Z);
+        return pivot + q;
+    }
+
+    /// <summary>Applies the inverse of the normal transform used by <see cref="ApplySrtNormal"/>.</summary>
+    public static Vec3 ApplyInverseSrtNormal(Vec3 normal, Vec3 rotation, Vec3 scale)
+    {
+        Vec3 safeScale = SanitizeScale(scale);
+        Vec3 transformed = RotateEulerInverse(normal, rotation);
+        transformed = new Vec3(
+            transformed.X * safeScale.X,
+            transformed.Y * safeScale.Y,
+            transformed.Z * safeScale.Z);
+        double length = transformed.Length();
+        return double.IsFinite(length) && length > 1e-12 ? transformed / length : normal.Normalize();
+    }
+
+    /// <summary>Reverses <see cref="RotateEuler"/> by undoing Z, then Y, then X rotation.</summary>
+    public static Vec3 RotateEulerInverse(Vec3 point, Vec3 rotation)
+    {
+        double cx = Math.Cos(rotation.X), sx = Math.Sin(rotation.X);
+        double cy = Math.Cos(rotation.Y), sy = Math.Sin(rotation.Y);
+        double cz = Math.Cos(rotation.Z), sz = Math.Sin(rotation.Z);
+
+        Vec3 p = point;
+        p = new Vec3(p.X * cz + p.Y * sz, -p.X * sz + p.Y * cz, p.Z);
+        p = new Vec3(p.X * cy - p.Z * sy, p.Y, p.X * sy + p.Z * cy);
+        p = new Vec3(p.X, p.Y * cx + p.Z * sx, -p.Y * sx + p.Z * cx);
+        return p;
+    }
+
     public static Vec3 FromRightHandedZForwardToCanonical(Vec3 value) => new(value.X, value.Y, value.Z);
     public static Vec3 FromZUpToCanonicalYUp(Vec3 value) => new(value.X, value.Z, -value.Y);
     public static Vec3 MirrorX(Vec3 value) => new(-value.X, value.Y, value.Z);
