@@ -376,6 +376,37 @@ internal sealed class ComposerSceneSession : IDisposable
         }
     }
 
+    public SceneExportPackageResult ExportPackage(
+        string parentDirectory,
+        SceneExportFormat format,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(parentDirectory))
+            throw new ArgumentException("An export parent directory is required.", nameof(parentDirectory));
+
+        sceneGate.Wait(cancellationToken);
+        try
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            string baseName = ScenePath == null
+                ? "composition"
+                : Path.GetFileNameWithoutExtension(ScenePath);
+            if (baseName.EndsWith(".prop", StringComparison.OrdinalIgnoreCase))
+                baseName = Path.GetFileNameWithoutExtension(baseName);
+
+            return new SceneExportPackageService().Export(
+                scene,
+                parentDirectory,
+                baseName,
+                format,
+                cancellationToken);
+        }
+        finally
+        {
+            sceneGate.Release();
+        }
+    }
+
     public bool UpdateObject(
         int id,
         string name,

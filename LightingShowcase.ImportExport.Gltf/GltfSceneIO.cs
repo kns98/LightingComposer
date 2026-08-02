@@ -330,16 +330,16 @@ public static class GltfSceneIO
         }
     }
 
-    public static void Save(Scene scene, string filePath, bool binary)
+    public static void Save(Scene scene, string filePath, bool binary, SceneSaveOptions? options = null)
     {
-        ExportBuild build = BuildExport(scene);
+        ExportBuild build = BuildExport(scene, options?.TexturePathResolver);
         if (binary)
             WriteGlb(build, filePath);
         else
             WriteGltf(build, filePath);
     }
 
-    private static ExportBuild BuildExport(Scene scene)
+    private static ExportBuild BuildExport(Scene scene, Func<TextureMap, string?>? texturePathResolver)
     {
         List<byte> bin = new();
         List<object> bufferViews = new();
@@ -348,7 +348,46 @@ public static class GltfSceneIO
         List<object> nodes = new();
         List<int> rootNodes = new();
         List<object> materials = new();
-        Dictionary<string, int> materialIds = new(StringComparer.Ordinal);
+        Dictionary<Material, int> materialIds = new(ReferenceEqualityComparer.Instance);
+        List<object> images = new();
+        List<object> textureDefs = new();
+        List<object> samplers = new();
+        Dictionary<TextureMap, int> textureIds = new(ReferenceEqualityComparer.Instance);
+        HashSet<string> materialExtensionsUsed = new(StringComparer.Ordinal);
+
+        int TextureIndex(TextureMap? texture)
+        {
+            if (texture == null || texturePathResolver == null)
+                return -1;
+            if (textureIds.TryGetValue(texture, out int existing))
+                return existing;
+
+            string? uri = texturePathResolver(texture);
+            if (string.IsNullOrWhiteSpace(uri))
+                return -1;
+
+            int samplerIndex = samplers.Count;
+            samplers.Add(new Dictionary<string, object?>
+            {
+                ["wrapS"] = ToGltfWrap(texture.WrapU),
+                ["wrapT"] = ToGltfWrap(texture.WrapV)
+            });
+            int imageIndex = images.Count;
+            images.Add(new Dictionary<string, object?>
+            {
+                ["name"] = texture.Name,
+                ["uri"] = uri.Replace('\\', '/')
+            });
+            int textureIndex = textureDefs.Count;
+            textureDefs.Add(new Dictionary<string, object?>
+            {
+                ["name"] = texture.Name,
+                ["sampler"] = samplerIndex,
+                ["source"] = imageIndex
+            });
+            textureIds[texture] = textureIndex;
+            return textureIndex;
+        }
 
         foreach (SceneObjectGroup group in scene.ObjectGroups)
         {
@@ -359,28 +398,114 @@ public static class GltfSceneIO
             if (tris.Count == 0)
                 continue;
 
-            Dictionary<string, List<Triangle>> byMaterial = tris.GroupBy(t => MaterialKey(t.Material)).ToDictionary(g => g.Key, g => g.ToList());
-            List<object> primitives = new();
-            foreach (KeyValuePair<string, List<Triangle>> entry in byMaterial)
+            Dictionary<Material, List<Triangle>> byMaterial = new(ReferenceEqualityComparer.Instance);
+            foreach (Triangle triangle in tris)
             {
-                string key = entry.Key;
+                Material material = triangle.Material;
+                if (!byMaterial.TryGetValue(material, out List<Triangle>? materialTriangles))
+                {
+                    materialTriangles = new List<Triangle>();
+                    byMaterial.Add(material, materialTriangles);
+                }
+
+                materialTriangles.Add(triangle);
+            }
+            List<object> primitives = new();
+            foreach (KeyValuePair<Material, List<Triangle>> entry in byMaterial)
+            {
+                Material material = entry.Key;
                 List<Triangle> materialTris = entry.Value;
-                Material material = materialTris[0].Material;
-                if (!materialIds.TryGetValue(key, out int materialId))
+                if (!materialIds.TryGetValue(material, out int materialId))
                 {
                     materialId = materials.Count;
-                    materialIds[key] = materialId;
-                    materials.Add(new Dictionary<string, object?>
+                    materialIds[material] = materialId;
+
+                    Dictionary<string, object?> pbr = new()
+                    {
+                        ["baseColorFactor"] = new[] { Clamp01(material.Color.X), Clamp01(material.Color.Y), Clamp01(material.Color.Z), Clamp01(material.Alpha) },
+                        ["metallicFactor"] = Clamp01(material.Metallic),
+                        ["roughnessFactor"] = Clamp01(material.Roughness)
+                    };
+                    int baseTexture = TextureIndex(material.Texture);
+                    if (baseTexture >= 0)
+                        pbr["baseColorTexture"] = new Dictionary<string, object?> { ["index"] = baseTexture };
+                    int metallicRoughnessTexture = TextureIndex(material.MetallicRoughnessTexture);
+                    if (metallicRoughnessTexture >= 0)
+                        pbr["metallicRoughnessTexture"] = new Dictionary<string, object?> { ["index"] = metallicRoughnessTexture };
+
+                    Dictionary<string, object?> materialDef = new()
                     {
                         ["name"] = $"mat_{materialId + 1}",
-                        ["pbrMetallicRoughness"] = new Dictionary<string, object?>
+                        ["pbrMetallicRoughness"] = pbr,
+                        ["emissiveFactor"] = material.Emission > 0.0
+                            ? new[] { Clamp01(material.EmissionColor.X * material.Emission), Clamp01(material.EmissionColor.Y * material.Emission), Clamp01(material.EmissionColor.Z * material.Emission) }
+                            : new[] { 0.0, 0.0, 0.0 },
+                        ["alphaMode"] = material.AlphaMode switch
                         {
-                            ["baseColorFactor"] = new[] { Clamp01(material.Color.X), Clamp01(material.Color.Y), Clamp01(material.Color.Z), 1.0 },
-                            ["metallicFactor"] = 0.0,
-                            ["roughnessFactor"] = 0.72
+                            MaterialAlphaMode.Mask => "MASK",
+                            MaterialAlphaMode.Blend => "BLEND",
+                            _ => "OPAQUE"
                         },
-                        ["emissiveFactor"] = material.Emission > 0.0 ? new[] { Clamp01(material.Color.X * material.Emission), Clamp01(material.Color.Y * material.Emission), Clamp01(material.Color.Z * material.Emission) } : new[] { 0.0, 0.0, 0.0 }
-                    });
+                        ["doubleSided"] = material.DoubleSided
+                    };
+                    if (material.AlphaMode == MaterialAlphaMode.Mask)
+                        materialDef["alphaCutoff"] = material.AlphaCutoff;
+                    int normalTexture = TextureIndex(material.NormalTexture);
+                    if (normalTexture >= 0)
+                        materialDef["normalTexture"] = new Dictionary<string, object?> { ["index"] = normalTexture, ["scale"] = material.NormalScale };
+                    int occlusionTexture = TextureIndex(material.OcclusionTexture);
+                    if (occlusionTexture >= 0)
+                        materialDef["occlusionTexture"] = new Dictionary<string, object?> { ["index"] = occlusionTexture, ["strength"] = material.OcclusionStrength };
+                    int emissiveTexture = TextureIndex(material.EmissiveTexture);
+                    if (emissiveTexture >= 0)
+                        materialDef["emissiveTexture"] = new Dictionary<string, object?> { ["index"] = emissiveTexture };
+
+                    Dictionary<string, object?> materialExtensions = new();
+                    int transmissionTexture = TextureIndex(material.TransmissionTexture);
+                    if (material.Transmission > 0.0 || transmissionTexture >= 0)
+                    {
+                        Dictionary<string, object?> transmission = new()
+                        {
+                            ["transmissionFactor"] = Clamp01(material.Transmission)
+                        };
+                        if (transmissionTexture >= 0)
+                            transmission["transmissionTexture"] = new Dictionary<string, object?> { ["index"] = transmissionTexture };
+                        materialExtensions["KHR_materials_transmission"] = transmission;
+                        materialExtensionsUsed.Add("KHR_materials_transmission");
+                    }
+                    if (Math.Abs(material.Ior - 1.5) > 1e-9)
+                    {
+                        materialExtensions["KHR_materials_ior"] = new Dictionary<string, object?> { ["ior"] = material.Ior };
+                        materialExtensionsUsed.Add("KHR_materials_ior");
+                    }
+                    if (material.Thickness > 0.0 || material.AttenuationDistance > 0.0)
+                    {
+                        Dictionary<string, object?> volume = new()
+                        {
+                            ["thicknessFactor"] = material.Thickness,
+                            ["attenuationColor"] = new[] { Clamp01(material.AttenuationColor.X), Clamp01(material.AttenuationColor.Y), Clamp01(material.AttenuationColor.Z) }
+                        };
+                        if (material.AttenuationDistance > 0.0)
+                            volume["attenuationDistance"] = material.AttenuationDistance;
+                        materialExtensions["KHR_materials_volume"] = volume;
+                        materialExtensionsUsed.Add("KHR_materials_volume");
+                    }
+                    if (material.Clearcoat > 0.0)
+                    {
+                        Dictionary<string, object?> clearcoat = new()
+                        {
+                            ["clearcoatFactor"] = Clamp01(material.Clearcoat),
+                            ["clearcoatRoughnessFactor"] = Clamp01(material.ClearcoatRoughness)
+                        };
+                        if (material.ClearcoatUsesTransmissionTexture && transmissionTexture >= 0)
+                            clearcoat["clearcoatTexture"] = new Dictionary<string, object?> { ["index"] = transmissionTexture };
+                        materialExtensions["KHR_materials_clearcoat"] = clearcoat;
+                        materialExtensionsUsed.Add("KHR_materials_clearcoat");
+                    }
+                    if (materialExtensions.Count > 0)
+                        materialDef["extensions"] = materialExtensions;
+
+                    materials.Add(materialDef);
                 }
 
                 int vertexCount = materialTris.Count * 3;
@@ -484,11 +609,20 @@ public static class GltfSceneIO
             ["buffers"] = new[] { new Dictionary<string, object?> { ["byteLength"] = bin.Count } },
             ["bufferViews"] = bufferViews,
             ["accessors"] = accessors,
-            ["extensionsUsed"] = lightDefs.Count > 0 ? new[] { "KHR_lights_punctual" } : Array.Empty<string>(),
+            ["extensionsUsed"] = materialExtensionsUsed
+                .Concat(lightDefs.Count > 0 ? new[] { "KHR_lights_punctual" } : Array.Empty<string>())
+                .Distinct(StringComparer.Ordinal)
+                .ToArray(),
             ["extensions"] = lightDefs.Count > 0
                 ? new Dictionary<string, object?> { ["KHR_lights_punctual"] = new Dictionary<string, object?> { ["lights"] = lightDefs } }
                 : null
         };
+        if (images.Count > 0)
+        {
+            root["images"] = images;
+            root["textures"] = textureDefs;
+            root["samplers"] = samplers;
+        }
         return new ExportBuild(root, bin.ToArray());
     }
 
@@ -908,6 +1042,13 @@ public static class GltfSceneIO
 
         return texCoord;
     }
+
+    private static int ToGltfWrap(TextureAddressMode mode) => mode switch
+    {
+        TextureAddressMode.ClampToEdge => 33071,
+        TextureAddressMode.MirroredRepeat => 33648,
+        _ => 10497
+    };
 
     private static TextureAddressMode ToTextureAddressMode(int gltfWrap) => gltfWrap switch
     {

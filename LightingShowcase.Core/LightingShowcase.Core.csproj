@@ -38,6 +38,7 @@
     <Compile Include="../Scene/SceneFormatPlugin.cs" Link="Scene/SceneFormatPlugin.cs" />
     <Compile Include="../Scene/SceneFormatRegistry.cs" Link="Scene/SceneFormatRegistry.cs" />
     <Compile Include="../Scene/SceneFormatTypes.cs" Link="Scene/SceneFormatTypes.cs" />
+    <Compile Include="../Scene/SceneExportPackage.cs" Link="Scene/SceneExportPackage.cs" />
     <Compile Include="../Scene/SceneImportExportService.cs" Link="Scene/SceneImportExportService.cs" />
     <Compile Include="../Scene/SceneMaterials.cs" Link="Scene/SceneMaterials.cs" />
     <Compile Include="../Scene/SceneObjectGroup.cs" Link="Scene/SceneObjectGroup.cs" />
@@ -47,6 +48,7 @@
     <Compile Include="../Scene/SceneRenderData.cs" Link="Scene/SceneRenderData.cs" />
     <Compile Include="../Scene/SceneSnapshot.cs" Link="Scene/SceneSnapshot.cs" />
     <Compile Include="../Scene/SceneStats.cs" Link="Scene/SceneStats.cs" />
+    <Compile Include="../Scene/SceneTextureResources.cs" Link="Scene/SceneTextureResources.cs" />
     <Compile Include="../Scene/TextureAsset.cs" Link="Scene/TextureAsset.cs" />
     <Compile Include="../Scene/TextureMap.cs" Link="Scene/TextureMap.cs" />
     <Compile Include="../Scene/TransformConverter.cs" Link="Scene/TransformConverter.cs" />

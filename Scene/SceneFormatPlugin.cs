@@ -24,6 +24,16 @@ public sealed class SceneLoadOptions
 public sealed class SceneSaveOptions
 {
     public string? Variant { get; init; }
+
+    /// <summary>
+    /// Resolves an in-memory texture to a URI relative to the exported primary
+    /// file. Package exports use this to make OBJ, glTF, and XML references
+    /// portable instead of retaining absolute source paths.
+    /// </summary>
+    public Func<TextureMap, string?>? TexturePathResolver { get; init; }
+
+    /// <summary>Directory containing the primary export and related resources.</summary>
+    public string? PackageDirectory { get; init; }
 }
 
 public interface ISceneFormatPlugin

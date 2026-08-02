@@ -6,7 +6,7 @@ namespace LightingShowcase.ImportExport.Obj;
 /// <summary>Exports visible scene geometry as Wavefront OBJ with a companion MTL file.</summary>
 public static class ObjSceneSaver
 {
-    public static void Save(Scene scene, string filePath)
+    public static void Save(Scene scene, string filePath, SceneSaveOptions? options = null)
     {
         if (scene == null) throw new ArgumentNullException(nameof(scene));
         if (string.IsNullOrWhiteSpace(filePath)) throw new ArgumentException("A save path is required.", nameof(filePath));
@@ -61,16 +61,13 @@ public static class ObjSceneSaver
             }
         }
 
-        WriteMaterialFile(mtlPath, materialNames, objDirectory);
+        WriteMaterialFile(mtlPath, materialNames, objDirectory, options?.TexturePathResolver);
     }
 
-    private readonly record struct MaterialKey(double R, double G, double B, string TexturePath)
+    private readonly record struct MaterialKey(double R, double G, double B, TextureMap? Texture)
     {
-        public static MaterialKey FromMaterial(Material material)
-        {
-            string texturePath = material.Texture?.SourcePath ?? string.Empty;
-            return new MaterialKey(Round(material.Color.X), Round(material.Color.Y), Round(material.Color.Z), texturePath);
-        }
+        public static MaterialKey FromMaterial(Material material) =>
+            new(Round(material.Color.X), Round(material.Color.Y), Round(material.Color.Z), material.Texture);
 
         private static double Round(double value) => Math.Round(value, 6);
     }
@@ -88,7 +85,7 @@ public static class ObjSceneSaver
         return names;
     }
 
-    private static void WriteMaterialFile(string mtlPath, Dictionary<MaterialKey, string> materialNames, string objDirectory)
+    private static void WriteMaterialFile(string mtlPath, Dictionary<MaterialKey, string> materialNames, string objDirectory, Func<TextureMap, string?>? texturePathResolver)
     {
         using StreamWriter writer = new(mtlPath, false, new UTF8Encoding(false));
         writer.WriteLine("# Exported by LightingShowcase");
@@ -102,11 +99,21 @@ public static class ObjSceneSaver
             writer.WriteLine("Ka 0 0 0");
             writer.WriteLine("Ks 0 0 0");
             writer.WriteLine("d 1");
-            if (!string.IsNullOrWhiteSpace(key.TexturePath))
+            if (key.Texture != null)
             {
-                string texturePath = Path.IsPathRooted(key.TexturePath) ? key.TexturePath : Path.GetFullPath(Path.Combine(objDirectory, key.TexturePath));
-                string relative = Path.GetRelativePath(objDirectory, texturePath).Replace('\\', '/');
-                writer.WriteLine($"map_Kd {relative}");
+                string? packaged = texturePathResolver?.Invoke(key.Texture);
+                if (!string.IsNullOrWhiteSpace(packaged))
+                {
+                    writer.WriteLine($"map_Kd {packaged.Replace('\\', '/')}");
+                }
+                else if (!string.IsNullOrWhiteSpace(key.Texture.SourcePath))
+                {
+                    string texturePath = Path.IsPathRooted(key.Texture.SourcePath)
+                        ? key.Texture.SourcePath
+                        : Path.GetFullPath(Path.Combine(objDirectory, key.Texture.SourcePath));
+                    string relative = Path.GetRelativePath(objDirectory, texturePath).Replace('\\', '/');
+                    writer.WriteLine($"map_Kd {relative}");
+                }
             }
         }
     }

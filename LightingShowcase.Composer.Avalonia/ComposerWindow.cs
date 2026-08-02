@@ -67,6 +67,8 @@ internal sealed class ComposerWindow : Window
     private readonly Button openButton;
     private readonly Button insertButton;
     private readonly Button saveButton;
+    private readonly Button exportButton;
+    private readonly ComboBox exportFormatBox;
     private readonly Button undoButton;
     private readonly Button redoButton;
     private readonly Button duplicateButton;
@@ -120,6 +122,13 @@ internal sealed class ComposerWindow : Window
         openButton = NewButton("Open…");
         insertButton = NewButton("Insert model…");
         saveButton = NewButton("Save scene…");
+        exportButton = NewButton("Export package…");
+        exportFormatBox = new ComboBox
+        {
+            ItemsSource = SceneExportFormats.All,
+            SelectedIndex = 0,
+            MinWidth = 210
+        };
         undoButton = NewButton("Undo");
         redoButton = NewButton("Redo");
         duplicateButton = NewButton("Duplicate");
@@ -216,7 +225,7 @@ internal sealed class ComposerWindow : Window
 
         Grid toolbar = new()
         {
-            ColumnDefinitions = new ColumnDefinitions("Auto,Auto,Auto,Auto,Auto,Auto,*,Auto"),
+            ColumnDefinitions = new ColumnDefinitions("Auto,Auto,Auto,Auto,Auto,Auto,*,Auto,Auto,Auto"),
             ColumnSpacing = 8,
             Margin = new Thickness(10)
         };
@@ -234,8 +243,12 @@ internal sealed class ComposerWindow : Window
         Grid.SetColumn(redoButton, 5);
         toolbar.Children.Add(pathText);
         Grid.SetColumn(pathText, 6);
+        toolbar.Children.Add(exportFormatBox);
+        Grid.SetColumn(exportFormatBox, 7);
+        toolbar.Children.Add(exportButton);
+        Grid.SetColumn(exportButton, 8);
         toolbar.Children.Add(rendererBox);
-        Grid.SetColumn(rendererBox, 7);
+        Grid.SetColumn(rendererBox, 9);
         root.Children.Add(toolbar);
 
         Grid content = new()
@@ -371,6 +384,7 @@ internal sealed class ComposerWindow : Window
         openButton.Click += async (_, _) => await BrowseAndOpenAsync();
         insertButton.Click += async (_, _) => await BrowseAndInsertAsync();
         saveButton.Click += async (_, _) => await SaveSceneAsync();
+        exportButton.Click += async (_, _) => await ExportPackageAsync();
         undoButton.Click += async (_, _) => await UndoAsync();
         redoButton.Click += async (_, _) => await RedoAsync();
         duplicateButton.Click += async (_, _) => await DuplicateSelectedAsync();
@@ -566,14 +580,85 @@ internal sealed class ComposerWindow : Window
             if (string.IsNullOrWhiteSpace(path))
                 return;
 
+            await StopCurrentRenderAsync();
             SetBusy(true, "Saving composition…");
-            await Task.Run(() => session.Save(path, lifetimeCancellation.Token), lifetimeCancellation.Token);
+
+            int triangleCountAtSave = session.TriangleCount;
+            Stopwatch saveStopwatch = Stopwatch.StartNew();
+            Task saveTask = Task.Run(
+                () => session.Save(path, lifetimeCancellation.Token),
+                lifetimeCancellation.Token);
+
+            while (!saveTask.IsCompleted)
+            {
+                Task completed = await Task.WhenAny(saveTask, Task.Delay(500, lifetimeCancellation.Token));
+                if (ReferenceEquals(completed, saveTask))
+                    break;
+
+                statusText.Text = $"Saving composition… {saveStopwatch.Elapsed.TotalSeconds:0.0}s " +
+                                  $"({triangleCountAtSave:N0} triangles).";
+            }
+
+            await saveTask;
+            saveStopwatch.Stop();
             pathText.Text = session.ScenePath ?? path;
-            statusText.Text = $"Saved {Path.GetFileName(session.ScenePath ?? path)}.";
+            statusText.Text = $"Saved {Path.GetFileName(session.ScenePath ?? path)} in {saveStopwatch.Elapsed.TotalSeconds:0.0}s.";
+        }
+        catch (OperationCanceledException) when (lifetimeCancellation.IsCancellationRequested)
+        {
         }
         catch (Exception ex)
         {
             statusText.Text = $"Save failed: {ex.Message}";
+            Console.Error.WriteLine($"Save failed: {ex}");
+        }
+        finally
+        {
+            SetBusy(false);
+        }
+    }
+
+    private SceneExportFormat SelectedExportFormat =>
+        exportFormatBox.SelectedItem as SceneExportFormat ?? SceneExportFormats.All[0];
+
+    private async Task ExportPackageAsync()
+    {
+        if (!session.HasRenderableScene)
+        {
+            statusText.Text = "There is no renderable scene to export.";
+            return;
+        }
+        if (!StorageProvider.CanPickFolder)
+        {
+            statusText.Text = "The desktop folder picker is unavailable.";
+            return;
+        }
+
+        try
+        {
+            IReadOnlyList<IStorageFolder> folders = await StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
+            {
+                Title = $"Choose parent folder for {SelectedExportFormat.DisplayName}",
+                AllowMultiple = false
+            });
+            string? parentDirectory = folders.Count == 0 ? null : folders[0].TryGetLocalPath();
+            if (string.IsNullOrWhiteSpace(parentDirectory))
+                return;
+
+            SceneExportFormat format = SelectedExportFormat;
+            SetBusy(true, $"Exporting {format.DisplayName} package…");
+            SceneExportPackageResult result = await Task.Run(
+                () => session.ExportPackage(parentDirectory, format, lifetimeCancellation.Token),
+                lifetimeCancellation.Token);
+            statusText.Text = $"Exported {Path.GetFileName(result.PrimaryFilePath)} with {result.Files.Count:N0} files to {result.DirectoryPath}.";
+        }
+        catch (OperationCanceledException) when (lifetimeCancellation.IsCancellationRequested)
+        {
+        }
+        catch (Exception ex)
+        {
+            statusText.Text = $"Export failed: {ex.Message}";
+            Console.Error.WriteLine($"Export failed: {ex}");
         }
         finally
         {
@@ -1761,6 +1846,8 @@ internal sealed class ComposerWindow : Window
         openButton.IsEnabled = !busy;
         insertButton.IsEnabled = !busy;
         saveButton.IsEnabled = !busy;
+        exportButton.IsEnabled = !busy;
+        exportFormatBox.IsEnabled = !busy;
         rendererBox.IsEnabled = !busy;
         objectTree.IsEnabled = !busy;
         if (selectedObjectId.HasValue)

@@ -16,5 +16,5 @@ public sealed class ObjSceneFormatPlugin : ISceneFormatPlugin
         ObjSceneLoader.LoadIntoScene(scene, filePath, options.FallbackMaterial, options.TargetSize, options.TargetCenter, options.FloorY, options.Progress, options.SimplifyKeepFraction);
 
     public void Export(Scene scene, string filePath, SceneSaveOptions options) =>
-        ObjSceneSaver.Save(scene, filePath);
+        ObjSceneSaver.Save(scene, filePath, options);
 }

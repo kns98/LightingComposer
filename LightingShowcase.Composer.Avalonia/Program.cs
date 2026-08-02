@@ -1,5 +1,6 @@
 using Avalonia;
 using LightingShowcase.CommandLine;
+using LightingShowcase.SceneGraph;
 
 namespace LightingShowcase.Composer;
 
@@ -16,7 +17,7 @@ internal static class Program
         if (args.Length > 0)
         {
             string command = args[0].ToLowerInvariant();
-            if (command is "render" or "headless" or "formats" or "self-test-transforms" or "help" or "--help" or "-h")
+            if (command is "render" or "headless" or "export" or "formats" or "export-formats" or "self-test-transforms" or "help" or "--help" or "-h")
                 return RunCommandLineAsync(args).GetAwaiter().GetResult();
 
             if (command == "compose")
@@ -52,6 +53,16 @@ internal static class Program
                     Console.WriteLine(extension);
                 return 0;
             }
+
+            if (command == "export-formats")
+            {
+                foreach (SceneExportFormat format in SceneExportFormats.All)
+                    Console.WriteLine($"{format.Id}	{format.DisplayName}");
+                return 0;
+            }
+
+            if (command == "export")
+                return RunExport(args.Skip(1).ToArray(), cancellation.Token);
 
             if (command == "self-test-transforms")
                 return TransformRegressionTest.Run();
@@ -91,6 +102,26 @@ internal static class Program
         }
     }
 
+    private static int RunExport(string[] args, CancellationToken cancellationToken)
+    {
+        CommandLineArguments values = CommandLineArguments.Parse(args);
+        values.ValidateKnownOptions(["format", "output-dir"]);
+        string scenePath = values.Positionals.FirstOrDefault()
+            ?? throw new ArgumentException("The export command requires a scene or model path.");
+        string formatId = values.Get("format") ?? "glb";
+        string outputDirectory = values.Get("output-dir") ?? Environment.CurrentDirectory;
+        SceneExportFormat format = SceneExportFormats.Find(formatId);
+
+        using ComposerSceneSession session = new();
+        session.Load(scenePath, cancellationToken);
+        SceneExportPackageResult result = session.ExportPackage(outputDirectory, format, cancellationToken);
+        Console.WriteLine(JsonSerializer.Serialize(result, new JsonSerializerOptions(JsonSerializerDefaults.Web)
+        {
+            WriteIndented = true
+        }));
+        return 0;
+    }
+
     private static int PrintHelp()
     {
         Console.WriteLine("""
@@ -111,6 +142,10 @@ Common render options:
   --width <pixels> --height <pixels>
   --samples <count> --bounces <count>
   --fov <degrees> --exposure <value>
+
+Portable export package:
+  LightingShowcase.Composer export <scene> --format <id> --output-dir <folder>
+  LightingShowcase.Composer export-formats
 
 Other:
   LightingShowcase.Composer formats

@@ -17,5 +17,5 @@ public sealed class GltfSceneFormatPlugin : ISceneFormatPlugin
         GltfSceneIO.LoadIntoScene(scene, filePath, options.FallbackMaterial, options.TargetSize, options.TargetCenter, options.FloorY, options.Progress, options.SimplifyKeepFraction);
 
     public void Export(Scene scene, string filePath, SceneSaveOptions options) =>
-        GltfSceneIO.Save(scene, filePath, binary: string.Equals(Path.GetExtension(filePath), ".glb", StringComparison.OrdinalIgnoreCase) || string.Equals(options.Variant, "glb", StringComparison.OrdinalIgnoreCase));
+        GltfSceneIO.Save(scene, filePath, binary: string.Equals(Path.GetExtension(filePath), ".glb", StringComparison.OrdinalIgnoreCase) || string.Equals(options.Variant, "glb", StringComparison.OrdinalIgnoreCase), options: options);
 }

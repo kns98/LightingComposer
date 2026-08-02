@@ -19,7 +19,7 @@ namespace LightingShowcase.SceneGraph;
 public static class BinarySceneFile
 {
     private const string Magic = "LSCN";
-    private const int Version = 9;
+    private const int Version = 10;
 
     private enum GeometryKind : byte
     {
@@ -35,42 +35,71 @@ public static class BinarySceneFile
         if (scene == null) throw new ArgumentNullException(nameof(scene));
         if (string.IsNullOrWhiteSpace(filePath)) throw new ArgumentException("A save path is required.", nameof(filePath));
 
-        Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(filePath)) ?? Environment.CurrentDirectory);
-        using FileStream stream = File.Create(filePath);
+        string fullPath = Path.GetFullPath(filePath);
+        string directory = Path.GetDirectoryName(fullPath) ?? Environment.CurrentDirectory;
+        Directory.CreateDirectory(directory);
 
-        // Keep the header writer's lifetime separate from the compressed body.
-        // A using declaration here can be disposed after DeflateStream has closed
-        // the underlying FileStream, which causes "Cannot access a closed file".
-        using (BinaryWriter headerWriter = new(stream, Encoding.UTF8, leaveOpen: true))
+        // Write beside the destination and replace it only after the complete
+        // scene has been flushed. A cancelled/crashed save therefore cannot
+        // destroy the previous good file.
+        string temporaryPath = Path.Combine(
+            directory,
+            $".{Path.GetFileName(fullPath)}.{Guid.NewGuid():N}.tmp");
+
+        try
         {
-            headerWriter.Write(Magic);
-            headerWriter.Write(Version);
-            headerWriter.Flush();
+            using (FileStream stream = new(
+                       temporaryPath,
+                       FileMode.CreateNew,
+                       FileAccess.Write,
+                       FileShare.None,
+                       bufferSize: 1024 * 1024,
+                       options: FileOptions.SequentialScan))
+            {
+                // Keep the header writer's lifetime separate from the compressed body.
+                using (BinaryWriter headerWriter = new(stream, Encoding.UTF8, leaveOpen: true))
+                {
+                    headerWriter.Write(Magic);
+                    headerWriter.Write(Version);
+                    headerWriter.Flush();
+                }
+
+                // SmallestSize made embedded-texture scenes appear to hang. The
+                // fast mode still compresses the binary scene while keeping save
+                // latency predictable for interactive editor use.
+                using (DeflateStream compressedBody = new(stream, CompressionLevel.Fastest, leaveOpen: true))
+                using (BinaryWriter writer = new(compressedBody, Encoding.UTF8, leaveOpen: true))
+                {
+                    writer.Write(scene.Description ?? string.Empty);
+
+                    TextureWriteTable textureTable = TextureWriteTable.Build(scene);
+                    MaterialWriteTable materialTable = MaterialWriteTable.Build(scene, textureTable);
+                    WriteTextureTable(writer, textureTable);
+                    WriteMaterialTable(writer, materialTable, textureTable);
+
+                    writer.Write(scene.Lights.Count);
+                    foreach (SceneLight light in scene.Lights)
+                        WriteLight(writer, light);
+
+                    writer.Write(scene.ObjectGroups.Count);
+                    foreach (SceneObjectGroup group in scene.ObjectGroups)
+                        WriteObject(writer, group, textureTable, materialTable);
+
+                    writer.Flush();
+                }
+
+                stream.Flush(flushToDisk: true);
+            }
+
+            File.Move(temporaryPath, fullPath, overwrite: true);
         }
-
-        // Version 3 compresses the body.  The DeflateStream must leave the
-        // FileStream open so the outer FileStream owner can dispose it cleanly.
-        // The BinaryWriter also leaves the DeflateStream open; disposing the
-        // DeflateStream is what writes the final compressed bytes.
-        using (DeflateStream compressedBody = new(stream, CompressionLevel.SmallestSize, leaveOpen: true))
-        using (BinaryWriter writer = new(compressedBody, Encoding.UTF8, leaveOpen: true))
+        finally
         {
-            writer.Write(scene.Description ?? string.Empty);
-
-            TextureWriteTable textureTable = TextureWriteTable.Build(scene);
-            MaterialWriteTable materialTable = MaterialWriteTable.Build(scene, textureTable);
-            WriteTextureTable(writer, textureTable);
-            WriteMaterialTable(writer, materialTable, textureTable);
-
-            writer.Write(scene.Lights.Count);
-            foreach (SceneLight light in scene.Lights)
-                WriteLight(writer, light);
-
-            writer.Write(scene.ObjectGroups.Count);
-            foreach (SceneObjectGroup group in scene.ObjectGroups)
-                WriteObject(writer, group, textureTable, materialTable);
-
-            writer.Flush();
+            if (File.Exists(temporaryPath))
+            {
+                try { File.Delete(temporaryPath); }
+                catch { }
+            }
         }
     }
 
@@ -659,13 +688,20 @@ public static class BinarySceneFile
         writer.Write(texture.ScaleU);
         writer.Write(texture.ScaleV);
         writer.Write(texture.Rotation);
+
+        // Version 10 embeds the decoded RGBA pixels for every texture.  The
+        // complete scene body is already Deflate-compressed, so this remains
+        // compact while removing all runtime dependencies on source image files.
+        byte[] rgba = texture.ToRgbaBytes();
+        writer.Write(rgba.Length);
+        writer.Write(rgba);
     }
 
     private static TextureMap? ReadTextureRecord(BinaryReader reader, string sceneFilePath, int version)
     {
         string name = reader.ReadString();
-        int width = Math.Max(2, reader.ReadInt32());
-        int height = Math.Max(2, reader.ReadInt32());
+        int width = Math.Max(version >= 10 ? 1 : 2, reader.ReadInt32());
+        int height = Math.Max(version >= 10 ? 1 : 2, reader.ReadInt32());
         string sourcePath = reader.ReadString();
         bool checker = reader.ReadBoolean();
         TextureAddressMode wrapU = TextureAddressMode.Repeat;
@@ -686,6 +722,20 @@ public static class BinarySceneFile
             rotation = reader.ReadDouble();
         }
 
+        if (version >= 10)
+        {
+            int expectedLength = checked(width * height * 4);
+            int embeddedLength = reader.ReadInt32();
+            if (embeddedLength != expectedLength)
+                throw new InvalidDataException($"Embedded texture '{name}' has {embeddedLength} bytes; expected {expectedLength}.");
+            byte[] rgba = reader.ReadBytes(embeddedLength);
+            if (rgba.Length != embeddedLength)
+                throw new EndOfStreamException($"Embedded texture '{name}' ended before all pixel bytes were read.");
+
+            TextureMap embedded = TextureMap.FromRgbaBytes(name, width, height, rgba, sourcePath, checker);
+            return ApplyTextureMetadata(embedded, wrapU, wrapV, offsetU, offsetV, scaleU, scaleV, rotation);
+        }
+
         return ResolveTexture(name, width, height, sourcePath, checker, sceneFilePath, wrapU, wrapV, offsetU, offsetV, scaleU, scaleV, rotation);
     }
 
@@ -702,6 +752,17 @@ public static class BinarySceneFile
         return ResolveTexture(name, width, height, sourcePath, checker, sceneFilePath);
     }
 
+    private static TextureMap ApplyTextureMetadata(
+        TextureMap texture,
+        TextureAddressMode wrapU,
+        TextureAddressMode wrapV,
+        double offsetU,
+        double offsetV,
+        double scaleU,
+        double scaleV,
+        double rotation) =>
+        texture.WithAddressing(wrapU, wrapV).WithTextureTransform(offsetU, offsetV, scaleU, scaleV, rotation);
+
     private static TextureMap? ResolveTexture(
         string name,
         int width,
@@ -717,11 +778,8 @@ public static class BinarySceneFile
         double scaleV = 1.0,
         double rotation = 0.0)
     {
-        static TextureMap ApplyMetadata(TextureMap texture, TextureAddressMode wrapU, TextureAddressMode wrapV, double offsetU, double offsetV, double scaleU, double scaleV, double rotation) =>
-            texture.WithAddressing(wrapU, wrapV).WithTextureTransform(offsetU, offsetV, scaleU, scaleV, rotation);
-
         if (checker)
-            return ApplyMetadata(TextureMap.CreateChecker(string.IsNullOrWhiteSpace(name) ? "Built-in checker" : name, width, height), wrapU, wrapV, offsetU, offsetV, scaleU, scaleV, rotation);
+            return ApplyTextureMetadata(TextureMap.CreateChecker(string.IsNullOrWhiteSpace(name) ? "Built-in checker" : name, width, height), wrapU, wrapV, offsetU, offsetV, scaleU, scaleV, rotation);
 
         if (string.IsNullOrWhiteSpace(sourcePath))
             return null;
@@ -731,7 +789,7 @@ public static class BinarySceneFile
 
         try
         {
-            return candidate != null ? ApplyMetadata(TextureMap.FromFile(candidate), wrapU, wrapV, offsetU, offsetV, scaleU, scaleV, rotation) : null;
+            return candidate != null ? ApplyTextureMetadata(TextureMap.FromFile(candidate), wrapU, wrapV, offsetU, offsetV, scaleU, scaleV, rotation) : null;
         }
         catch
         {
@@ -762,7 +820,7 @@ public static class BinarySceneFile
 
     private sealed class MaterialWriteTable
     {
-        private readonly Dictionary<string, int> idsByKey = new(StringComparer.Ordinal);
+        private readonly Dictionary<Material, int> idsByReference = new(ReferenceEqualityComparer.Instance);
         private readonly TextureWriteTable textureTable;
 
         public List<Material> Materials { get; } = new();
@@ -782,12 +840,11 @@ public static class BinarySceneFile
 
         public int IdFor(Material material)
         {
-            string key = KeyFor(material);
-            if (idsByKey.TryGetValue(key, out int id))
+            if (idsByReference.TryGetValue(material, out int id))
                 return id;
 
             id = Materials.Count;
-            idsByKey[key] = id;
+            idsByReference[material] = id;
             Materials.Add(material);
             return id;
         }
@@ -802,16 +859,6 @@ public static class BinarySceneFile
                 CollectGroup(child);
         }
 
-        private string KeyFor(Material material) =>
-            $"{RoundKey(material.Color.X)}|{RoundKey(material.Color.Y)}|{RoundKey(material.Color.Z)}|{RoundKey(material.Emission)}|{material.LightId ?? string.Empty}|" +
-            $"{textureTable.IdFor(material.Texture)}|{RoundKey(material.EmissionColor.X)}|{RoundKey(material.EmissionColor.Y)}|{RoundKey(material.EmissionColor.Z)}|" +
-            $"{textureTable.IdFor(material.EmissiveTexture)}|{RoundKey(material.Alpha)}|{material.AlphaBlend}|{RoundKey(material.Metallic)}|{RoundKey(material.Roughness)}|" +
-            $"{RoundKey(material.Transmission)}|{textureTable.IdFor(material.MetallicRoughnessTexture)}|{textureTable.IdFor(material.NormalTexture)}|" +
-            $"{textureTable.IdFor(material.OcclusionTexture)}|{RoundKey(material.NormalScale)}|{RoundKey(material.OcclusionStrength)}|" +
-            $"{(int)material.AlphaMode}|{RoundKey(material.AlphaCutoff)}|{material.DoubleSided}|{textureTable.IdFor(material.TransmissionTexture)}|" +
-            $"{RoundKey(material.Ior)}|{RoundKey(material.Thickness)}|{RoundKey(material.AttenuationColor.X)}|{RoundKey(material.AttenuationColor.Y)}|" +
-            $"{RoundKey(material.AttenuationColor.Z)}|{RoundKey(material.AttenuationDistance)}|{RoundKey(material.Clearcoat)}|" +
-            $"{RoundKey(material.ClearcoatRoughness)}|{material.ClearcoatUsesTransmissionTexture}";
     }
 
     private sealed class MaterialReadTable
@@ -828,7 +875,7 @@ public static class BinarySceneFile
 
     private sealed class TextureWriteTable
     {
-        private readonly Dictionary<string, int> idsByKey = new(StringComparer.Ordinal);
+        private readonly Dictionary<TextureMap, int> idsByReference = new(ReferenceEqualityComparer.Instance);
 
         public List<TextureMap> Textures { get; } = new();
 
@@ -845,14 +892,13 @@ public static class BinarySceneFile
             if (texture == null)
                 return -1;
 
-            string key = KeyFor(texture);
-            if (idsByKey.TryGetValue(key, out int id))
+            if (idsByReference.TryGetValue(texture, out int id))
                 return id;
 
-            // This is a safety net for textures added after the table was built.
-            // Normal Save() collects all scene textures before it writes the table.
+            // Materials normally share TextureMap instances. Reference-based
+            // lookup avoids recomputing a full pixel hash for every triangle.
             id = Textures.Count;
-            idsByKey[key] = id;
+            idsByReference[texture] = id;
             Textures.Add(texture);
             return id;
         }
@@ -879,14 +925,6 @@ public static class BinarySceneFile
             IdFor(material.TransmissionTexture);
         }
 
-        private static string KeyFor(TextureMap texture)
-        {
-            string path = string.IsNullOrWhiteSpace(texture.SourcePath)
-                ? string.Empty
-                : Path.GetFullPath(texture.SourcePath).ToUpperInvariant();
-            return $"{texture.IsBuiltInChecker}|{path}|{texture.Name}|{texture.Width}|{texture.Height}|{(int)texture.WrapU}|{(int)texture.WrapV}|" +
-                $"{RoundKey(texture.OffsetU)}|{RoundKey(texture.OffsetV)}|{RoundKey(texture.ScaleU)}|{RoundKey(texture.ScaleV)}|{RoundKey(texture.Rotation)}";
-        }
     }
 
     private sealed class TextureReadTable

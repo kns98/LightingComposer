@@ -4,7 +4,7 @@ using System.IO.Compression;
 namespace LightingShowcase.Rendering;
 
 /// <summary>Minimal streaming PNG writer for 8-bit RGBA images.</summary>
-internal static class PngWriter
+public static class PngWriter
 {
     private static readonly byte[] Signature = [137, 80, 78, 71, 13, 10, 26, 10];
     private static readonly uint[] CrcTable = BuildCrcTable();
@@ -48,6 +48,53 @@ internal static class PngWriter
                         row[offset + 2] = (byte)((packed >> 16) & 0xFF);
                         row[offset + 3] = (byte)((packed >> 24) & 0xFF);
                     }
+                    zlib.Write(row);
+                }
+            }
+            idat.Complete();
+        }
+
+        WriteChunk(output, "IEND"u8, ReadOnlySpan<byte>.Empty);
+    }
+
+
+    /// <summary>Writes an 8-bit RGBA pixel buffer to a PNG file.</summary>
+    public static void WriteRgba(string path, int width, int height, byte[] rgba)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            throw new ArgumentException("An output path is required.", nameof(path));
+        if (width <= 0) throw new ArgumentOutOfRangeException(nameof(width));
+        if (height <= 0) throw new ArgumentOutOfRangeException(nameof(height));
+        if (rgba == null) throw new ArgumentNullException(nameof(rgba));
+        int expected = checked(width * height * 4);
+        if (rgba.Length != expected)
+            throw new ArgumentException("RGBA buffer size does not match the image dimensions.", nameof(rgba));
+
+        string fullPath = Path.GetFullPath(path);
+        Directory.CreateDirectory(Path.GetDirectoryName(fullPath) ?? Environment.CurrentDirectory);
+
+        using FileStream output = File.Create(fullPath);
+        output.Write(Signature);
+
+        Span<byte> ihdr = stackalloc byte[13];
+        BinaryPrimitives.WriteUInt32BigEndian(ihdr[..4], checked((uint)width));
+        BinaryPrimitives.WriteUInt32BigEndian(ihdr.Slice(4, 4), checked((uint)height));
+        ihdr[8] = 8;
+        ihdr[9] = 6;
+        ihdr[10] = 0;
+        ihdr[11] = 0;
+        ihdr[12] = 0;
+        WriteChunk(output, "IHDR"u8, ihdr);
+
+        using (ChunkedIdatStream idat = new(output, 1024 * 1024))
+        {
+            using (ZLibStream zlib = new(idat, CompressionLevel.Optimal, leaveOpen: true))
+            {
+                byte[] row = new byte[checked(width * 4 + 1)];
+                for (int y = 0; y < height; y++)
+                {
+                    row[0] = 0;
+                    Buffer.BlockCopy(rgba, y * width * 4, row, 1, width * 4);
                     zlib.Write(row);
                 }
             }

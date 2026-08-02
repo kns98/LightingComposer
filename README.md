@@ -157,3 +157,26 @@ On Windows:
 
 The suite verifies baked local-geometry mutation, identity transform metadata after commit, exact undo/redo hashes, deferred gizmo commits, Vulkan cache revision handling, rendered-pixel changes, lazy triangle browsing without object growth, root/nested ungroup behavior, hierarchy expansion, and Visual Studio solution integrity.
 See `TESTING.md` for the optional Vulkan tests.
+
+## Self-contained scenes and portable exports
+
+`.lscene` version 10 embeds decoded RGBA texture pixels together with geometry,
+materials, lights, hierarchy, and baked transforms. Reopening the scene does not
+require the original PNG/JPEG files.
+
+Use **Export package…** to choose an export format and a parent folder. The
+composer always creates a new uniquely named directory containing the primary
+model file, companion files such as OBJ/MTL or glTF/BIN, a `textures` directory,
+and `export-manifest.json`.
+
+Command line:
+
+```bash
+./run.sh export-formats
+./run.sh export composition.lscene --format gltf --output-dir ./exports
+./run.sh export composition.lscene --format obj --output-dir ./exports
+```
+
+Supported export IDs are `lscene`, `lsb`, `prop-xml`, `xml`, `obj`, `stl-binary`,
+`stl-ascii`, `ply-binary`, `ply-ascii`, `3ds`, `fbx-binary`, `fbx-ascii`,
+`gltf`, and `glb`.

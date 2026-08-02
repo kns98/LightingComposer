@@ -4,6 +4,7 @@
 // -----------------------------------------------------------------------------
 
 using LightingShowcase.Math3D;
+using LightingShowcase.Rendering;
 using StbImageSharp;
 
 namespace LightingShowcase.SceneGraph;
@@ -134,6 +135,68 @@ public sealed partial class TextureMap
 
     public TextureMap WithTextureTransform(double offsetU, double offsetV, double scaleU, double scaleV, double rotation) =>
         new(Name, Width, Height, pixels, alpha, SourcePath, IsBuiltInChecker, wrapU, wrapV, offsetU, offsetV, scaleU, scaleV, rotation);
+
+    /// <summary>Returns a copy of the decoded texture pixels as tightly packed RGBA8 bytes.</summary>
+    public byte[] ToRgbaBytes()
+    {
+        byte[] rgba = new byte[checked(Width * Height * 4)];
+        for (int i = 0; i < pixels.Length; i++)
+        {
+            int offset = i * 4;
+            rgba[offset] = ToByte(pixels[i].X);
+            rgba[offset + 1] = ToByte(pixels[i].Y);
+            rgba[offset + 2] = ToByte(pixels[i].Z);
+            rgba[offset + 3] = ToByte(alpha[i]);
+        }
+        return rgba;
+    }
+
+    /// <summary>Creates a decoded texture from tightly packed RGBA8 pixels.</summary>
+    public static TextureMap FromRgbaBytes(
+        string name,
+        int width,
+        int height,
+        byte[] rgba,
+        string? sourcePath = null,
+        bool isBuiltInChecker = false)
+    {
+        if (width <= 0) throw new ArgumentOutOfRangeException(nameof(width));
+        if (height <= 0) throw new ArgumentOutOfRangeException(nameof(height));
+        if (rgba == null) throw new ArgumentNullException(nameof(rgba));
+        int pixelCount = checked(width * height);
+        if (rgba.Length != checked(pixelCount * 4))
+            throw new ArgumentException("RGBA buffer size does not match the texture dimensions.", nameof(rgba));
+
+        Vec3[] decodedPixels = new Vec3[pixelCount];
+        double[] decodedAlpha = new double[pixelCount];
+        for (int i = 0; i < pixelCount; i++)
+        {
+            int offset = i * 4;
+            decodedPixels[i] = new Vec3(rgba[offset] / 255.0, rgba[offset + 1] / 255.0, rgba[offset + 2] / 255.0);
+            decodedAlpha[i] = rgba[offset + 3] / 255.0;
+        }
+
+        return new TextureMap(name, width, height, decodedPixels, decodedAlpha, sourcePath, isBuiltInChecker);
+    }
+
+    /// <summary>Writes this texture as a self-contained PNG file.</summary>
+    public void SavePng(string path) => PngWriter.WriteRgba(path, Width, Height, ToRgbaBytes());
+
+    /// <summary>Computes a stable content hash over decoded RGBA pixels.</summary>
+    public ulong ComputeContentHash()
+    {
+        const ulong offset = 1469598103934665603UL;
+        const ulong prime = 1099511628211UL;
+        ulong hash = offset;
+        for (int i = 0; i < pixels.Length; i++)
+        {
+            hash ^= ToByte(pixels[i].X); hash *= prime;
+            hash ^= ToByte(pixels[i].Y); hash *= prime;
+            hash ^= ToByte(pixels[i].Z); hash *= prime;
+            hash ^= ToByte(alpha[i]); hash *= prime;
+        }
+        return hash;
+    }
 
     /// <summary>Loads an encoded image with a managed, cross-platform decoder.</summary>
     public static TextureMap FromFile(string path)
@@ -287,7 +350,7 @@ public sealed partial class TextureMap
     }
 
     private static byte ToByte(double value) =>
-        (byte)Math.Round(Math.Clamp(value, 0.0, 1.0) * 255.0);
+        (byte)Math.Clamp((int)Math.Round(Math.Clamp(value, 0.0, 1.0) * 255.0, MidpointRounding.AwayFromZero), 0, 255);
 
     /// <summary>Implements the wrap01 operation for this file's subsystem.</summary>
     private static double Address(double value, TextureAddressMode mode)

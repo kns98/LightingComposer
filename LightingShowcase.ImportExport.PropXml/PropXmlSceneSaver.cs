@@ -18,7 +18,7 @@ namespace LightingShowcase.SceneGraph;
 /// <summary>Saves the native .prop.xml scene format.</summary>
 public static class PropXmlSceneSaver
 {
-    public static void Save(Scene scene, string filePath)
+    public static void Save(Scene scene, string filePath, SceneSaveOptions? options = null)
     {
         if (scene == null) throw new ArgumentNullException(nameof(scene));
         if (string.IsNullOrWhiteSpace(filePath)) throw new ArgumentException("A save path is required.", nameof(filePath));
@@ -29,7 +29,7 @@ public static class PropXmlSceneSaver
                 new XAttribute("createdUtc", DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture)),
                 new XElement("Description", scene.Description),
                 new XElement("Lights", scene.Lights.Select(ToLightElement)),
-                new XElement("Objects", scene.ObjectGroups.Select(ToObjectElement))));
+                new XElement("Objects", scene.ObjectGroups.Select(group => ToObjectElement(group, options?.TexturePathResolver)))));
 
         Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(filePath)) ?? Environment.CurrentDirectory);
         document.Save(filePath);
@@ -50,7 +50,7 @@ public static class PropXmlSceneSaver
             new XAttribute("outerConeAngle", Format(light.OuterConeAngle)));
 
     /// <summary>Implements the to object element operation for this file's subsystem.</summary>
-    private static XElement ToObjectElement(SceneObjectGroup group) =>
+    private static XElement ToObjectElement(SceneObjectGroup group, Func<TextureMap, string?>? texturePathResolver) =>
         new("Object",
             new XAttribute("id", group.Id),
             new XAttribute("name", group.Name),
@@ -62,17 +62,17 @@ public static class PropXmlSceneSaver
                 VecAttributes("position", group.Position),
                 VecAttributes("rotationRadians", group.Rotation),
                 VecAttributes("scale", group.Scale)),
-            group.ColorOverride == null ? null : new XElement("ColorOverride", MaterialAttributes(group.ColorOverride)),
+            group.ColorOverride == null ? null : new XElement("ColorOverride", MaterialAttributes(group.ColorOverride, texturePathResolver)),
             group.PrimitiveParameters.Count == 0 ? null : new XElement("PrimitiveParameters",
                 group.PrimitiveParameters.OrderBy(p => p.Key, StringComparer.OrdinalIgnoreCase)
                     .Select(p => new XElement("Parameter",
                         new XAttribute("name", p.Key),
                         new XAttribute("value", Format(p.Value))))),
-            new XElement("Triangles", group.LocalTriangles.Select(ToTriangleElement)),
-            group.Children.Count == 0 ? null : new XElement("Children", group.Children.Select(ToObjectElement)));
+            new XElement("Triangles", group.LocalTriangles.Select(triangle => ToTriangleElement(triangle, texturePathResolver))),
+            group.Children.Count == 0 ? null : new XElement("Children", group.Children.Select(child => ToObjectElement(child, texturePathResolver))));
 
     /// <summary>Implements the to triangle element operation for this file's subsystem.</summary>
-    private static XElement ToTriangleElement(Triangle triangle) =>
+    private static XElement ToTriangleElement(Triangle triangle, Func<TextureMap, string?>? texturePathResolver) =>
         new("Triangle",
             VecAttributes("a", triangle.A),
             VecAttributes("b", triangle.B),
@@ -80,7 +80,7 @@ public static class PropXmlSceneSaver
             Vec2Attributes("uvA", triangle.UvA),
             Vec2Attributes("uvB", triangle.UvB),
             Vec2Attributes("uvC", triangle.UvC),
-            new XElement("Material", MaterialAttributes(triangle.Material)));
+            new XElement("Material", MaterialAttributes(triangle.Material, texturePathResolver)));
 
     /// <summary>Implements the vec attributes operation for this file's subsystem.</summary>
     internal static object[] VecAttributes(string prefix, Vec3 value) => new object[]
@@ -99,7 +99,7 @@ public static class PropXmlSceneSaver
     };
 
     /// <summary>Implements the material attributes operation for this file's subsystem.</summary>
-    internal static object[] MaterialAttributes(Material material)
+    internal static object[] MaterialAttributes(Material material, Func<TextureMap, string?>? texturePathResolver = null)
     {
         List<object> attributes = new()
         {
@@ -113,8 +113,9 @@ public static class PropXmlSceneSaver
         if (material.Texture != null)
         {
             attributes.Add(new XAttribute("textureName", material.Texture.Name));
-            if (!string.IsNullOrWhiteSpace(material.Texture.SourcePath))
-                attributes.Add(new XAttribute("texturePath", material.Texture.SourcePath));
+            string? texturePath = texturePathResolver?.Invoke(material.Texture) ?? material.Texture.SourcePath;
+            if (!string.IsNullOrWhiteSpace(texturePath))
+                attributes.Add(new XAttribute("texturePath", texturePath.Replace('\\', '/')));
             if (material.Texture.IsBuiltInChecker)
             {
                 attributes.Add(new XAttribute("textureKind", "checker"));

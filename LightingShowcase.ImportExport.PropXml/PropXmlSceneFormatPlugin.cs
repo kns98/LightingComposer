@@ -21,5 +21,5 @@ public sealed class PropXmlSceneFormatPlugin : ISceneFormatPlugin
         return new ObjLoadResult(filePath, 0, triangles, triangles);
     }
 
-    public void Export(Scene scene, string filePath, SceneSaveOptions options) => PropXmlSceneSaver.Save(scene, filePath);
+    public void Export(Scene scene, string filePath, SceneSaveOptions options) => PropXmlSceneSaver.Save(scene, filePath, options);
 }

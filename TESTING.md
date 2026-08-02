@@ -68,3 +68,10 @@ These render the same Scene instance before and after a baked transform, assert 
 `InspectorThreadSafetyTests` verifies that the transform worker payload contains no
 Avalonia objects and that the same work item used by the Apply button can execute
 on a worker thread while modifying authoritative model geometry.
+
+## Embedded resource and export-package tests
+
+The normal suite also verifies that `.lscene` files reopen textures without the
+original image files, distinct in-memory textures are preserved, every advertised
+export route resolves to a registered exporter, and each format creates a new
+package directory containing its primary file, manifest, and related textures.
