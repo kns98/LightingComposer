@@ -1,0 +1,17 @@
+{
+  "$schema": "http://json.schemastore.org/launchsettings.json",
+  "profiles": {
+    "Composer UI": {
+      "commandName": "Project",
+      "commandLineArgs": ""
+    },
+    "Composer CLI - Help": {
+      "commandName": "Project",
+      "commandLineArgs": "--help"
+    },
+    "Composer CLI - Formats": {
+      "commandName": "Project",
+      "commandLineArgs": "formats"
+    }
+  }
+}
