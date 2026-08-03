@@ -40,6 +40,13 @@ public sealed class SceneSaveOptions
 
     /// <summary>Optional package-relative name for the OBJ material library.</summary>
     public string? MaterialFileName { get; init; }
+
+    /// <summary>
+    /// When true, exporters may ignore editor-only chunk boundaries, merge
+    /// compatible geometry, and weld shared vertices for faster runtime loading.
+    /// The current implementation is used by glTF/GLB export.
+    /// </summary>
+    public bool OptimizeGeometry { get; init; }
 }
 
 public interface ISceneFormatPlugin

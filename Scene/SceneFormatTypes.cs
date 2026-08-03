@@ -16,14 +16,16 @@ public sealed class ObjLoadResult
     public int VertexCount { get; }
     public int FaceCount { get; }
     public int TriangleCount { get; }
+    public string? Details { get; }
 
     /// <summary>Constructs and initializes this component.</summary>
-    public ObjLoadResult(string filePath, int vertexCount, int faceCount, int triangleCount)
+    public ObjLoadResult(string filePath, int vertexCount, int faceCount, int triangleCount, string? details = null)
     {
         FilePath = filePath;
         VertexCount = vertexCount;
         FaceCount = faceCount;
         TriangleCount = triangleCount;
+        Details = details;
     }
 }
 

@@ -149,7 +149,7 @@ public sealed class SceneObjectGroup
         IsSelectable = selectable;
     }
 
-    public void AddChild(SceneObjectGroup child)
+    public void AddChild(SceneObjectGroup child, bool recalculatePivot = true)
     {
         if (child == null) throw new ArgumentNullException(nameof(child));
         if (ReferenceEquals(child, this)) throw new InvalidOperationException("A group cannot be parented to itself.");
@@ -158,7 +158,8 @@ public sealed class SceneObjectGroup
         child.Parent?.Children.Remove(child);
         child.Parent = this;
         Children.Add(child);
-        RecalculatePivot();
+        if (recalculatePivot)
+            RecalculatePivot();
     }
 
     public bool RemoveChild(SceneObjectGroup child)
@@ -200,34 +201,43 @@ public sealed class SceneObjectGroup
         LocalTriangles.Add(new Triangle(a, b, c, uvA, uvB, uvC, normalA, normalB, normalC, material, Id));
     }
 
+    /// <summary>Adds a prebuilt primitive batch without per-triangle scene-stack dispatch.</summary>
+    public void AddTriangles(IEnumerable<Triangle> triangles)
+    {
+        if (triangles == null) throw new ArgumentNullException(nameof(triangles));
+        LocalTriangles.AddRange(triangles);
+    }
+
+    /// <summary>Preallocates local triangle storage for large imported primitives.</summary>
+    public void EnsureTriangleCapacity(int additionalTriangleCount)
+    {
+        if (additionalTriangleCount <= 0)
+            return;
+        LocalTriangles.EnsureCapacity(checked(LocalTriangles.Count + additionalTriangleCount));
+    }
+
     public void RecalculatePivot()
     {
-        List<Vec3> points = new();
+        bool hasPoint = false;
+        Vec3 min = Vec3.Zero;
+        Vec3 max = Vec3.Zero;
+
         foreach (Triangle tri in LocalTriangles)
         {
-            points.Add(tri.A); points.Add(tri.B); points.Add(tri.C);
+            IncludePoint(tri.A, ref hasPoint, ref min, ref max);
+            IncludePoint(tri.B, ref hasPoint, ref min, ref max);
+            IncludePoint(tri.C, ref hasPoint, ref min, ref max);
         }
 
         foreach (SceneObjectGroup child in Children)
         {
-            Aabb childBounds = child.GetWorldBounds();
-            points.Add(childBounds.Min);
-            points.Add(childBounds.Max);
+            if (!child.TryGetWorldBounds(includeHidden: false, out Aabb childBounds))
+                continue;
+            IncludePoint(childBounds.Min, ref hasPoint, ref min, ref max);
+            IncludePoint(childBounds.Max, ref hasPoint, ref min, ref max);
         }
 
-        if (points.Count == 0)
-        {
-            Pivot = Vec3.Zero;
-            return;
-        }
-
-        Vec3 min = points[0], max = points[0];
-        foreach (Vec3 point in points)
-        {
-            min = Min(min, point);
-            max = Max(max, point);
-        }
-        Pivot = (min + max) * 0.5;
+        Pivot = hasPoint ? (min + max) * 0.5 : Vec3.Zero;
     }
 
     /// <summary>Bakes this group's pending transform into all contained geometry, including descendants.</summary>
@@ -492,27 +502,70 @@ public sealed class SceneObjectGroup
         return null;
     }
 
-    public Aabb GetWorldBounds(bool includeHidden = false)
+    public Aabb GetWorldBounds(bool includeHidden = false) =>
+        TryGetWorldBounds(includeHidden, out Aabb bounds)
+            ? bounds
+            : new Aabb(Vec3.Zero, Vec3.Zero);
+
+    /// <summary>Computes bounds without materializing world-triangle copies when the subtree has identity transforms.</summary>
+    internal bool TryGetWorldBounds(bool includeHidden, out Aabb bounds)
     {
         bool hasPoint = false;
         Vec3 min = Vec3.Zero;
         Vec3 max = Vec3.Zero;
 
-        foreach (Triangle tri in BuildWorldTriangles(includeHidden))
+        if (CanReferenceLocalTrianglesAsWorld(includeHidden))
         {
-            if (!hasPoint)
+            AccumulateLocalBounds(includeHidden, ref hasPoint, ref min, ref max);
+        }
+        else
+        {
+            foreach (Triangle tri in BuildWorldTriangles(includeHidden))
             {
-                min = tri.A;
-                max = tri.A;
-                hasPoint = true;
+                IncludePoint(tri.A, ref hasPoint, ref min, ref max);
+                IncludePoint(tri.B, ref hasPoint, ref min, ref max);
+                IncludePoint(tri.C, ref hasPoint, ref min, ref max);
             }
-
-            AddPoint(tri.A, ref min, ref max);
-            AddPoint(tri.B, ref min, ref max);
-            AddPoint(tri.C, ref min, ref max);
         }
 
-        return hasPoint ? new Aabb(min, max) : new Aabb(Vec3.Zero, Vec3.Zero);
+        bounds = hasPoint ? new Aabb(min, max) : new Aabb(Vec3.Zero, Vec3.Zero);
+        return hasPoint;
+    }
+
+    /// <summary>Returns true when local immutable triangles can be reused directly as world geometry.</summary>
+    internal bool CanReferenceLocalTrianglesAsWorld(bool includeHidden = false)
+    {
+        if (!includeHidden && !Visible)
+            return true;
+        if (HasPendingTransform() || ColorOverride != null || PreviewColorOverride != null)
+            return false;
+        return Children.All(child => child.CanReferenceLocalTrianglesAsWorld(includeHidden));
+    }
+
+    /// <summary>Appends local triangle references for an identity-transform subtree.</summary>
+    internal void AppendLocalTrianglesAsWorld(List<Triangle> destination, bool includeHidden = false)
+    {
+        if (!includeHidden && !Visible)
+            return;
+        destination.AddRange(LocalTriangles);
+        foreach (SceneObjectGroup child in Children)
+            child.AppendLocalTrianglesAsWorld(destination, includeHidden);
+    }
+
+    private void AccumulateLocalBounds(bool includeHidden, ref bool hasPoint, ref Vec3 min, ref Vec3 max)
+    {
+        if (!includeHidden && !Visible)
+            return;
+
+        foreach (Triangle tri in LocalTriangles)
+        {
+            IncludePoint(tri.A, ref hasPoint, ref min, ref max);
+            IncludePoint(tri.B, ref hasPoint, ref min, ref max);
+            IncludePoint(tri.C, ref hasPoint, ref min, ref max);
+        }
+
+        foreach (SceneObjectGroup child in Children)
+            child.AccumulateLocalBounds(includeHidden, ref hasPoint, ref min, ref max);
     }
 
     /// <summary>Builds visible world triangles while preserving each leaf group id for picking.</summary>
@@ -664,6 +717,19 @@ public sealed class SceneObjectGroup
     {
         min = Min(min, p);
         max = Max(max, p);
+    }
+
+    private static void IncludePoint(Vec3 point, ref bool hasPoint, ref Vec3 min, ref Vec3 max)
+    {
+        if (!hasPoint)
+        {
+            min = point;
+            max = point;
+            hasPoint = true;
+            return;
+        }
+        min = Min(min, point);
+        max = Max(max, point);
     }
 
     private static Vec3 Min(Vec3 a, Vec3 b) => new(Math.Min(a.X, b.X), Math.Min(a.Y, b.Y), Math.Min(a.Z, b.Z));

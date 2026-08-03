@@ -505,7 +505,7 @@ internal sealed class ComposerWindow : Window
             trianglePageOffsets.Clear();
             treeExpansionInitialized = false;
             RefreshObjectTree();
-            statusText.Text = $"Loaded {Path.GetFileName(path)} — {session.ObjectCount:N0} objects, {session.TriangleCount:N0} triangles.";
+            statusText.Text = $"Loaded {Path.GetFileName(path)} — {session.ObjectCount:N0} objects, {session.TriangleCount:N0} triangles{FormatImportDetails()}.";
             await RequestRenderAsync(interactive: false);
         }
         catch (OperationCanceledException) when (lifetimeCancellation.IsCancellationRequested)
@@ -535,7 +535,7 @@ internal sealed class ComposerWindow : Window
             ClearVirtualTriangleSelection();
             expandedObjectIds.Add(insertedId);
             RefreshObjectTree(insertedId);
-            statusText.Text = $"Inserted {Path.GetFileName(path)} — {session.ObjectCount:N0} objects, {session.TriangleCount:N0} triangles.";
+            statusText.Text = $"Inserted {Path.GetFileName(path)} — {session.ObjectCount:N0} objects, {session.TriangleCount:N0} triangles{FormatImportDetails()}.";
             await RequestRenderAsync(interactive: false);
         }
         catch (Exception ex)
@@ -547,6 +547,11 @@ internal sealed class ComposerWindow : Window
             SetBusy(false);
         }
     }
+
+    private string FormatImportDetails() =>
+        string.IsNullOrWhiteSpace(session.LastImportDetails)
+            ? string.Empty
+            : $"; {session.LastImportDetails}";
 
     private async Task SaveSceneAsync()
     {

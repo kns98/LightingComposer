@@ -6,7 +6,8 @@ public sealed record SceneExportFormat(
     string DisplayName,
     string Extension,
     string? Variant = null,
-    bool IsNativeScene = false)
+    bool IsNativeScene = false,
+    bool OptimizeGeometry = false)
 {
     public override string ToString() => DisplayName;
 }
@@ -28,8 +29,10 @@ public static class SceneExportFormats
         new("3ds", "3D Studio (.3ds)", ".3ds"),
         new("fbx-binary", "Binary FBX (.fbx)", ".fbx", "binary"),
         new("fbx-ascii", "ASCII FBX (.fbx)", ".fbx", "ascii"),
-        new("gltf", "glTF JSON (.gltf)", ".gltf", "gltf"),
-        new("glb", "GLB (.glb with external resources)", ".glb", "glb")
+        new("gltf", "glTF JSON — optimized (.gltf)", ".gltf", "gltf", OptimizeGeometry: true),
+        new("glb", "GLB — optimized (.glb with external resources)", ".glb", "glb", OptimizeGeometry: true),
+        new("gltf-hierarchy", "glTF JSON — preserve editor chunks (.gltf)", ".gltf", "gltf"),
+        new("glb-hierarchy", "GLB — preserve editor chunks (.glb)", ".glb", "glb")
     ];
 
     public static SceneExportFormat Find(string id) =>
@@ -75,8 +78,8 @@ public sealed class SceneExportPackageService
             ? resourceNames.Next(".mtl")
             : null;
         string? bufferFileName =
-            string.Equals(format.Id, "gltf", StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(format.Id, "glb", StringComparison.OrdinalIgnoreCase)
+            string.Equals(format.Extension, ".gltf", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(format.Extension, ".glb", StringComparison.OrdinalIgnoreCase)
                 ? resourceNames.Next(".bin")
                 : null;
 
@@ -110,7 +113,8 @@ public sealed class SceneExportPackageService
                 PackageDirectory = directory,
                 TexturePathResolver = texture => relativeTexturePaths.TryGetValue(texture, out string? relative) ? relative : null,
                 BufferFileName = bufferFileName,
-                MaterialFileName = materialFileName
+                MaterialFileName = materialFileName,
+                OptimizeGeometry = format.OptimizeGeometry
             });
         }
 

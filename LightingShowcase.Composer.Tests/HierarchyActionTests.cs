@@ -13,13 +13,13 @@ public sealed class HierarchyActionTests
         int rootId = session.Insert(model.ModelPath, CancellationToken.None);
 
         IReadOnlyList<SceneObjectInfo> infos = session.GetObjectInfos();
-        SceneObjectInfo rootInfo = Assert.Single(infos.Where(info => info.Id == rootId));
+        SceneObjectInfo rootInfo = Assert.Single(infos, info => info.Id == rootId);
         Assert.Equal(0, rootInfo.Depth);
         Assert.True(rootInfo.ChildCount > 0);
         Assert.Contains(infos, info => info.Depth > 0);
 
         List<ObjectTreeNode> roots = ComposerObjectTree.Build(infos);
-        ObjectTreeNode root = Assert.Single(roots.Where(node => node.Id == rootId));
+        ObjectTreeNode root = Assert.Single(roots, node => node.Id == rootId);
         Assert.NotEmpty(root.Children);
     }
 
@@ -30,7 +30,7 @@ public sealed class HierarchyActionTests
         using ComposerSceneSession session = new();
         int rootId = session.Insert(model.ModelPath, CancellationToken.None);
         List<ObjectTreeNode> roots = ComposerObjectTree.Build(session.GetObjectInfos());
-        ObjectTreeNode root = Assert.Single(roots.Where(node => node.Id == rootId));
+        ObjectTreeNode root = Assert.Single(roots, node => node.Id == rootId);
 
         IReadOnlyList<int> collapsed = ComposerObjectTree.FlattenVisible(roots, new HashSet<int>());
         Assert.Contains(rootId, collapsed);

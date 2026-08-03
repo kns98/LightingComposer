@@ -10,6 +10,7 @@
 // -----------------------------------------------------------------------------
 
 using System.IO;
+using System.Diagnostics;
 using System.Globalization;
 using System.Numerics;
 using System.Text;
@@ -37,18 +38,26 @@ public static class GltfSceneIO
         Action<ObjLoadProgress>? progress = null,
         double? simplifyKeepFraction = null)
     {
-        progress?.Invoke(new ObjLoadProgress("Reading glTF", 5, 0, 0, 0));
+        Stopwatch totalTimer = Stopwatch.StartNew();
+        Stopwatch phaseTimer = Stopwatch.StartNew();
+        progress?.Invoke(new ObjLoadProgress("Reading glTF JSON", 5, 0, 0, 0));
         GltfDocument doc = ReadDocument(filePath);
-        using JsonDocument json = JsonDocument.Parse(doc.Json);
+        using JsonDocument json = JsonDocument.Parse(doc.JsonUtf8);
         JsonElement root = json.RootElement;
+        long documentMilliseconds = phaseTimer.ElapsedMilliseconds;
 
+        phaseTimer.Restart();
+        progress?.Invoke(new ObjLoadProgress("Loading glTF buffers and materials", 12, 0, 0, 0));
         List<byte[]> buffers = LoadBuffers(root, doc, filePath);
         List<GltfMaterial> materials = ReadMaterials(root, buffers, filePath, fallbackMaterial);
         List<ImportedLight> lights = ReadLights(root);
+        long resourceMilliseconds = phaseTimer.ElapsedMilliseconds;
 
         int vertexCount = 0;
         int faceCount = 0;
         int triangleCount = 0;
+        int accessorBoundsCount = 0;
+        int scannedBoundsCount = 0;
         int sceneIndex = root.TryGetProperty("scene", out JsonElement sceneProp) && sceneProp.ValueKind == JsonValueKind.Number ? sceneProp.GetInt32() : 0;
         JsonElement scenes = GetArray(root, "scenes");
         JsonElement nodes = GetArray(root, "nodes");
@@ -62,7 +71,10 @@ public static class GltfSceneIO
         Vec3 boundsMin = new(double.PositiveInfinity, double.PositiveInfinity, double.PositiveInfinity);
         Vec3 boundsMax = new(double.NegativeInfinity, double.NegativeInfinity, double.NegativeInfinity);
         bool hasBounds = false;
+        phaseTimer.Restart();
+        progress?.Invoke(new ObjLoadProgress("Reading glTF bounds", 20, 0, 0, 0));
         TraverseSceneRoots(TraverseBounds);
+        long boundsMilliseconds = phaseTimer.ElapsedMilliseconds;
         if (!hasBounds)
             throw new InvalidDataException("glTF file does not contain any mesh positions.");
 
@@ -82,7 +94,10 @@ public static class GltfSceneIO
         int emissiveTriangleCount = 0;
         double strongestEmission = 0.0;
 
+        phaseTimer.Restart();
+        progress?.Invoke(new ObjLoadProgress("Building glTF triangles", 35, 0, 0, 0));
         TraverseSceneRoots(TraverseNode);
+        long geometryMilliseconds = phaseTimer.ElapsedMilliseconds;
 
         if (lights.Count == 0 && emissiveTriangleCount > 0)
         {
@@ -130,9 +145,16 @@ public static class GltfSceneIO
             triangleCount = scene.ObjectGroups.Sum(g => g.CountLocalTrianglesRecursively());
         }
 
-        scene.RebuildWorldGeometry();
-        progress?.Invoke(new ObjLoadProgress("Finished glTF", 100, vertexCount, faceCount, triangleCount));
-        return new ObjLoadResult(filePath, vertexCount, faceCount, triangleCount);
+        phaseTimer.Restart();
+        progress?.Invoke(new ObjLoadProgress("Finalizing glTF scene", 94, vertexCount, faceCount, triangleCount));
+        scene.RebuildWorldGeometry(buildAccelerationStructure: false);
+        long finalizeMilliseconds = phaseTimer.ElapsedMilliseconds;
+        totalTimer.Stop();
+
+        string details = FormattableString.Invariant(
+            $"total={totalTimer.ElapsedMilliseconds}ms; json={documentMilliseconds}ms; resources={resourceMilliseconds}ms; bounds={boundsMilliseconds}ms; geometry={geometryMilliseconds}ms; finalize={finalizeMilliseconds}ms; accessorBounds={accessorBoundsCount}; scannedBounds={scannedBoundsCount}; bvh=deferred");
+        progress?.Invoke(new ObjLoadProgress($"Finished glTF in {totalTimer.ElapsedMilliseconds:N0} ms", 100, vertexCount, faceCount, triangleCount));
+        return new ObjLoadResult(filePath, vertexCount, faceCount, triangleCount, details);
 
         void TraverseSceneRoots(Action<int, Matrix4x4> visitor)
         {
@@ -180,8 +202,39 @@ public static class GltfSceneIO
                 if (mode != 4 || !primitive.TryGetProperty("attributes", out JsonElement attributes) || !attributes.TryGetProperty("POSITION", out JsonElement posEl))
                     continue;
 
-                foreach (Vec3 position in ReadVec3Accessor(root, buffers, posEl.GetInt32(), world))
-                    ExpandBounds(position);
+                int positionAccessorIndex = posEl.GetInt32();
+                if (TryReadVec3AccessorBounds(root, positionAccessorIndex, out Vec3 accessorMin, out Vec3 accessorMax))
+                {
+                    accessorBoundsCount++;
+                    ExpandTransformedBounds(accessorMin, accessorMax, world);
+                }
+                else
+                {
+                    scannedBoundsCount++;
+                    foreach (Vec3 position in ReadVec3Accessor(root, buffers, positionAccessorIndex, world))
+                        ExpandBounds(position);
+                }
+            }
+        }
+
+        void ExpandTransformedBounds(Vec3 min, Vec3 max, Matrix4x4 transform)
+        {
+            Span<Vector3> corners = stackalloc Vector3[8]
+            {
+                new((float)min.X, (float)min.Y, (float)min.Z),
+                new((float)max.X, (float)min.Y, (float)min.Z),
+                new((float)min.X, (float)max.Y, (float)min.Z),
+                new((float)max.X, (float)max.Y, (float)min.Z),
+                new((float)min.X, (float)min.Y, (float)max.Z),
+                new((float)max.X, (float)min.Y, (float)max.Z),
+                new((float)min.X, (float)max.Y, (float)max.Z),
+                new((float)max.X, (float)max.Y, (float)max.Z)
+            };
+
+            foreach (Vector3 corner in corners)
+            {
+                Vector3 transformed = Vector3.Transform(corner, transform);
+                ExpandBounds(new Vec3(transformed.X, transformed.Y, transformed.Z));
             }
         }
 
@@ -249,12 +302,12 @@ public static class GltfSceneIO
                 if (mode != 4 || !primitive.TryGetProperty("attributes", out JsonElement attributes) || !attributes.TryGetProperty("POSITION", out JsonElement posEl))
                     continue;
 
-                List<Vec3> positions = ReadVec3Accessor(root, buffers, posEl.GetInt32(), world)
-                    .Select(NormalizePosition)
-                    .ToList();
+                List<Vec3> positions = ReadNormalizedPositionAccessor(
+                    root, buffers, posEl.GetInt32(), world, sourceCenter, importScale, importOffset);
+
                 List<Vec3> normals = attributes.TryGetProperty("NORMAL", out JsonElement normalAccessorEl)
                     ? ReadNormalAccessor(root, buffers, normalAccessorEl.GetInt32(), world)
-                    : new List<Vec3>();
+                    : new List<Vec3>(0);
                 int materialIndex = primitive.TryGetProperty("material", out JsonElement materialEl) ? materialEl.GetInt32() : -1;
                 GltfMaterial? gltfMaterial = materialIndex >= 0 && materialIndex < materials.Count ? materials[materialIndex] : null;
                 string uvAttributeName = $"TEXCOORD_{Math.Max(0, gltfMaterial?.BaseColorTexCoord ?? 0)}";
@@ -262,20 +315,24 @@ public static class GltfSceneIO
                     attributes.TryGetProperty("TEXCOORD_0", out uvEl);
                 List<Vec2> uvs = hasUv
                     ? ReadVec2Accessor(root, buffers, uvEl.GetInt32())
-                    : new List<Vec2>();
+                    : new List<Vec2>(0);
                 List<Vec3> vertexColors = attributes.TryGetProperty("COLOR_0", out JsonElement colorAccessorEl)
                     ? ReadColorAccessor(root, buffers, colorAccessorEl.GetInt32())
-                    : new List<Vec3>();
-                List<int> indices = primitive.TryGetProperty("indices", out JsonElement indicesEl)
+                    : new List<Vec3>(0);
+                List<int>? indices = primitive.TryGetProperty("indices", out JsonElement indicesEl)
                     ? ReadIndexAccessor(root, buffers, indicesEl.GetInt32())
-                    : Enumerable.Range(0, positions.Count).ToList();
+                    : null;
+                int indexCount = indices?.Count ?? positions.Count;
 
                 Material material = gltfMaterial?.Material ?? fallbackMaterial;
                 string groupName = primitiveIndex == 0 ? nodeName : $"{nodeName}_{primitiveIndex + 1}";
-                scene.BeginGroup(groupName);
-                for (int i = 0; i + 2 < indices.Count; i += 3)
+                SceneObjectGroup importedGroup = scene.BeginGroup(groupName);
+                importedGroup.EnsureTriangleCapacity(indexCount / 3);
+                for (int i = 0; i + 2 < indexCount; i += 3)
                 {
-                    int ia = indices[i], ib = indices[i + 1], ic = indices[i + 2];
+                    int ia = indices?[i] ?? i;
+                    int ib = indices?[i + 1] ?? i + 1;
+                    int ic = indices?[i + 2] ?? i + 2;
                     if (!IsValidIndex(ia, positions.Count) || !IsValidIndex(ib, positions.Count) || !IsValidIndex(ic, positions.Count))
                         continue;
 
@@ -297,7 +354,7 @@ public static class GltfSceneIO
                     }
                     if (ia < normals.Count && ib < normals.Count && ic < normals.Count)
                     {
-                        scene.AddTriangle(
+                        importedGroup.AddTriangle(
                             positions[ia], positions[ib], positions[ic],
                             uva, uvb, uvc,
                             normals[ia], normals[ib], normals[ic],
@@ -305,7 +362,7 @@ public static class GltfSceneIO
                     }
                     else
                     {
-                        scene.AddTriangle(positions[ia], positions[ib], positions[ic], uva, uvb, uvc, triangleMaterial);
+                        importedGroup.AddTriangle(positions[ia], positions[ib], positions[ic], uva, uvb, uvc, triangleMaterial);
                     }
                     if (triangleMaterial.Emission > 0.0 && triangleMaterial.EmissiveTexture != null)
                     {
@@ -321,25 +378,32 @@ public static class GltfSceneIO
                         }
                     }
                     triangleCount++;
+                    if ((triangleCount & 0x3FFF) == 0)
+                    {
+                        int inPrimitivePercent = indexCount <= 0 ? 35 : 35 + (int)Math.Min(50L, 50L * (i + 3L) / indexCount);
+                        progress?.Invoke(new ObjLoadProgress("Building glTF triangles", inPrimitivePercent, vertexCount + positions.Count, faceCount + i / 3, triangleCount));
+                    }
                 }
                 scene.EndGroup();
                 vertexCount += positions.Count;
-                faceCount += indices.Count / 3;
+                faceCount += indexCount / 3;
                 primitiveIndex++;
+                int geometryPercent = Math.Min(88, 35 + Math.Max(1, triangleCount / 50000));
+                progress?.Invoke(new ObjLoadProgress("Building glTF triangles", geometryPercent, vertexCount, faceCount, triangleCount));
             }
         }
     }
 
     public static void Save(Scene scene, string filePath, bool binary, SceneSaveOptions? options = null)
     {
-        ExportBuild build = BuildExport(scene, options?.TexturePathResolver);
+        ExportBuild build = BuildExport(scene, options?.TexturePathResolver, options?.OptimizeGeometry ?? false);
         if (binary)
             WriteGlb(build, filePath, options?.BufferFileName);
         else
             WriteGltf(build, filePath, options?.BufferFileName);
     }
 
-    private static ExportBuild BuildExport(Scene scene, Func<TextureMap, string?>? texturePathResolver)
+    private static ExportBuild BuildExport(Scene scene, Func<TextureMap, string?>? texturePathResolver, bool optimizeGeometry)
     {
         List<byte> bin = new();
         List<object> bufferViews = new();
@@ -389,168 +453,210 @@ public static class GltfSceneIO
             return textureIndex;
         }
 
-        foreach (SceneObjectGroup group in scene.ObjectGroups)
+        int GetMaterialId(Material material)
         {
-            if (!group.Visible)
-                continue;
+            if (materialIds.TryGetValue(material, out int existingMaterialId))
+                return existingMaterialId;
 
-            List<Triangle> tris = group.BuildWorldTriangles().ToList();
-            if (tris.Count == 0)
-                continue;
+            int materialId = materials.Count;
+            materialIds[material] = materialId;
 
+            Dictionary<string, object?> pbr = new()
+            {
+                ["baseColorFactor"] = new[] { Clamp01(material.Color.X), Clamp01(material.Color.Y), Clamp01(material.Color.Z), Clamp01(material.Alpha) },
+                ["metallicFactor"] = Clamp01(material.Metallic),
+                ["roughnessFactor"] = Clamp01(material.Roughness)
+            };
+            int baseTexture = TextureIndex(material.Texture);
+            if (baseTexture >= 0)
+                pbr["baseColorTexture"] = new Dictionary<string, object?> { ["index"] = baseTexture };
+            int metallicRoughnessTexture = TextureIndex(material.MetallicRoughnessTexture);
+            if (metallicRoughnessTexture >= 0)
+                pbr["metallicRoughnessTexture"] = new Dictionary<string, object?> { ["index"] = metallicRoughnessTexture };
+
+            Dictionary<string, object?> materialDef = new()
+            {
+                ["name"] = $"mat_{materialId + 1}",
+                ["pbrMetallicRoughness"] = pbr,
+                ["emissiveFactor"] = material.Emission > 0.0
+                    ? new[] { Clamp01(material.EmissionColor.X * material.Emission), Clamp01(material.EmissionColor.Y * material.Emission), Clamp01(material.EmissionColor.Z * material.Emission) }
+                    : new[] { 0.0, 0.0, 0.0 },
+                ["alphaMode"] = material.AlphaMode switch
+                {
+                    MaterialAlphaMode.Mask => "MASK",
+                    MaterialAlphaMode.Blend => "BLEND",
+                    _ => "OPAQUE"
+                },
+                ["doubleSided"] = material.DoubleSided
+            };
+            if (material.AlphaMode == MaterialAlphaMode.Mask)
+                materialDef["alphaCutoff"] = material.AlphaCutoff;
+            int normalTexture = TextureIndex(material.NormalTexture);
+            if (normalTexture >= 0)
+                materialDef["normalTexture"] = new Dictionary<string, object?> { ["index"] = normalTexture, ["scale"] = material.NormalScale };
+            int occlusionTexture = TextureIndex(material.OcclusionTexture);
+            if (occlusionTexture >= 0)
+                materialDef["occlusionTexture"] = new Dictionary<string, object?> { ["index"] = occlusionTexture, ["strength"] = material.OcclusionStrength };
+            int emissiveTexture = TextureIndex(material.EmissiveTexture);
+            if (emissiveTexture >= 0)
+                materialDef["emissiveTexture"] = new Dictionary<string, object?> { ["index"] = emissiveTexture };
+
+            Dictionary<string, object?> materialExtensions = new();
+            int transmissionTexture = TextureIndex(material.TransmissionTexture);
+            if (material.Transmission > 0.0 || transmissionTexture >= 0)
+            {
+                Dictionary<string, object?> transmission = new()
+                {
+                    ["transmissionFactor"] = Clamp01(material.Transmission)
+                };
+                if (transmissionTexture >= 0)
+                    transmission["transmissionTexture"] = new Dictionary<string, object?> { ["index"] = transmissionTexture };
+                materialExtensions["KHR_materials_transmission"] = transmission;
+                materialExtensionsUsed.Add("KHR_materials_transmission");
+            }
+            if (Math.Abs(material.Ior - 1.5) > 1e-9)
+            {
+                materialExtensions["KHR_materials_ior"] = new Dictionary<string, object?> { ["ior"] = material.Ior };
+                materialExtensionsUsed.Add("KHR_materials_ior");
+            }
+            if (material.Thickness > 0.0 || material.AttenuationDistance > 0.0)
+            {
+                Dictionary<string, object?> volume = new()
+                {
+                    ["thicknessFactor"] = material.Thickness,
+                    ["attenuationColor"] = new[] { Clamp01(material.AttenuationColor.X), Clamp01(material.AttenuationColor.Y), Clamp01(material.AttenuationColor.Z) }
+                };
+                if (material.AttenuationDistance > 0.0)
+                    volume["attenuationDistance"] = material.AttenuationDistance;
+                materialExtensions["KHR_materials_volume"] = volume;
+                materialExtensionsUsed.Add("KHR_materials_volume");
+            }
+            if (material.Clearcoat > 0.0)
+            {
+                Dictionary<string, object?> clearcoat = new()
+                {
+                    ["clearcoatFactor"] = Clamp01(material.Clearcoat),
+                    ["clearcoatRoughnessFactor"] = Clamp01(material.ClearcoatRoughness)
+                };
+                if (material.ClearcoatUsesTransmissionTexture && transmissionTexture >= 0)
+                    clearcoat["clearcoatTexture"] = new Dictionary<string, object?> { ["index"] = transmissionTexture };
+                materialExtensions["KHR_materials_clearcoat"] = clearcoat;
+                materialExtensionsUsed.Add("KHR_materials_clearcoat");
+            }
+            if (materialExtensions.Count > 0)
+                materialDef["extensions"] = materialExtensions;
+
+            materials.Add(materialDef);
+            return materialId;
+        }
+
+        Dictionary<string, object?> BuildPrimitive(Material material, List<Triangle> materialTris)
+        {
+            Dictionary<ExportVertex, uint> vertexIds = new();
+            List<float> positions = new(materialTris.Count * 6);
+            List<float> normals = new(materialTris.Count * 6);
+            List<float> texcoords = new(materialTris.Count * 4);
+            List<uint> indices = new(materialTris.Count * 3);
+            Vec3 min = materialTris[0].A;
+            Vec3 max = materialTris[0].A;
+
+            foreach (Triangle tri in materialTris)
+            {
+                AddVertex(tri.A, tri.UvA, tri.NormalA);
+                AddVertex(tri.B, tri.UvB, tri.NormalB);
+                AddVertex(tri.C, tri.UvC, tri.NormalC);
+            }
+
+            int posAccessor = AddFloatAccessor(bin, bufferViews, accessors, positions.ToArray(), "VEC3", min, max);
+            int normalAccessor = AddFloatAccessor(bin, bufferViews, accessors, normals.ToArray(), "VEC3", null, null);
+            int uvAccessor = AddFloatAccessor(bin, bufferViews, accessors, texcoords.ToArray(), "VEC2", null, null);
+            int indexAccessor = AddIndexAccessor(bin, bufferViews, accessors, indices, vertexIds.Count);
+            return new Dictionary<string, object?>
+            {
+                ["attributes"] = new Dictionary<string, object?>
+                {
+                    ["POSITION"] = posAccessor,
+                    ["NORMAL"] = normalAccessor,
+                    ["TEXCOORD_0"] = uvAccessor
+                },
+                ["indices"] = indexAccessor,
+                ["material"] = GetMaterialId(material),
+                ["mode"] = 4
+            };
+
+            void AddVertex(Vec3 p, Vec2 uv, Vec3 normal)
+            {
+                ExportVertex key = new(
+                    (float)p.X, (float)p.Y, (float)p.Z,
+                    (float)normal.X, (float)normal.Y, (float)normal.Z,
+                    (float)uv.U, (float)uv.V);
+                if (!vertexIds.TryGetValue(key, out uint index))
+                {
+                    index = checked((uint)vertexIds.Count);
+                    vertexIds.Add(key, index);
+                    positions.Add(key.Px);
+                    positions.Add(key.Py);
+                    positions.Add(key.Pz);
+                    normals.Add(key.Nx);
+                    normals.Add(key.Ny);
+                    normals.Add(key.Nz);
+                    texcoords.Add(key.U);
+                    texcoords.Add(key.V);
+                    min = Min(min, p);
+                    max = Max(max, p);
+                }
+                indices.Add(index);
+            }
+        }
+
+        List<(string Name, List<Triangle> Triangles)> geometrySets = new();
+        if (optimizeGeometry)
+        {
+            List<Triangle> combined = scene.ObjectGroups
+                .Where(group => group.Visible)
+                .SelectMany(group => group.BuildWorldTriangles())
+                .ToList();
+            if (combined.Count > 0)
+            {
+                string optimizedName = string.IsNullOrWhiteSpace(scene.Description)
+                    ? "Optimized scene"
+                    : scene.Description;
+                geometrySets.Add((optimizedName, combined));
+            }
+        }
+        else
+        {
+            foreach (SceneObjectGroup group in scene.ObjectGroups)
+            {
+                if (!group.Visible)
+                    continue;
+                List<Triangle> groupTriangles = group.BuildWorldTriangles().ToList();
+                if (groupTriangles.Count > 0)
+                    geometrySets.Add((group.Name, groupTriangles));
+            }
+        }
+
+        foreach ((string geometryName, List<Triangle> tris) in geometrySets)
+        {
             Dictionary<Material, List<Triangle>> byMaterial = new(ReferenceEqualityComparer.Instance);
             foreach (Triangle triangle in tris)
             {
-                Material material = triangle.Material;
-                if (!byMaterial.TryGetValue(material, out List<Triangle>? materialTriangles))
+                if (!byMaterial.TryGetValue(triangle.Material, out List<Triangle>? materialTriangles))
                 {
                     materialTriangles = new List<Triangle>();
-                    byMaterial.Add(material, materialTriangles);
+                    byMaterial.Add(triangle.Material, materialTriangles);
                 }
-
                 materialTriangles.Add(triangle);
             }
-            List<object> primitives = new();
+
+            List<object> primitives = new(byMaterial.Count);
             foreach (KeyValuePair<Material, List<Triangle>> entry in byMaterial)
-            {
-                Material material = entry.Key;
-                List<Triangle> materialTris = entry.Value;
-                if (!materialIds.TryGetValue(material, out int materialId))
-                {
-                    materialId = materials.Count;
-                    materialIds[material] = materialId;
-
-                    Dictionary<string, object?> pbr = new()
-                    {
-                        ["baseColorFactor"] = new[] { Clamp01(material.Color.X), Clamp01(material.Color.Y), Clamp01(material.Color.Z), Clamp01(material.Alpha) },
-                        ["metallicFactor"] = Clamp01(material.Metallic),
-                        ["roughnessFactor"] = Clamp01(material.Roughness)
-                    };
-                    int baseTexture = TextureIndex(material.Texture);
-                    if (baseTexture >= 0)
-                        pbr["baseColorTexture"] = new Dictionary<string, object?> { ["index"] = baseTexture };
-                    int metallicRoughnessTexture = TextureIndex(material.MetallicRoughnessTexture);
-                    if (metallicRoughnessTexture >= 0)
-                        pbr["metallicRoughnessTexture"] = new Dictionary<string, object?> { ["index"] = metallicRoughnessTexture };
-
-                    Dictionary<string, object?> materialDef = new()
-                    {
-                        ["name"] = $"mat_{materialId + 1}",
-                        ["pbrMetallicRoughness"] = pbr,
-                        ["emissiveFactor"] = material.Emission > 0.0
-                            ? new[] { Clamp01(material.EmissionColor.X * material.Emission), Clamp01(material.EmissionColor.Y * material.Emission), Clamp01(material.EmissionColor.Z * material.Emission) }
-                            : new[] { 0.0, 0.0, 0.0 },
-                        ["alphaMode"] = material.AlphaMode switch
-                        {
-                            MaterialAlphaMode.Mask => "MASK",
-                            MaterialAlphaMode.Blend => "BLEND",
-                            _ => "OPAQUE"
-                        },
-                        ["doubleSided"] = material.DoubleSided
-                    };
-                    if (material.AlphaMode == MaterialAlphaMode.Mask)
-                        materialDef["alphaCutoff"] = material.AlphaCutoff;
-                    int normalTexture = TextureIndex(material.NormalTexture);
-                    if (normalTexture >= 0)
-                        materialDef["normalTexture"] = new Dictionary<string, object?> { ["index"] = normalTexture, ["scale"] = material.NormalScale };
-                    int occlusionTexture = TextureIndex(material.OcclusionTexture);
-                    if (occlusionTexture >= 0)
-                        materialDef["occlusionTexture"] = new Dictionary<string, object?> { ["index"] = occlusionTexture, ["strength"] = material.OcclusionStrength };
-                    int emissiveTexture = TextureIndex(material.EmissiveTexture);
-                    if (emissiveTexture >= 0)
-                        materialDef["emissiveTexture"] = new Dictionary<string, object?> { ["index"] = emissiveTexture };
-
-                    Dictionary<string, object?> materialExtensions = new();
-                    int transmissionTexture = TextureIndex(material.TransmissionTexture);
-                    if (material.Transmission > 0.0 || transmissionTexture >= 0)
-                    {
-                        Dictionary<string, object?> transmission = new()
-                        {
-                            ["transmissionFactor"] = Clamp01(material.Transmission)
-                        };
-                        if (transmissionTexture >= 0)
-                            transmission["transmissionTexture"] = new Dictionary<string, object?> { ["index"] = transmissionTexture };
-                        materialExtensions["KHR_materials_transmission"] = transmission;
-                        materialExtensionsUsed.Add("KHR_materials_transmission");
-                    }
-                    if (Math.Abs(material.Ior - 1.5) > 1e-9)
-                    {
-                        materialExtensions["KHR_materials_ior"] = new Dictionary<string, object?> { ["ior"] = material.Ior };
-                        materialExtensionsUsed.Add("KHR_materials_ior");
-                    }
-                    if (material.Thickness > 0.0 || material.AttenuationDistance > 0.0)
-                    {
-                        Dictionary<string, object?> volume = new()
-                        {
-                            ["thicknessFactor"] = material.Thickness,
-                            ["attenuationColor"] = new[] { Clamp01(material.AttenuationColor.X), Clamp01(material.AttenuationColor.Y), Clamp01(material.AttenuationColor.Z) }
-                        };
-                        if (material.AttenuationDistance > 0.0)
-                            volume["attenuationDistance"] = material.AttenuationDistance;
-                        materialExtensions["KHR_materials_volume"] = volume;
-                        materialExtensionsUsed.Add("KHR_materials_volume");
-                    }
-                    if (material.Clearcoat > 0.0)
-                    {
-                        Dictionary<string, object?> clearcoat = new()
-                        {
-                            ["clearcoatFactor"] = Clamp01(material.Clearcoat),
-                            ["clearcoatRoughnessFactor"] = Clamp01(material.ClearcoatRoughness)
-                        };
-                        if (material.ClearcoatUsesTransmissionTexture && transmissionTexture >= 0)
-                            clearcoat["clearcoatTexture"] = new Dictionary<string, object?> { ["index"] = transmissionTexture };
-                        materialExtensions["KHR_materials_clearcoat"] = clearcoat;
-                        materialExtensionsUsed.Add("KHR_materials_clearcoat");
-                    }
-                    if (materialExtensions.Count > 0)
-                        materialDef["extensions"] = materialExtensions;
-
-                    materials.Add(materialDef);
-                }
-
-                int vertexCount = materialTris.Count * 3;
-                float[] positions = new float[vertexCount * 3];
-                float[] texcoords = new float[vertexCount * 2];
-                uint[] indices = new uint[vertexCount];
-                Vec3 min = materialTris[0].A;
-                Vec3 max = materialTris[0].A;
-                int v = 0;
-                foreach (Triangle tri in materialTris)
-                {
-                    WriteVertex(tri.A, tri.UvA);
-                    WriteVertex(tri.B, tri.UvB);
-                    WriteVertex(tri.C, tri.UvC);
-                }
-
-                int posAccessor = AddFloatAccessor(bin, bufferViews, accessors, positions, "VEC3", min, max);
-                int uvAccessor = AddFloatAccessor(bin, bufferViews, accessors, texcoords, "VEC2", null, null);
-                int indexAccessor = AddUIntAccessor(bin, bufferViews, accessors, indices);
-                primitives.Add(new Dictionary<string, object?>
-                {
-                    ["attributes"] = new Dictionary<string, object?> { ["POSITION"] = posAccessor, ["TEXCOORD_0"] = uvAccessor },
-                    ["indices"] = indexAccessor,
-                    ["material"] = materialId,
-                    ["mode"] = 4
-                });
-
-                void WriteVertex(Vec3 p, Vec2 uv)
-                {
-                    positions[v * 3] = (float)p.X;
-                    positions[v * 3 + 1] = (float)p.Y;
-                    positions[v * 3 + 2] = (float)p.Z;
-                    texcoords[v * 2] = (float)uv.U;
-                    texcoords[v * 2 + 1] = (float)uv.V;
-                    indices[v] = (uint)v;
-                    min = Min(min, p);
-                    max = Max(max, p);
-                    v++;
-                }
-            }
+                primitives.Add(BuildPrimitive(entry.Key, entry.Value));
 
             int meshIndex = meshes.Count;
-            meshes.Add(new Dictionary<string, object?> { ["name"] = group.Name, ["primitives"] = primitives });
+            meshes.Add(new Dictionary<string, object?> { ["name"] = geometryName, ["primitives"] = primitives });
             int nodeIndex = nodes.Count;
-            nodes.Add(new Dictionary<string, object?> { ["name"] = group.Name, ["mesh"] = meshIndex });
+            nodes.Add(new Dictionary<string, object?> { ["name"] = geometryName, ["mesh"] = meshIndex });
             rootNodes.Add(nodeIndex);
         }
 
@@ -623,7 +729,7 @@ public static class GltfSceneIO
             root["textures"] = textureDefs;
             root["samplers"] = samplers;
         }
-        return new ExportBuild(root, bin.ToArray());
+        return new ExportBuild(root, bin.ToArray(), optimizeGeometry);
     }
 
     private static void WriteGltf(ExportBuild build, string filePath, string? bufferFileName)
@@ -636,7 +742,7 @@ public static class GltfSceneIO
         {
             ["buffers"] = new[] { new Dictionary<string, object?> { ["byteLength"] = bin.Length, ["uri"] = binName } }
         };
-        string json = JsonSerializer.Serialize(root, JsonOptions());
+        string json = JsonSerializer.Serialize(root, JsonOptions(build.CompactJson));
         File.WriteAllText(filePath, json, new UTF8Encoding(false));
         File.WriteAllBytes(Path.Combine(Path.GetDirectoryName(filePath) ?? string.Empty, binName), bin);
     }
@@ -659,7 +765,7 @@ public static class GltfSceneIO
             }
             : build.Root;
 
-        byte[] jsonBytes = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(root, JsonOptions()));
+        byte[] jsonBytes = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(root, JsonOptions(build.CompactJson)));
         jsonBytes = Pad(jsonBytes, 0x20);
         byte[] binBytes = useExternalBuffer ? Array.Empty<byte>() : Pad(build.Bin, 0x00);
         uint length = (uint)(12 + 8 + jsonBytes.Length + (binBytes.Length > 0 ? 8 + binBytes.Length : 0));
@@ -688,7 +794,7 @@ public static class GltfSceneIO
     {
         string extension = Path.GetExtension(filePath).ToLowerInvariant();
         if (extension == ".gltf")
-            return new GltfDocument(File.ReadAllText(filePath), null);
+            return new GltfDocument(File.ReadAllBytes(filePath), null);
 
         using BinaryReader reader = new(File.OpenRead(filePath), Encoding.UTF8);
         uint magic = reader.ReadUInt32();
@@ -697,19 +803,33 @@ public static class GltfSceneIO
         if (magic != GlbMagic || version != 2 || length > reader.BaseStream.Length)
             throw new InvalidDataException("Invalid GLB header.");
 
-        string? json = null;
+        byte[]? jsonUtf8 = null;
         byte[]? bin = null;
         while (reader.BaseStream.Position < reader.BaseStream.Length)
         {
             int chunkLength = checked((int)reader.ReadUInt32());
             uint chunkType = reader.ReadUInt32();
             byte[] chunk = reader.ReadBytes(chunkLength);
+            if (chunk.Length != chunkLength)
+                throw new EndOfStreamException("Unexpected end of GLB chunk.");
             if (chunkType == JsonChunkType)
-                json = Encoding.UTF8.GetString(chunk).TrimEnd('\0', ' ', '\r', '\n', '\t');
+                jsonUtf8 = TrimJsonPadding(chunk);
             else if (chunkType == BinChunkType)
                 bin = chunk;
         }
-        return new GltfDocument(json ?? throw new InvalidDataException("GLB JSON chunk missing."), bin);
+        return new GltfDocument(jsonUtf8 ?? throw new InvalidDataException("GLB JSON chunk missing."), bin);
+    }
+
+    private static byte[] TrimJsonPadding(byte[] bytes)
+    {
+        int length = bytes.Length;
+        while (length > 0 && bytes[length - 1] is 0 or 0x20 or 0x09 or 0x0A or 0x0D)
+            length--;
+        if (length == bytes.Length)
+            return bytes;
+        byte[] result = new byte[length];
+        Buffer.BlockCopy(bytes, 0, result, 0, length);
+        return result;
     }
 
     private static List<byte[]> LoadBuffers(JsonElement root, GltfDocument doc, string filePath)
@@ -1146,6 +1266,32 @@ public static class GltfSceneIO
         return result;
     }
 
+    private static bool TryReadVec3AccessorBounds(JsonElement root, int accessorIndex, out Vec3 min, out Vec3 max)
+    {
+        min = Vec3.Zero;
+        max = Vec3.Zero;
+        JsonElement accessors = GetArray(root, "accessors");
+        if (accessorIndex < 0 || accessorIndex >= accessors.GetArrayLength())
+            return false;
+
+        JsonElement accessor = accessors[accessorIndex];
+        if (!accessor.TryGetProperty("type", out JsonElement typeEl) ||
+            !string.Equals(typeEl.GetString(), "VEC3", StringComparison.Ordinal) ||
+            !accessor.TryGetProperty("min", out JsonElement minEl) ||
+            !accessor.TryGetProperty("max", out JsonElement maxEl) ||
+            minEl.ValueKind != JsonValueKind.Array || maxEl.ValueKind != JsonValueKind.Array ||
+            minEl.GetArrayLength() < 3 || maxEl.GetArrayLength() < 3)
+        {
+            return false;
+        }
+
+        min = new Vec3(minEl[0].GetDouble(), minEl[1].GetDouble(), minEl[2].GetDouble());
+        max = new Vec3(maxEl[0].GetDouble(), maxEl[1].GetDouble(), maxEl[2].GetDouble());
+        return double.IsFinite(min.X) && double.IsFinite(min.Y) && double.IsFinite(min.Z) &&
+               double.IsFinite(max.X) && double.IsFinite(max.Y) && double.IsFinite(max.Z) &&
+               min.X <= max.X && min.Y <= max.Y && min.Z <= max.Z;
+    }
+
     private static List<Vec3> ReadVec3Accessor(JsonElement root, List<byte[]> buffers, int accessorIndex, Matrix4x4 transform)
     {
         AccessorInfo info = GetAccessorInfo(root, accessorIndex);
@@ -1158,6 +1304,33 @@ public static class GltfSceneIO
             float z = ReadFloat(buffers[info.Buffer], offset + 8);
             Vector3 v = Vector3.Transform(new Vector3(x, y, z), transform);
             values.Add(new Vec3(v.X, v.Y, v.Z));
+        }
+        return values;
+    }
+
+    private static List<Vec3> ReadNormalizedPositionAccessor(
+        JsonElement root,
+        List<byte[]> buffers,
+        int accessorIndex,
+        Matrix4x4 transform,
+        Vec3 sourceCenter,
+        double importScale,
+        Vec3 importOffset)
+    {
+        AccessorInfo info = GetAccessorInfo(root, accessorIndex);
+        if (info.Type != "VEC3" || info.ComponentType != 5126)
+            throw new NotSupportedException($"Expected float VEC3 glTF positions, got component {info.ComponentType} and type {info.Type}.");
+
+        List<Vec3> values = new(info.Count);
+        byte[] data = buffers[info.Buffer];
+        for (int i = 0; i < info.Count; i++)
+        {
+            int offset = info.Offset + i * info.Stride;
+            Vector3 transformed = Vector3.Transform(
+                new Vector3(ReadFloat(data, offset), ReadFloat(data, offset + 4), ReadFloat(data, offset + 8)),
+                transform);
+            Vec3 position = new Vec3(transformed.X, transformed.Y, transformed.Z);
+            values.Add((position - sourceCenter) * importScale + importOffset);
         }
         return values;
     }
@@ -1302,16 +1475,48 @@ public static class GltfSceneIO
         return accessor;
     }
 
-    private static int AddUIntAccessor(List<byte> bin, List<object> views, List<object> accessors, uint[] values)
+    private static int AddIndexAccessor(
+        List<byte> bin,
+        List<object> views,
+        List<object> accessors,
+        IReadOnlyList<uint> values,
+        int vertexCount)
     {
         Align(bin, 4);
         int offset = bin.Count;
-        foreach (uint value in values)
-            bin.AddRange(BitConverter.GetBytes(value));
+        int componentType;
+        int byteLength;
+
+        if (vertexCount <= ushort.MaxValue)
+        {
+            componentType = 5123;
+            byteLength = checked(values.Count * 2);
+            foreach (uint value in values)
+                bin.AddRange(BitConverter.GetBytes(checked((ushort)value)));
+        }
+        else
+        {
+            componentType = 5125;
+            byteLength = checked(values.Count * 4);
+            foreach (uint value in values)
+                bin.AddRange(BitConverter.GetBytes(value));
+        }
+
         int view = views.Count;
-        views.Add(new Dictionary<string, object?> { ["buffer"] = 0, ["byteOffset"] = offset, ["byteLength"] = values.Length * 4 });
+        views.Add(new Dictionary<string, object?>
+        {
+            ["buffer"] = 0,
+            ["byteOffset"] = offset,
+            ["byteLength"] = byteLength
+        });
         int accessor = accessors.Count;
-        accessors.Add(new Dictionary<string, object?> { ["bufferView"] = view, ["componentType"] = 5125, ["count"] = values.Length, ["type"] = "SCALAR" });
+        accessors.Add(new Dictionary<string, object?>
+        {
+            ["bufferView"] = view,
+            ["componentType"] = componentType,
+            ["count"] = values.Count,
+            ["type"] = "SCALAR"
+        });
         return accessor;
     }
 
@@ -1347,7 +1552,7 @@ public static class GltfSceneIO
     private static Vec3 Max(Vec3 a, Vec3 b) => new(Math.Max(a.X, b.X), Math.Max(a.Y, b.Y), Math.Max(a.Z, b.Z));
     private static void Align(List<byte> bytes, int boundary) { while (bytes.Count % boundary != 0) bytes.Add(0); }
     private static byte[] Pad(byte[] bytes, byte pad) { int padded = (bytes.Length + 3) & ~3; if (padded == bytes.Length) return bytes; byte[] result = new byte[padded]; Array.Copy(bytes, result, bytes.Length); for (int i = bytes.Length; i < result.Length; i++) result[i] = pad; return result; }
-    private static JsonSerializerOptions JsonOptions() => new() { WriteIndented = true, DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull };
+    private static JsonSerializerOptions JsonOptions(bool compact = false) => new() { WriteIndented = !compact, DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull };
 
     private static string LightTypeName(SceneLightKind kind) => kind switch
     {
@@ -1376,9 +1581,13 @@ public static class GltfSceneIO
         return new[] { axis.X * s, axis.Y * s, axis.Z * s, Math.Cos(angle / 2.0) };
     }
 
-    private sealed record GltfDocument(string Json, byte[]? BinaryChunk);
+    private sealed record GltfDocument(byte[] JsonUtf8, byte[]? BinaryChunk);
     private sealed record GltfMaterial(Material Material, int BaseColorTexCoord);
     private sealed record ImportedLight(string Id, SceneLightKind Kind, Vec3 Position, Vec3 Direction, Vec3 Color, double Intensity, double Range, double InnerConeAngle, double OuterConeAngle, bool Enabled);
     private sealed record AccessorInfo(int Buffer, int Offset, int Stride, int Count, int ComponentType, string Type);
-    private sealed record ExportBuild(Dictionary<string, object?> Root, byte[] Bin);
+    private readonly record struct ExportVertex(
+        float Px, float Py, float Pz,
+        float Nx, float Ny, float Nz,
+        float U, float V);
+    private sealed record ExportBuild(Dictionary<string, object?> Root, byte[] Bin, bool CompactJson);
 }

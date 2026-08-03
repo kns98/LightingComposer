@@ -66,6 +66,7 @@ internal sealed class ComposerSceneSession : IDisposable
     public string? UndoDescription => editHistory.UndoDescription;
     public string? RedoDescription => editHistory.RedoDescription;
     public string LastGeometryRefreshDetails { get; private set; } = string.Empty;
+    public string? LastImportDetails { get; private set; }
 
     public IReadOnlyList<SceneObjectInfo> GetObjectInfos() => document.GetObjectInfos();
 
@@ -262,6 +263,7 @@ internal sealed class ComposerSceneSession : IDisposable
             editHistory.Clear();
             ClearSelectionState();
             ScenePath = null;
+            LastImportDetails = null;
             Camera.Reset(scene);
         }
         finally
@@ -284,14 +286,16 @@ internal sealed class ComposerSceneSession : IDisposable
 
             Scene loaded = new();
             bool isComposerScene = ComposerFileTypes.IsBinaryScenePath(path);
+            ObjLoadResult? importResult = null;
             if (isComposerScene)
             {
                 loaded.SetDescription(BinarySceneFile.LoadIntoScene(loaded, path));
             }
             else
             {
-                loaded.OpenModelFile(path, progress => cancellationToken.ThrowIfCancellationRequested());
+                importResult = loaded.OpenModelFile(path, progress => cancellationToken.ThrowIfCancellationRequested());
             }
+            LastImportDetails = importResult?.Details;
 
             cancellationToken.ThrowIfCancellationRequested();
             if (loaded.Triangles.Count == 0)
@@ -330,7 +334,8 @@ internal sealed class ComposerSceneSession : IDisposable
             bool wasEmpty = scene.Triangles.Count == 0;
             HashSet<int> rootsBeforeInsert = scene.ObjectGroups.Select(group => group.Id).ToHashSet();
             TextureMap.ConfigureAssetRoots([assetDirectory]);
-            scene.InsertModelFromFile(path, progress => cancellationToken.ThrowIfCancellationRequested());
+            ObjLoadResult importResult = scene.InsertModelFromFile(path, progress => cancellationToken.ThrowIfCancellationRequested());
+            LastImportDetails = importResult.Details;
 
             List<int> insertedRootIds = scene.ObjectGroups
                 .Where(group => !rootsBeforeInsert.Contains(group.Id))

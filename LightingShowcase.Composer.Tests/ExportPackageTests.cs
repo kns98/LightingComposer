@@ -161,7 +161,7 @@ public sealed class ExportPackageTests
             ISceneFormatPlugin plugin = SceneFormatRegistry.FindExporter("probe" + format.Extension);
             Assert.True(plugin.CanExport);
             if (!string.IsNullOrWhiteSpace(format.Variant))
-                Assert.True(plugin.ExportVariants.Contains(format.Variant, StringComparer.OrdinalIgnoreCase));
+                Assert.Contains(format.Variant, plugin.ExportVariants, StringComparer.OrdinalIgnoreCase);
         }
     }
 

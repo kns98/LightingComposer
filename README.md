@@ -182,3 +182,12 @@ Command line:
 Supported export IDs are `lscene`, `lsb`, `prop-xml`, `xml`, `obj`, `stl-binary`,
 `stl-ascii`, `ply-binary`, `ply-ascii`, `3ds`, `fbx-binary`, `fbx-ascii`,
 `gltf`, and `glb`.
+
+## Optimized glTF and GLB export
+
+The export dialog offers two glTF/GLB modes:
+
+- **Optimized** (default): ignores editor-only spatial chunk boundaries, combines all visible geometry into one mesh, emits one primitive per material, welds vertices that share position/normal/UV data, uses 16-bit indices where possible, and writes compact JSON. This is intended for fast loading and runtime rendering, including scenes that were ungrouped into many chunks.
+- **Preserve editor chunks**: retains one exported mesh for each current top-level editor object. Use this only when the chunk organization is needed in another application.
+
+Optimized export does not alter the open `.lscene` document. It only changes the generated glTF/GLB package.

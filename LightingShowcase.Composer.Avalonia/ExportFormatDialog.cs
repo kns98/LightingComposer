@@ -62,7 +62,7 @@ internal sealed class ExportFormatDialog : Window
         panel.Children.Add(formatBox);
         panel.Children.Add(new TextBlock
         {
-            Text = "The program creates a new directory. Related resources are external and named res_0001.ext, res_0002.ext, and so on.",
+            Text = "Optimized glTF/GLB is recommended for ungrouped or chunked scenes. The program creates a new directory; related resources are external and named res_0001.ext, res_0002.ext, and so on.",
             TextWrapping = TextWrapping.Wrap,
             Opacity = 0.72
         });

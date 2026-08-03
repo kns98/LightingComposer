@@ -22,12 +22,16 @@ public sealed class Scene
 
     private readonly SceneMaterials materials = new();
     private BvhNode? bvhRoot;
+    private readonly object accelerationGate = new();
     private readonly Stack<SceneObjectGroup> activeGroups = new();
     private int nextGroupId = 1;
     private long revision;
 
     /// <summary>Monotonically increases whenever world geometry is rebuilt.</summary>
     public long Revision => Interlocked.Read(ref revision);
+
+    /// <summary>True after the CPU ray-query BVH has been built for the current geometry.</summary>
+    public bool HasAccelerationStructure => Volatile.Read(ref bvhRoot) != null;
 
     public string Description { get; private set; } = "Built-in room";
 
@@ -172,7 +176,7 @@ public sealed class Scene
         ObjectGroups.Clear();
         activeGroups.Clear();
         nextGroupId = 1;
-        bvhRoot = null;
+        InvalidateAccelerationStructure();
         Description = "Empty scene";
         Interlocked.Increment(ref revision);
     }
@@ -256,13 +260,16 @@ public sealed class Scene
         foreach (SceneObjectGroup root in roots)
         {
             ObjectGroups.Remove(root);
-            wrapper.AddChild(root);
+            wrapper.AddChild(root, recalculatePivot: false);
         }
 
         wrapper.RecalculatePivot();
         ObjectGroups.Insert(Math.Clamp(insertionIndex, 0, ObjectGroups.Count), wrapper);
         Description = $"Scene with inserted object group: {wrapper.Name}";
-        RebuildWorldGeometry();
+
+        // Grouping identity-transform roots does not change their world geometry.
+        // Keep the existing triangle references and any already-built BVH instead
+        // of rebuilding the complete imported model a second time.
         return wrapper;
     }
 
@@ -880,20 +887,55 @@ public sealed class Scene
         }
     }
 
-    /// <summary>Implements the rebuild world geometry operation for this file's subsystem.</summary>
-    public void RebuildWorldGeometry()
+    /// <summary>
+    /// Rebuilds visible world geometry. CPU acceleration construction can be
+    /// deferred for realtime raster/compute preview and is then created lazily
+    /// on the first ray query.
+    /// </summary>
+    public void RebuildWorldGeometry(bool buildAccelerationStructure = true)
     {
+        InvalidateAccelerationStructure();
         Triangles.Clear();
+        int estimatedTriangleCount = ObjectGroups.Sum(group => group.CountLocalTrianglesRecursively());
+        Triangles.EnsureCapacity(estimatedTriangleCount);
+
         foreach (SceneObjectGroup group in ObjectGroups)
-            Triangles.AddRange(group.BuildWorldTriangles());
-        RebuildAccelerationStructure();
+        {
+            if (group.CanReferenceLocalTrianglesAsWorld())
+                group.AppendLocalTrianglesAsWorld(Triangles);
+            else
+                Triangles.AddRange(group.BuildWorldTriangles());
+        }
+
         Interlocked.Increment(ref revision);
+        if (buildAccelerationStructure)
+            RebuildAccelerationStructure();
     }
 
-    /// <summary>Implements the rebuild acceleration structure operation for this file's subsystem.</summary>
+    /// <summary>Builds the CPU ray-query acceleration structure immediately.</summary>
     public void RebuildAccelerationStructure()
     {
-        bvhRoot = BvhNode.Build(Triangles);
+        lock (accelerationGate)
+            bvhRoot = BvhNode.Build(Triangles);
+    }
+
+    private void InvalidateAccelerationStructure()
+    {
+        lock (accelerationGate)
+            bvhRoot = null;
+    }
+
+    private BvhNode? GetOrBuildAccelerationStructure()
+    {
+        BvhNode? cached = Volatile.Read(ref bvhRoot);
+        if (cached != null || Triangles.Count == 0)
+            return cached;
+
+        lock (accelerationGate)
+        {
+            bvhRoot ??= BvhNode.Build(Triangles);
+            return bvhRoot;
+        }
     }
 
     /// <summary>Releases editor hierarchy and CPU acceleration data after world triangles are packed for a headless GPU render.</summary>
@@ -901,63 +943,28 @@ public sealed class Scene
     {
         ObjectGroups.Clear();
         activeGroups.Clear();
-        bvhRoot = null;
+        InvalidateAccelerationStructure();
     }
 
     /// <summary>Tests a ray against the primitive or bounds and returns hit information.</summary>
     public Hit? Intersect(Ray ray)
     {
-        if (bvhRoot != null)
-            return bvhRoot.Intersect(ray, 1e-6, double.PositiveInfinity);
-
-        Hit? closest = null;
-        foreach (Triangle tri in Triangles)
-        {
-            Hit? hit = tri.Intersect(ray);
-            if (hit != null && (closest == null || hit.T < closest.T))
-                closest = hit;
-        }
-        return closest;
+        BvhNode? acceleration = GetOrBuildAccelerationStructure();
+        return acceleration?.Intersect(ray, 1e-6, double.PositiveInfinity);
     }
 
     /// <summary>Implements the any intersection operation for this file's subsystem.</summary>
     public bool AnyIntersection(Ray ray, double maxDistance)
     {
-        if (bvhRoot != null)
-            return bvhRoot.AnyIntersection(ray, 1e-6, maxDistance);
-
-        foreach (Triangle tri in Triangles)
-        {
-            Hit? hit = tri.Intersect(ray);
-            if (hit != null && hit.T < maxDistance)
-                return true;
-        }
-
-        return false;
+        BvhNode? acceleration = GetOrBuildAccelerationStructure();
+        return acceleration?.AnyIntersection(ray, 1e-6, maxDistance) ?? false;
     }
 
     /// <summary>Returns approximate opacity along a shadow ray so transparent/transmission materials do not cast solid black shadows.</summary>
     public double ShadowOpacity(Ray ray, double maxDistance, int maxSamples = 8)
     {
-        if (bvhRoot != null)
-            return bvhRoot.ShadowOpacity(ray, 1e-6, maxDistance, maxSamples);
-
-        double remaining = 1.0;
-        int samples = 0;
-        foreach (Triangle tri in Triangles)
-        {
-            Hit? hit = tri.Intersect(ray);
-            if (hit == null || hit.T >= maxDistance)
-                continue;
-
-            double opacity = hit.Material.SampleAlpha(hit.TextureU, hit.TextureV) * (1.0 - hit.Material.Transmission * 0.82);
-            remaining *= 1.0 - Math.Clamp(opacity, 0.0, 1.0);
-            samples++;
-            if (remaining <= 0.02 || samples >= maxSamples)
-                break;
-        }
-
-        return 1.0 - remaining;
+        BvhNode? acceleration = GetOrBuildAccelerationStructure();
+        return acceleration?.ShadowOpacity(ray, 1e-6, maxDistance, maxSamples) ?? 0.0;
     }
 
     /// <summary>Implements the quad operation for this file's subsystem.</summary>
