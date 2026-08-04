@@ -15,7 +15,7 @@ permissions:
 
 # Update PROJECT if the executable project is in a different location.
 env:
-  PROJECT: LightingComposer/LightingComposer.csproj
+  PROJECT: LightingShowcase.Composer.Avalonia/LightingShowcase.Composer.Avalonia.csproj
   DOTNET_VERSION: 8.0.x
 
 jobs:
@@ -65,7 +65,7 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up .NET
         uses: actions/setup-dotnet@v5
