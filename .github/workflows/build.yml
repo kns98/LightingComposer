@@ -5,8 +5,6 @@ on:
     branches:
       - main
       - master
-    tags:
-      - "v*"
   pull_request:
   workflow_dispatch:
 
@@ -66,7 +64,7 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v5
 
-      - name: Set up .NET
+      - name: Set up .NET SDK
         uses: actions/setup-dotnet@v5
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
@@ -76,12 +74,12 @@ jobs:
           dotnet restore "${{ env.PROJECT }}"
           --runtime "${{ matrix.rid }}"
 
-      - name: Publish ${{ matrix.rid }}
+      - name: Publish ${{ matrix.rid }} without bundled .NET
         run: >-
           dotnet publish "${{ env.PROJECT }}"
           --configuration Release
           --runtime "${{ matrix.rid }}"
-          --self-contained true
+          --self-contained false
           --no-restore
           --output "${{ github.workspace }}/publish/${{ matrix.artifact }}"
           -p:DebugType=None
@@ -113,10 +111,10 @@ jobs:
           name: ${{ matrix.artifact }}
           path: ${{ github.workspace }}/${{ matrix.artifact }}.${{ matrix.extension }}
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 1
 
   release:
-    name: Create GitHub Release
+    name: Replace latest build release
     if: ${{ github.event_name != 'pull_request' }}
     needs: build
     runs-on: ubuntu-latest
@@ -128,48 +126,30 @@ jobs:
           path: release-files
           merge-multiple: true
 
-      - name: Select release tag and type
-        id: release_info
-        shell: bash
-        run: |
-          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
-            echo "tag=${GITHUB_REF_NAME}" >> "${GITHUB_OUTPUT}"
-            echo "title=Lighting Composer ${GITHUB_REF_NAME}" >> "${GITHUB_OUTPUT}"
-            echo "prerelease=false" >> "${GITHUB_OUTPUT}"
-          else
-            echo "tag=build-${GITHUB_RUN_NUMBER}" >> "${GITHUB_OUTPUT}"
-            echo "title=Lighting Composer build ${GITHUB_RUN_NUMBER}" >> "${GITHUB_OUTPUT}"
-            echo "prerelease=true" >> "${GITHUB_OUTPUT}"
-          fi
-
-      - name: Create release or replace its assets
+      - name: Delete previous latest build
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ steps.release_info.outputs.tag }}
-          RELEASE_TITLE: ${{ steps.release_info.outputs.title }}
-          IS_PRERELEASE: ${{ steps.release_info.outputs.prerelease }}
         run: |
-          set -euo pipefail
+          gh release delete latest-build \
+            --repo "${GITHUB_REPOSITORY}" \
+            --cleanup-tag \
+            --yes || true
 
-          if gh release view "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
-            gh release upload "${RELEASE_TAG}" release-files/* \
-              --repo "${GITHUB_REPOSITORY}" \
-              --clobber
-            exit 0
-          fi
+          gh api \
+            --method DELETE \
+            "repos/${GITHUB_REPOSITORY}/git/refs/tags/latest-build" \
+            >/dev/null 2>&1 || true
 
-          release_args=(
-            "${RELEASE_TAG}"
-            release-files/*
-            --repo "${GITHUB_REPOSITORY}"
-            --target "${GITHUB_SHA}"
-            --title "${RELEASE_TITLE}"
-            --generate-notes
-          )
-
-          if [[ "${IS_PRERELEASE}" == "true" ]]; then
-            release_args+=(--prerelease)
-          fi
-
-          gh release create "${release_args[@]}"
+      - name: Create latest build release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create latest-build \
+            release-files/* \
+            --repo "${GITHUB_REPOSITORY}" \
+            --target "${GITHUB_SHA}" \
+            --title "Lighting Composer — Latest Build" \
+            --notes "Automated framework-dependent build from commit ${GITHUB_SHA}. Requires the .NET 8 Desktop Runtime." \
+            --latest
