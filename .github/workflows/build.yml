@@ -1,0 +1,140 @@
+name: Build Lighting Composer
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    tags:
+      - "v*"
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+# Update PROJECT if the executable project is in a different location.
+env:
+  PROJECT: LightingComposer/LightingComposer.csproj
+  DOTNET_VERSION: 8.0.x
+
+jobs:
+  build:
+    name: ${{ matrix.artifact }}
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            rid: win-x64
+            artifact: LightingComposer-windows-x64
+            extension: zip
+            archive: zip
+
+          - os: windows-latest
+            rid: win-arm64
+            artifact: LightingComposer-windows-arm64
+            extension: zip
+            archive: zip
+
+          - os: ubuntu-latest
+            rid: linux-x64
+            artifact: LightingComposer-linux-x64
+            extension: tar.gz
+            archive: tar
+
+          - os: ubuntu-latest
+            rid: linux-arm64
+            artifact: LightingComposer-linux-arm64
+            extension: tar.gz
+            archive: tar
+
+          - os: macos-latest
+            rid: osx-x64
+            artifact: LightingComposer-macos-x64
+            extension: tar.gz
+            archive: tar
+
+          - os: macos-latest
+            rid: osx-arm64
+            artifact: LightingComposer-macos-arm64
+            extension: tar.gz
+            archive: tar
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Restore ${{ matrix.rid }}
+        run: >-
+          dotnet restore "${{ env.PROJECT }}"
+          --runtime "${{ matrix.rid }}"
+
+      - name: Publish ${{ matrix.rid }}
+        run: >-
+          dotnet publish "${{ env.PROJECT }}"
+          --configuration Release
+          --runtime "${{ matrix.rid }}"
+          --self-contained true
+          --no-restore
+          --output "${{ github.workspace }}/publish/${{ matrix.artifact }}"
+          -p:DebugType=None
+          -p:DebugSymbols=false
+          -p:PublishSingleFile=false
+          -p:UseAppHost=true
+
+      - name: Create Windows ZIP
+        if: matrix.archive == 'zip'
+        shell: pwsh
+        run: |
+          Compress-Archive `
+            -Path "${{ github.workspace }}/publish/${{ matrix.artifact }}/*" `
+            -DestinationPath "${{ github.workspace }}/${{ matrix.artifact }}.zip" `
+            -CompressionLevel Optimal
+
+      - name: Create Linux or macOS archive
+        if: matrix.archive == 'tar'
+        shell: bash
+        run: |
+          tar \
+            -C "${{ github.workspace }}/publish" \
+            -czf "${{ github.workspace }}/${{ matrix.artifact }}.tar.gz" \
+            "${{ matrix.artifact }}"
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ github.workspace }}/${{ matrix.artifact }}.${{ matrix.extension }}
+          if-no-files-found: error
+          retention-days: 14
+
+  release:
+    name: Create GitHub Release
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download all platform builds
+        uses: actions/download-artifact@v4
+        with:
+          path: release-files
+          merge-multiple: true
+
+      - name: Create release and upload builds
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          gh release create "${{ github.ref_name }}"
+          release-files/*
+          --repo "${{ github.repository }}"
+          --title "Lighting Composer ${{ github.ref_name }}"
+          --generate-notes
