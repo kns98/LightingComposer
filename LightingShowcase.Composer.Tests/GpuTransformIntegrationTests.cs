@@ -57,6 +57,62 @@ public sealed class GpuTransformIntegrationTests
         Assert.NotEqual(HashPixels(before.Image), HashPixels(after.Image));
     }
 
+
+    [Fact]
+    [Trait("Category", "Gpu")]
+    public void Vulkan_raster_previews_pending_rotation_and_scale_without_committing_geometry()
+    {
+        if (!string.Equals(
+                Environment.GetEnvironmentVariable("LIGHTINGSHOWCASE_RUN_GPU_TESTS"),
+                "1",
+                StringComparison.Ordinal))
+        {
+            output.WriteLine("GPU integration test not requested. Set LIGHTINGSHOWCASE_RUN_GPU_TESTS=1 to run it.");
+            return;
+        }
+
+        using TestModel model = new();
+        using ComposerSceneSession session = new();
+        int rootId = session.Insert(model.ModelPath, CancellationToken.None);
+        Assert.True(session.SetSelectedObject(rootId));
+        session.FrameObject(rootId);
+        var camera = session.Camera.Snapshot();
+        SceneCacheStamp beforeStamp = session.CaptureSceneCacheStampForTests();
+
+        ComposerFrame before = session.Render(
+            ComposerRendererKind.VulkanRaster,
+            camera,
+            192,
+            144,
+            interactive: true,
+            CancellationToken.None,
+            ComposerGizmoMode.Rotate);
+
+        ComposerObjectState state = session.GetObjectState(rootId)!;
+        Assert.True(session.UpdateTransformTarget(
+            rootId,
+            state.Position,
+            state.Rotation + new Vec3(Math.PI / 7.0, Math.PI / 5.0, 0),
+            new Vec3(1.35, 0.75, 1.1)));
+
+        SceneCacheStamp pendingStamp = session.CaptureSceneCacheStampForTests();
+        Assert.Equal(beforeStamp.Revision, pendingStamp.Revision);
+
+        ComposerFrame preview = session.Render(
+            ComposerRendererKind.VulkanRaster,
+            camera,
+            192,
+            144,
+            interactive: true,
+            CancellationToken.None,
+            ComposerGizmoMode.Rotate);
+
+        Assert.Contains("live-transform=", preview.Details, StringComparison.Ordinal);
+        Assert.NotEqual(HashPixels(before.Image), HashPixels(preview.Image));
+        Assert.Equal(beforeStamp.Revision, session.CaptureSceneCacheStampForTests().Revision);
+        Assert.True(session.CancelPendingTransform(rootId));
+    }
+
     private static ulong HashPixels(RenderImage image)
     {
         const ulong offset = 14695981039346656037UL;

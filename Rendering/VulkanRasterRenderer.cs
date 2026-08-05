@@ -106,11 +106,16 @@ public static class VulkanRasterRenderer
         public required DeviceBuffer OpaqueVertexBuffer { get; init; }
         public required DeviceBuffer TransparentVertexBuffer { get; init; }
         public required DeviceBuffer CameraBuffer { get; init; }
+        public required DeviceBuffer IdentityTransformBuffer { get; init; }
+        public required DeviceBuffer PreviewTransformBuffer { get; init; }
         public required DeviceBuffer LightBuffer { get; init; }
         public required DeviceBuffer MaterialBuffer { get; init; }
         public required Texture AtlasTexture { get; init; }
         public required Sampler AtlasSampler { get; init; }
-        public required ResourceSet ResourceSet { get; init; }
+        public required ResourceSet IdentityResourceSet { get; init; }
+        public required ResourceSet PreviewResourceSet { get; init; }
+        public required IReadOnlyDictionary<int, PreviewRangeSet> GroupRanges { get; init; }
+        public Dictionary<int, PreviewRangeSet> PreviewRanges { get; } = new();
         public required int LightCount { get; init; }
         public required int OpaqueVertexCount { get; init; }
         public required int TransparentVertexCount { get; init; }
@@ -128,11 +133,14 @@ public static class VulkanRasterRenderer
 
         public void Dispose()
         {
-            try { ResourceSet.Dispose(); } catch { }
+            try { PreviewResourceSet.Dispose(); } catch { }
+            try { IdentityResourceSet.Dispose(); } catch { }
             try { AtlasSampler.Dispose(); } catch { }
             try { AtlasTexture.Dispose(); } catch { }
             try { MaterialBuffer.Dispose(); } catch { }
             try { LightBuffer.Dispose(); } catch { }
+            try { PreviewTransformBuffer.Dispose(); } catch { }
+            try { IdentityTransformBuffer.Dispose(); } catch { }
             try { CameraBuffer.Dispose(); } catch { }
             try { TransparentVertexBuffer.Dispose(); } catch { }
             try { OpaqueVertexBuffer.Dispose(); } catch { }
@@ -205,6 +213,38 @@ public static class VulkanRasterRenderer
                 Math.Max(0, materialCount));
         }
     }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private readonly struct RasterTransformConstants
+    {
+        public readonly Vector4 PivotEnabled;
+        public readonly Vector4 Translation;
+        public readonly Vector4 Rotation;
+        public readonly Vector4 Scale;
+
+        public RasterTransformConstants(VulkanRasterTransformPreview? preview)
+        {
+            if (preview == null || preview.IsIdentity)
+            {
+                PivotEnabled = Vector4.Zero;
+                Translation = Vector4.Zero;
+                Rotation = Vector4.Zero;
+                Scale = Vector4.One;
+                return;
+            }
+
+            PivotEnabled = ToVector4(preview.Pivot, 1.0f);
+            Translation = ToVector4(preview.Position, 0.0f);
+            Rotation = ToVector4(preview.Rotation, 0.0f);
+            Scale = ToVector4(preview.Scale, 0.0f);
+        }
+    }
+
+    private readonly record struct VertexRange(uint Start, uint Count);
+
+    private sealed record PreviewRangeSet(
+        IReadOnlyList<VertexRange> Opaque,
+        IReadOnlyList<VertexRange> Transparent);
 
     [StructLayout(LayoutKind.Sequential)]
     private readonly struct RasterLight
@@ -521,6 +561,7 @@ public static class VulkanRasterRenderer
                 prepared.BoundingCenter = center;
                 prepared.BoundingRadius = radius;
                 prepared.CacheStamp = SceneCacheStamp.Capture(scene);
+                prepared.PreviewRanges.Clear();
                 stopwatch.Stop();
                 details = $"Vulkan raster geometry refreshed in-place in {stopwatch.ElapsedMilliseconds} ms; allocations and textures were reused.";
                 Stage(details);
@@ -537,6 +578,21 @@ public static class VulkanRasterRenderer
         int width,
         int height,
         CancellationToken cancellationToken,
+        out string details) =>
+        Render(scene, cameraPosition, basis, width, height, (VulkanRasterTransformPreview?)null, cancellationToken, out details);
+
+    /// <summary>
+    /// Renders with an optional editor-only transform. The preview updates one small
+    /// uniform buffer and changes draw ranges; it does not rebuild or upload vertices.
+    /// </summary>
+    public static RenderImage Render(
+        Scene scene,
+        Vec3 cameraPosition,
+        CameraBasis basis,
+        int width,
+        int height,
+        VulkanRasterTransformPreview? preview,
+        CancellationToken cancellationToken,
         out string details)
     {
         // Serialize the Veldrid/Vulkan raster path against disposal and resize/backend
@@ -546,7 +602,7 @@ public static class VulkanRasterRenderer
         // managed exception.
         lock (RenderSync)
         {
-            return RenderLocked(scene, cameraPosition, basis, width, height, cancellationToken, out details);
+            return RenderLocked(scene, cameraPosition, basis, width, height, preview, cancellationToken, out details);
         }
     }
 
@@ -557,6 +613,7 @@ public static class VulkanRasterRenderer
         CameraBasis basis,
         int width,
         int height,
+        VulkanRasterTransformPreview? preview,
         CancellationToken cancellationToken,
         out string details)
     {
@@ -585,6 +642,13 @@ public static class VulkanRasterRenderer
         gd.UpdateBuffer(prepared.CameraBuffer, 0, new RasterCameraConstants(
             cameraPosition, basis, width, height, prepared.LightCount, prepared.TextureCount,
             RasterDebugMode, prepared.MaterialCount, cameraFar));
+        bool hasPreview = preview != null && !preview.IsIdentity && preview.GroupIds.Count > 0;
+        PreviewRangeSet? previewRanges = null;
+        if (hasPreview)
+        {
+            gd.UpdateBuffer(prepared.PreviewTransformBuffer, 0, new RasterTransformConstants(preview));
+            previewRanges = GetOrCreatePreviewRanges(prepared, preview!);
+        }
         long uniformMs = phase.ElapsedMilliseconds;
 
         ThrowIfCancellationRequested(cancellationToken, "record Vulkan raster command list");
@@ -597,16 +661,24 @@ public static class VulkanRasterRenderer
         if (prepared.OpaqueVertexCount > 0)
         {
             commandList.SetPipeline(resources.OpaquePipeline);
-            commandList.SetGraphicsResourceSet(0, prepared.ResourceSet);
             commandList.SetVertexBuffer(0, prepared.OpaqueVertexBuffer);
-            commandList.Draw((uint)prepared.OpaqueVertexCount);
+            DrawVertexRanges(
+                commandList,
+                (uint)prepared.OpaqueVertexCount,
+                previewRanges?.Opaque,
+                prepared.IdentityResourceSet,
+                prepared.PreviewResourceSet);
         }
         if (prepared.TransparentVertexCount > 0)
         {
             commandList.SetPipeline(resources.TransparentPipeline);
-            commandList.SetGraphicsResourceSet(0, prepared.ResourceSet);
             commandList.SetVertexBuffer(0, prepared.TransparentVertexBuffer);
-            commandList.Draw((uint)prepared.TransparentVertexCount);
+            DrawVertexRanges(
+                commandList,
+                (uint)prepared.TransparentVertexCount,
+                previewRanges?.Transparent,
+                prepared.IdentityResourceSet,
+                prepared.PreviewResourceSet);
         }
         commandList.CopyTexture(targets.ColorTexture, 0, 0, 0, 0, 0,
             targets.StagingTexture, 0, 0, 0, 0, 0, (uint)width, (uint)height, 1, 1);
@@ -634,9 +706,134 @@ public static class VulkanRasterRenderer
         string triangleMode = prepared.NearClippedTriangleCount > 0
             ? $"triangles={prepared.TotalTriangleCount}/{prepared.SourceTriangleCount} ({prepared.NearClippedTriangleCount} invalid skipped)"
             : $"triangles={prepared.TotalTriangleCount}";
-        details = $"VULKAN RASTER PBR CACHED - {width}x{height}, revision={prepared.CacheStamp.Revision}, {triangleMode}, lights={prepared.LightCount}, {textureMode}, cache={(prepareMs == 0 ? "hot" : "ready")}, device={deviceMs}ms, targets={targetMs}ms, prepare={prepareMs}ms, uniform={uniformMs}ms, record={recordMs}ms, gpu+wait={gpuWaitMs}ms, readback={readbackMs}ms, total={total.ElapsedMilliseconds}ms";
+        string previewMode = hasPreview ? $", live-transform={preview!.SelectionId}" : string.Empty;
+        details = $"VULKAN RASTER PBR CACHED - {width}x{height}, revision={prepared.CacheStamp.Revision}, {triangleMode}, lights={prepared.LightCount}, {textureMode}, cache={(prepareMs == 0 ? "hot" : "ready")}{previewMode}, device={deviceMs}ms, targets={targetMs}ms, prepare={prepareMs}ms, uniform={uniformMs}ms, record={recordMs}ms, gpu+wait={gpuWaitMs}ms, readback={readbackMs}ms, total={total.ElapsedMilliseconds}ms";
         Stage(details);
         return image;
+    }
+
+    private static void DrawVertexRanges(
+        CommandList commandList,
+        uint totalVertexCount,
+        IReadOnlyList<VertexRange>? previewRanges,
+        ResourceSet identitySet,
+        ResourceSet previewSet)
+    {
+        if (previewRanges == null || previewRanges.Count == 0)
+        {
+            commandList.SetGraphicsResourceSet(0, identitySet);
+            commandList.Draw(totalVertexCount);
+            return;
+        }
+
+        uint cursor = 0;
+        foreach (VertexRange range in previewRanges)
+        {
+            if (range.Start > cursor)
+            {
+                commandList.SetGraphicsResourceSet(0, identitySet);
+                commandList.Draw(range.Start - cursor, 1, cursor, 0);
+            }
+
+            if (range.Count > 0)
+            {
+                commandList.SetGraphicsResourceSet(0, previewSet);
+                commandList.Draw(range.Count, 1, range.Start, 0);
+            }
+            cursor = Math.Max(cursor, range.Start + range.Count);
+        }
+
+        if (cursor < totalVertexCount)
+        {
+            commandList.SetGraphicsResourceSet(0, identitySet);
+            commandList.Draw(totalVertexCount - cursor, 1, cursor, 0);
+        }
+    }
+
+    private static PreviewRangeSet GetOrCreatePreviewRanges(
+        PreparedRasterScene prepared,
+        VulkanRasterTransformPreview preview)
+    {
+        if (prepared.PreviewRanges.TryGetValue(preview.SelectionId, out PreviewRangeSet? cached))
+            return cached;
+
+        List<VertexRange> opaque = new();
+        List<VertexRange> transparent = new();
+        foreach (int groupId in preview.GroupIds)
+        {
+            if (!prepared.GroupRanges.TryGetValue(groupId, out PreviewRangeSet? groupRanges))
+                continue;
+            opaque.AddRange(groupRanges.Opaque);
+            transparent.AddRange(groupRanges.Transparent);
+        }
+
+        PreviewRangeSet result = new(MergeRanges(opaque), MergeRanges(transparent));
+        prepared.PreviewRanges[preview.SelectionId] = result;
+        return result;
+    }
+
+    private static IReadOnlyDictionary<int, PreviewRangeSet> BuildGroupVertexRanges(Scene scene)
+    {
+        Dictionary<int, (List<VertexRange> Opaque, List<VertexRange> Transparent)> builders = new();
+        uint opaqueCursor = 0;
+        uint transparentCursor = 0;
+
+        foreach (Triangle triangle in scene.Triangles)
+        {
+            if (!IsFinite(triangle.A) || !IsFinite(triangle.B) || !IsFinite(triangle.C) || !IsFinite(triangle.Normal))
+                continue;
+
+            bool isTransparent = IsTransparentMaterial(triangle.Material);
+            uint start = isTransparent ? transparentCursor : opaqueCursor;
+            if (triangle.GroupId >= 0)
+            {
+                if (!builders.TryGetValue(triangle.GroupId, out var builder))
+                {
+                    builder = (new List<VertexRange>(), new List<VertexRange>());
+                    builders.Add(triangle.GroupId, builder);
+                }
+                AppendRange(isTransparent ? builder.Transparent : builder.Opaque, start, 3);
+            }
+
+            if (isTransparent)
+                transparentCursor += 3;
+            else
+                opaqueCursor += 3;
+        }
+
+        return builders.ToDictionary(
+            pair => pair.Key,
+            pair => new PreviewRangeSet(pair.Value.Opaque, pair.Value.Transparent));
+    }
+
+    private static IReadOnlyList<VertexRange> MergeRanges(List<VertexRange> ranges)
+    {
+        if (ranges.Count <= 1)
+            return ranges;
+
+        ranges.Sort(static (left, right) => left.Start.CompareTo(right.Start));
+        List<VertexRange> merged = new(ranges.Count);
+        foreach (VertexRange range in ranges)
+            AppendRange(merged, range.Start, range.Count);
+        return merged;
+    }
+
+    private static void AppendRange(List<VertexRange> ranges, uint start, uint count)
+    {
+        if (count == 0)
+            return;
+        if (ranges.Count > 0)
+        {
+            VertexRange previous = ranges[^1];
+            uint previousEnd = previous.Start + previous.Count;
+            if (start <= previousEnd)
+            {
+                uint end = Math.Max(previousEnd, start + count);
+                ranges[^1] = new VertexRange(previous.Start, end - previous.Start);
+                return;
+            }
+        }
+        ranges.Add(new VertexRange(start, count));
     }
 
     private static PreparedRasterScene GetOrCreatePreparedScene(GraphicsDevice gd, SharedRasterResources resources, Scene scene, CancellationToken cancellationToken)
@@ -656,6 +853,7 @@ public static class VulkanRasterRenderer
         // a full CPU-side atlas never coexists with the GPU atlas.
         TextureBuildResult textures = BuildTextureAtlas(gd, scene, gpuTextureSamplingRequested);
         RasterGeometryBuildResult geometry = BuildGeometryMetadata(scene, textures.TexturePlacements, textures.UsesGpuTextureSampling);
+        IReadOnlyDictionary<int, PreviewRangeSet> groupRanges = BuildGroupVertexRanges(scene);
         RasterLight[] lights = BuildLightBuffer(scene);
         ResourceFactory factory = gd.ResourceFactory;
         int vertexStride = Marshal.SizeOf<RasterVertex>();
@@ -675,16 +873,21 @@ public static class VulkanRasterRenderer
         DeviceBuffer? opaque = null;
         DeviceBuffer? transparent = null;
         DeviceBuffer? camera = null;
+        DeviceBuffer? identityTransform = null;
+        DeviceBuffer? previewTransform = null;
         DeviceBuffer? light = null;
         DeviceBuffer? material = null;
         Texture? atlas = null;
         Sampler? sampler = null;
-        ResourceSet? set = null;
+        ResourceSet? identitySet = null;
+        ResourceSet? previewSet = null;
         try
         {
             opaque = factory.CreateBuffer(new BufferDescription(opaqueBytes, BufferUsage.VertexBuffer));
             transparent = factory.CreateBuffer(new BufferDescription(transparentBytes, BufferUsage.VertexBuffer));
             camera = factory.CreateBuffer(new BufferDescription((uint)Marshal.SizeOf<RasterCameraConstants>(), BufferUsage.UniformBuffer));
+            identityTransform = factory.CreateBuffer(new BufferDescription((uint)Marshal.SizeOf<RasterTransformConstants>(), BufferUsage.UniformBuffer));
+            previewTransform = factory.CreateBuffer(new BufferDescription((uint)Marshal.SizeOf<RasterTransformConstants>(), BufferUsage.UniformBuffer));
             light = factory.CreateBuffer(new BufferDescription(lightBytes, BufferUsage.StructuredBufferReadOnly, (uint)lightStride));
             material = factory.CreateBuffer(new BufferDescription(materialBytes, BufferUsage.StructuredBufferReadOnly, (uint)materialStride));
             atlas = factory.CreateTexture(TextureDescription.Texture2D(
@@ -696,9 +899,14 @@ public static class VulkanRasterRenderer
             gd.UpdateBuffer(material, 0, geometry.Materials.Length == 0 ? new[] { default(RasterMaterial) } : geometry.Materials);
             geometry.Materials = Array.Empty<RasterMaterial>();
             gd.UpdateBuffer(light, 0, lights.Length == 0 ? new[] { default(RasterLight) } : lights);
+            gd.UpdateBuffer(identityTransform, 0, new RasterTransformConstants(preview: null));
+            gd.UpdateBuffer(previewTransform, 0, new RasterTransformConstants(preview: null));
             UploadTextureAtlas(gd, atlas, textures, cancellationToken);
 
-            set = factory.CreateResourceSet(new ResourceSetDescription(resources.Layout, camera, light, material, atlas, sampler));
+            identitySet = factory.CreateResourceSet(new ResourceSetDescription(
+                resources.Layout, camera, identityTransform, light, material, atlas, sampler));
+            previewSet = factory.CreateResourceSet(new ResourceSetDescription(
+                resources.Layout, camera, previewTransform, light, material, atlas, sampler));
             ComputeSceneBounds(scene, out Vec3 center, out double radius);
             preparedScene = new PreparedRasterScene
             {
@@ -708,11 +916,15 @@ public static class VulkanRasterRenderer
                 OpaqueVertexBuffer = opaque,
                 TransparentVertexBuffer = transparent,
                 CameraBuffer = camera,
+                IdentityTransformBuffer = identityTransform,
+                PreviewTransformBuffer = previewTransform,
                 LightBuffer = light,
                 MaterialBuffer = material,
                 AtlasTexture = atlas,
                 AtlasSampler = sampler,
-                ResourceSet = set,
+                IdentityResourceSet = identitySet,
+                PreviewResourceSet = previewSet,
+                GroupRanges = groupRanges,
                 LightCount = lights.Length,
                 OpaqueVertexCount = opaqueVertexCount,
                 TransparentVertexCount = transparentVertexCount,
@@ -732,11 +944,14 @@ public static class VulkanRasterRenderer
         }
         catch
         {
-            try { set?.Dispose(); } catch { }
+            try { previewSet?.Dispose(); } catch { }
+            try { identitySet?.Dispose(); } catch { }
             try { sampler?.Dispose(); } catch { }
             try { atlas?.Dispose(); } catch { }
             try { material?.Dispose(); } catch { }
             try { light?.Dispose(); } catch { }
+            try { previewTransform?.Dispose(); } catch { }
+            try { identityTransform?.Dispose(); } catch { }
             try { camera?.Dispose(); } catch { }
             try { transparent?.Dispose(); } catch { }
             try { opaque?.Dispose(); } catch { }
@@ -993,6 +1208,7 @@ public static class VulkanRasterRenderer
             Stage("Create Vulkan raster resource layout");
             ResourceLayout layout = factory.CreateResourceLayout(new ResourceLayoutDescription(
                 new ResourceLayoutElementDescription("CameraConstants", ResourceKind.UniformBuffer, ShaderStages.Vertex | ShaderStages.Fragment),
+                new ResourceLayoutElementDescription("TransformConstants", ResourceKind.UniformBuffer, ShaderStages.Vertex),
                 new ResourceLayoutElementDescription("LightBuffer", ResourceKind.StructuredBufferReadOnly, ShaderStages.Fragment),
                 new ResourceLayoutElementDescription("MaterialBuffer", ResourceKind.StructuredBufferReadOnly, ShaderStages.Fragment),
                 new ResourceLayoutElementDescription("AtlasTexture", ResourceKind.TextureReadOnly, ShaderStages.Fragment),
@@ -1673,9 +1889,45 @@ layout(std140, set = 0, binding = 0) uniform CameraConstants
     vec4 Counts;
 } Camera;
 
+layout(std140, set = 0, binding = 1) uniform TransformConstants
+{
+    vec4 PivotEnabled;
+    vec4 Translation;
+    vec4 Rotation;
+    vec4 Scale;
+} Transform;
+
+float sanitizeScale(float value)
+{
+    return abs(value) < 0.00000001 ? 1.0 : value;
+}
+
+vec3 rotateEuler(vec3 value, vec3 rotation)
+{
+    float cx = cos(rotation.x); float sx = sin(rotation.x);
+    value = vec3(value.x, value.y * cx - value.z * sx, value.y * sx + value.z * cx);
+    float cy = cos(rotation.y); float sy = sin(rotation.y);
+    value = vec3(value.x * cy + value.z * sy, value.y, -value.x * sy + value.z * cy);
+    float cz = cos(rotation.z); float sz = sin(rotation.z);
+    return vec3(value.x * cz - value.y * sz, value.x * sz + value.y * cz, value.z);
+}
+
 void main()
 {
-    vec3 rel = Position - Camera.CameraPosition.xyz;
+    vec3 worldPosition = Position;
+    vec3 worldNormal = Normal;
+    if (Transform.PivotEnabled.w > 0.5)
+    {
+        vec3 safeScale = vec3(
+            sanitizeScale(Transform.Scale.x),
+            sanitizeScale(Transform.Scale.y),
+            sanitizeScale(Transform.Scale.z));
+        vec3 local = (Position - Transform.PivotEnabled.xyz) * safeScale;
+        worldPosition = Transform.PivotEnabled.xyz + Transform.Translation.xyz + rotateEuler(local, Transform.Rotation.xyz);
+        worldNormal = normalize(rotateEuler(Normal / safeScale, Transform.Rotation.xyz));
+    }
+
+    vec3 rel = worldPosition - Camera.CameraPosition.xyz;
     float vx = dot(rel, Camera.CameraRight.xyz);
     float vy = dot(rel, Camera.CameraUp.xyz);
     float vz = dot(rel, Camera.CameraForward.xyz);
@@ -1694,8 +1946,8 @@ void main()
          z);
     gl_Position.y = -gl_Position.y;
 
-    fsWorldPos = Position;
-    fsNormal = Normal;
+    fsWorldPos = worldPosition;
+    fsNormal = worldNormal;
     fsUv = Uv;
     fsMaterialIndex = int(MaterialIndex + 0.5);
 }
@@ -1767,18 +2019,18 @@ layout(std140, set = 0, binding = 0) uniform CameraConstants
     vec4 Counts;
 } Camera;
 
-layout(std430, set = 0, binding = 1) readonly buffer LightBuffer
+layout(std430, set = 0, binding = 2) readonly buffer LightBuffer
 {
     RasterLight Lights[];
 };
 
-layout(std430, set = 0, binding = 2) readonly buffer MaterialBuffer
+layout(std430, set = 0, binding = 3) readonly buffer MaterialBuffer
 {
     RasterMaterial Materials[];
 };
 
-layout(set = 0, binding = 3) uniform texture2DArray AtlasTexture;
-layout(set = 0, binding = 4) uniform sampler AtlasSampler;
+layout(set = 0, binding = 4) uniform texture2DArray AtlasTexture;
+layout(set = 0, binding = 5) uniform sampler AtlasSampler;
 
 float addressTexture(float v, float mode)
 {

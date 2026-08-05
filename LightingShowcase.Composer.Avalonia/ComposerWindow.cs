@@ -21,6 +21,11 @@ internal sealed class ComposerWindow : Window
         public override string ToString() => Label;
     }
 
+    private sealed record GizmoModeChoice(ComposerGizmoMode Mode, string Label)
+    {
+        public override string ToString() => Label;
+    }
+
     private enum ViewportDragMode
     {
         None,
@@ -28,16 +33,56 @@ internal sealed class ComposerWindow : Window
         Pan
     }
 
-    private sealed record GizmoDragState(
-        int SelectedId,
-        ComposerGizmoAxis Axis,
-        Point StartImagePoint,
-        Vec3 StartPosition,
-        Vec3 Rotation,
-        Vec3 Scale,
-        double ScreenDirectionX,
-        double ScreenDirectionY,
-        double WorldUnitsPerPixel);
+    private sealed class GizmoDragState
+    {
+        public GizmoDragState(
+            int selectedId,
+            ComposerGizmoMode mode,
+            ComposerGizmoAxis axis,
+            Point startImagePoint,
+            Vec3 startPosition,
+            Vec3 startRotation,
+            Vec3 startScale,
+            ComposerGizmoHit hit)
+        {
+            SelectedId = selectedId;
+            Mode = mode;
+            Axis = axis;
+            StartImagePoint = startImagePoint;
+            StartPosition = startPosition;
+            StartRotation = startRotation;
+            StartScale = startScale;
+            ScreenDirectionX = hit.ScreenDirectionX;
+            ScreenDirectionY = hit.ScreenDirectionY;
+            WorldUnitsPerPixel = hit.WorldUnitsPerPixel;
+            CenterX = hit.CenterX;
+            CenterY = hit.CenterY;
+            GestureSign = hit.GestureSign;
+            WorldCenter = hit.WorldCenter;
+            LastRotationVector = hit.RotationStartVector;
+            LastPointerAngle = PointerAngle(startImagePoint.X, startImagePoint.Y, CenterX, CenterY);
+            LastImagePoint = startImagePoint;
+        }
+
+        public int SelectedId { get; }
+        public ComposerGizmoMode Mode { get; }
+        public ComposerGizmoAxis Axis { get; }
+        public Point StartImagePoint { get; }
+        public Vec3 StartPosition { get; }
+        public Vec3 StartRotation { get; }
+        public Vec3 StartScale { get; }
+        public double ScreenDirectionX { get; }
+        public double ScreenDirectionY { get; }
+        public double WorldUnitsPerPixel { get; }
+        public double CenterX { get; }
+        public double CenterY { get; }
+        public double GestureSign { get; }
+        public Vec3 WorldCenter { get; }
+        public Vec3 LastRotationVector { get; set; }
+        public Point LastImagePoint { get; set; }
+        public double LastPointerAngle { get; set; }
+        public double AccumulatedGesture { get; set; }
+    }
 
     private readonly RendererChoice[] rendererChoices =
     [
@@ -45,6 +90,13 @@ internal sealed class ComposerWindow : Window
         new(ComposerRendererKind.VulkanRaster, "Vulkan raster", "Hardware rasterizer using the complete scene."),
         new(ComposerRendererKind.VulkanCompute, "Vulkan compute", "Compute ray preview using the complete scene."),
         new(ComposerRendererKind.Cpu, "CPU", "CPU ray preview; renders after camera movement finishes.")
+    ];
+
+    private readonly GizmoModeChoice[] gizmoModeChoices =
+    [
+        new(ComposerGizmoMode.Translate, "Move (G)"),
+        new(ComposerGizmoMode.Rotate, "Rotate (R)"),
+        new(ComposerGizmoMode.Scale, "Scale (S)")
     ];
 
     private readonly ComposerSceneSession session = new();
@@ -55,6 +107,7 @@ internal sealed class ComposerWindow : Window
     private readonly TextBlock statusText;
     private readonly TextBlock detailsText;
     private readonly ComboBox rendererBox;
+    private readonly ComboBox gizmoModeBox;
     private readonly ScrollViewer objectTree;
     private readonly StackPanel objectTreePanel;
     private readonly HashSet<int> expandedObjectIds = new();
@@ -144,6 +197,12 @@ internal sealed class ComposerWindow : Window
             SelectedIndex = 0,
             MinWidth = 150
         };
+        gizmoModeBox = new ComboBox
+        {
+            ItemsSource = gizmoModeChoices,
+            SelectedIndex = 0,
+            MinWidth = 112
+        };
         statusText = new TextBlock
         {
             Text = "Insert or open a model to begin.",
@@ -218,7 +277,7 @@ internal sealed class ComposerWindow : Window
 
         Grid toolbar = new()
         {
-            ColumnDefinitions = new ColumnDefinitions("Auto,Auto,Auto,Auto,Auto,Auto,*,Auto,Auto"),
+            ColumnDefinitions = new ColumnDefinitions("Auto,Auto,Auto,Auto,Auto,Auto,*,Auto,Auto,Auto"),
             ColumnSpacing = 8,
             Margin = new Thickness(10)
         };
@@ -238,8 +297,10 @@ internal sealed class ComposerWindow : Window
         Grid.SetColumn(pathText, 6);
         toolbar.Children.Add(exportButton);
         Grid.SetColumn(exportButton, 7);
+        toolbar.Children.Add(gizmoModeBox);
+        Grid.SetColumn(gizmoModeBox, 8);
         toolbar.Children.Add(rendererBox);
-        Grid.SetColumn(rendererBox, 8);
+        Grid.SetColumn(rendererBox, 9);
         root.Children.Add(toolbar);
 
         Grid content = new()
@@ -355,7 +416,7 @@ internal sealed class ComposerWindow : Window
         stack.Children.Add(resetTransformButton);
         stack.Children.Add(new TextBlock
         {
-            Text = "Hierarchy: ▸/▾ expands group nodes. A … row lazily reveals triangle details in pages, so large meshes do not flood the tree. Ungroup promotes children or splits a mesh further. Apply bakes transforms into vertices; Ctrl+Z/Ctrl+Y undo and redo. Viewport: right drag orbits, middle drag pans, and wheel zooms.",
+            Text = "Hierarchy: ▸/▾ expands group nodes. A … row lazily reveals triangle details in pages, so large meshes do not flood the tree. Ungroup promotes children or splits a mesh further. Apply bakes transforms into vertices; Ctrl+Z/Ctrl+Y undo and redo. Gizmos: G move, R rotate, S scale; Shift is precision and Ctrl snaps. Viewport: right drag orbits, middle drag pans, and wheel zooms.",
             TextWrapping = TextWrapping.Wrap,
             Opacity = 0.68,
             FontSize = 12,
@@ -391,6 +452,11 @@ internal sealed class ComposerWindow : Window
             detailsText.Text = SelectedRenderer.Description;
             _ = RequestRenderAsync(interactive: false);
         };
+        gizmoModeBox.SelectionChanged += (_, _) =>
+        {
+            statusText.Text = $"{SelectedGizmoMode} gizmo selected.";
+            _ = RequestRenderAsync(interactive: false);
+        };
 
         viewport.PointerPressed += OnViewportPointerPressed;
         viewport.PointerMoved += OnViewportPointerMoved;
@@ -405,6 +471,7 @@ internal sealed class ComposerWindow : Window
                 LoadInspectorFromSelection();
             }
             gizmoDrag = null;
+            _ = RequestRenderAsync(interactive: false);
         };
         viewport.PointerWheelChanged += (_, e) =>
         {
@@ -420,6 +487,8 @@ internal sealed class ComposerWindow : Window
     }
 
     private RendererChoice SelectedRenderer => rendererBox.SelectedItem as RendererChoice ?? rendererChoices[0];
+    private ComposerGizmoMode SelectedGizmoMode =>
+        (gizmoModeBox.SelectedItem as GizmoModeChoice)?.Mode ?? ComposerGizmoMode.Translate;
 
     private async Task NewSceneAsync()
     {
@@ -1306,7 +1375,7 @@ internal sealed class ComposerWindow : Window
     {
         if (gizmoDrag != null)
         {
-            UpdateGizmoDrag(e.GetPosition(viewport));
+            UpdateGizmoDrag(e.GetPosition(viewport), e.KeyModifiers);
             e.Handled = true;
             return;
         }
@@ -1336,8 +1405,9 @@ internal sealed class ComposerWindow : Window
         Point releasePoint = e.GetPosition(viewport);
         if (gizmoDrag != null)
         {
-            UpdateGizmoDrag(releasePoint);
+            UpdateGizmoDrag(releasePoint, e.KeyModifiers);
             int commitId = gizmoDrag.SelectedId;
+            ComposerGizmoMode committedMode = gizmoDrag.Mode;
             gizmoDrag = null;
             e.Pointer.Capture(null);
             await StopCurrentRenderAsync();
@@ -1354,7 +1424,7 @@ internal sealed class ComposerWindow : Window
             ClearTransformTextBoxes();
             UpdateHistoryButtons();
             pathText.Text = "Untitled composition (modified)";
-            statusText.Text = $"Baked gizmo move into geometry. {session.LastGeometryRefreshDetails}";
+            statusText.Text = $"Baked {committedMode.ToString().ToLowerInvariant()} transform into geometry. {session.LastGeometryRefreshDetails}";
             await RequestRenderAsync(interactive: false);
             e.Handled = true;
             return;
@@ -1403,7 +1473,9 @@ internal sealed class ComposerWindow : Window
         }
 
         CameraDefinition camera = session.Camera.Snapshot();
-        if (!ComposerOverlayRenderer.TryHitTranslationAxis(
+        ComposerGizmoMode mode = SelectedGizmoMode;
+        if (!ComposerOverlayRenderer.TryHitGizmo(
+                mode,
                 camera,
                 bounds,
                 lastRenderWidth,
@@ -1417,43 +1489,109 @@ internal sealed class ComposerWindow : Window
 
         gizmoDrag = new GizmoDragState(
             selectedId,
+            mode,
             hit.Axis,
             imagePoint,
             state.Position,
             state.Rotation,
             state.Scale,
-            hit.ScreenDirectionX,
-            hit.ScreenDirectionY,
-            hit.WorldUnitsPerPixel);
-        statusText.Text = $"Dragging {hit.Axis} translation axis…";
+            hit);
+        statusText.Text = $"Dragging {hit.Axis} {mode.ToString().ToLowerInvariant()} gizmo…";
         return true;
     }
 
-    private void UpdateGizmoDrag(Point viewportPoint)
+    private void UpdateGizmoDrag(Point viewportPoint, KeyModifiers modifiers)
     {
         GizmoDragState? drag = gizmoDrag;
         if (drag == null || !TryViewportToImagePoint(viewportPoint, out Point imagePoint))
             return;
 
-        double deltaX = imagePoint.X - drag.StartImagePoint.X;
-        double deltaY = imagePoint.Y - drag.StartImagePoint.Y;
-        double pixelDistance = deltaX * drag.ScreenDirectionX + deltaY * drag.ScreenDirectionY;
-        double worldDistance = pixelDistance * drag.WorldUnitsPerPixel;
-        Vec3 axis = drag.Axis switch
-        {
-            ComposerGizmoAxis.X => new Vec3(1, 0, 0),
-            ComposerGizmoAxis.Y => new Vec3(0, 1, 0),
-            ComposerGizmoAxis.Z => new Vec3(0, 0, 1),
-            _ => Vec3.Zero
-        };
-        Vec3 updatedPosition = drag.StartPosition + axis * worldDistance;
+        Vec3 updatedPosition = drag.StartPosition;
+        Vec3 updatedRotation = drag.StartRotation;
+        Vec3 updatedScale = drag.StartScale;
+        double precision = modifiers.HasFlag(KeyModifiers.Shift) ? 0.20 : 1.0;
+        bool snap = modifiers.HasFlag(KeyModifiers.Control);
 
-        CancelCurrentRender();
+        switch (drag.Mode)
+        {
+            case ComposerGizmoMode.Rotate:
+            {
+                double angle = PointerAngle(imagePoint.X, imagePoint.Y, drag.CenterX, drag.CenterY);
+                double angularStep;
+                CameraDefinition camera = session.Camera.Snapshot();
+                bool hasPlaneVector = ComposerOverlayRenderer.TryGetRotationPlaneVector(
+                    camera,
+                    lastRenderWidth,
+                    lastRenderHeight,
+                    imagePoint.X,
+                    imagePoint.Y,
+                    drag.WorldCenter,
+                    drag.Axis,
+                    out Vec3 currentVector);
+                if (hasPlaneVector && drag.LastRotationVector.Length() > 1e-8)
+                {
+                    Vec3 axis = AxisVector(drag.Axis);
+                    angularStep = Math.Atan2(
+                        axis.Dot(drag.LastRotationVector.Cross(currentVector)),
+                        Math.Clamp(drag.LastRotationVector.Dot(currentVector), -1.0, 1.0));
+                    drag.LastRotationVector = currentVector;
+                }
+                else
+                {
+                    angularStep = WrapAngle(angle - drag.LastPointerAngle) * drag.GestureSign;
+                    drag.LastRotationVector = hasPlaneVector ? currentVector : Vec3.Zero;
+                }
+
+                drag.LastPointerAngle = angle;
+                drag.AccumulatedGesture += angularStep * precision;
+                double rotationDelta = drag.AccumulatedGesture;
+                if (snap)
+                {
+                    double increment = Math.PI / 36.0; // five degrees
+                    rotationDelta = Math.Round(rotationDelta / increment) * increment;
+                }
+                updatedRotation = AddAxisComponent(drag.StartRotation, drag.Axis, rotationDelta);
+                break;
+            }
+            case ComposerGizmoMode.Scale:
+            {
+                double deltaX = imagePoint.X - drag.LastImagePoint.X;
+                double deltaY = imagePoint.Y - drag.LastImagePoint.Y;
+                double pixelStep = drag.Axis == ComposerGizmoAxis.Uniform
+                    ? deltaX - deltaY
+                    : deltaX * drag.ScreenDirectionX + deltaY * drag.ScreenDirectionY;
+                drag.AccumulatedGesture += pixelStep * precision;
+                drag.LastImagePoint = imagePoint;
+                double factor = Math.Exp(drag.AccumulatedGesture / 140.0);
+                factor = Math.Clamp(factor, 0.01, 100.0);
+                if (snap)
+                    factor = Math.Max(0.01, Math.Round(factor * 10.0) / 10.0);
+                updatedScale = ScaleAxis(drag.StartScale, drag.Axis, factor);
+                break;
+            }
+            default:
+            {
+                double deltaX = imagePoint.X - drag.LastImagePoint.X;
+                double deltaY = imagePoint.Y - drag.LastImagePoint.Y;
+                double pixelStep = deltaX * drag.ScreenDirectionX + deltaY * drag.ScreenDirectionY;
+                drag.AccumulatedGesture += pixelStep * precision;
+                drag.LastImagePoint = imagePoint;
+                double worldDistance = drag.AccumulatedGesture * drag.WorldUnitsPerPixel;
+                if (snap)
+                {
+                    double increment = Math.Max(0.01, drag.WorldUnitsPerPixel * 10.0);
+                    worldDistance = Math.Round(worldDistance / increment) * increment;
+                }
+                updatedPosition = drag.StartPosition + AxisVector(drag.Axis) * worldDistance;
+                break;
+            }
+        }
+
         if (!session.UpdateTransformTarget(
                 drag.SelectedId,
                 updatedPosition,
-                drag.Rotation,
-                drag.Scale))
+                updatedRotation,
+                updatedScale))
         {
             gizmoDrag = null;
             statusText.Text = "The transform target no longer exists.";
@@ -1462,7 +1600,53 @@ internal sealed class ComposerWindow : Window
 
         LoadInspectorFromSelection();
         pathText.Text = "Untitled composition (modified)";
-        statusText.Text = $"Pending {drag.Axis} translation: release the mouse to bake once and refresh Vulkan.";
+
+        ComposerRendererKind renderer = SelectedRenderer.Kind;
+        if (renderer == ComposerRendererKind.VulkanRaster || CanRenderContinuously(renderer))
+        {
+            _ = RequestRenderAsync(interactive: true);
+            statusText.Text = renderer == ComposerRendererKind.VulkanRaster
+                ? $"Live Vulkan {drag.Mode.ToString().ToLowerInvariant()} preview; release to bake once."
+                : $"Pseudo-real-time {drag.Mode.ToString().ToLowerInvariant()} preview; release for the final frame.";
+        }
+        else
+        {
+            statusText.Text = $"{SelectedRenderer.Label}: release to render the {drag.Mode.ToString().ToLowerInvariant()} transform.";
+        }
+    }
+
+    private static Vec3 AxisVector(ComposerGizmoAxis axis) => axis switch
+    {
+        ComposerGizmoAxis.X => new Vec3(1, 0, 0),
+        ComposerGizmoAxis.Y => new Vec3(0, 1, 0),
+        ComposerGizmoAxis.Z => new Vec3(0, 0, 1),
+        _ => Vec3.Zero
+    };
+
+    private static Vec3 AddAxisComponent(Vec3 start, ComposerGizmoAxis axis, double delta) => axis switch
+    {
+        ComposerGizmoAxis.X => new Vec3(start.X + delta, start.Y, start.Z),
+        ComposerGizmoAxis.Y => new Vec3(start.X, start.Y + delta, start.Z),
+        ComposerGizmoAxis.Z => new Vec3(start.X, start.Y, start.Z + delta),
+        _ => start
+    };
+
+    private static Vec3 ScaleAxis(Vec3 start, ComposerGizmoAxis axis, double factor) => axis switch
+    {
+        ComposerGizmoAxis.X => new Vec3(start.X * factor, start.Y, start.Z),
+        ComposerGizmoAxis.Y => new Vec3(start.X, start.Y * factor, start.Z),
+        ComposerGizmoAxis.Z => new Vec3(start.X, start.Y, start.Z * factor),
+        _ => start * factor
+    };
+
+    private static double PointerAngle(double x, double y, double centerX, double centerY) =>
+        Math.Atan2(centerY - y, x - centerX);
+
+    private static double WrapAngle(double angle)
+    {
+        while (angle > Math.PI) angle -= Math.PI * 2.0;
+        while (angle < -Math.PI) angle += Math.PI * 2.0;
+        return angle;
     }
 
     private bool TryViewportToImagePoint(Point viewportPoint, out Point imagePoint)
@@ -1561,6 +1745,23 @@ internal sealed class ComposerWindow : Window
             return;
         }
 
+        if (e.Source is not TextBox && e.KeyModifiers == KeyModifiers.None)
+        {
+            ComposerGizmoMode? mode = e.Key switch
+            {
+                Key.G => ComposerGizmoMode.Translate,
+                Key.R => ComposerGizmoMode.Rotate,
+                Key.S => ComposerGizmoMode.Scale,
+                _ => null
+            };
+            if (mode.HasValue)
+            {
+                SelectGizmoMode(mode.Value);
+                e.Handled = true;
+                return;
+            }
+        }
+
         if (!session.HasRenderableScene)
             return;
 
@@ -1597,6 +1798,13 @@ internal sealed class ComposerWindow : Window
             _ = RequestRenderAsync(interactive: false);
             e.Handled = true;
         }
+    }
+
+    private void SelectGizmoMode(ComposerGizmoMode mode)
+    {
+        int index = Array.FindIndex(gizmoModeChoices, choice => choice.Mode == mode);
+        if (index >= 0)
+            gizmoModeBox.SelectedIndex = index;
     }
 
     private bool CanRenderContinuously(ComposerRendererKind renderer)
@@ -1660,6 +1868,7 @@ internal sealed class ComposerWindow : Window
     private async Task RenderOneFrameAsync(bool interactive, long requestVersion, CancellationToken token)
     {
         RendererChoice renderer = SelectedRenderer;
+        ComposerGizmoMode gizmoMode = SelectedGizmoMode;
         (int width, int height) = ChooseRenderSize(renderer.Kind, interactive);
         CameraDefinition camera = session.Camera.Snapshot();
         RenderOptions.SetBitmapInterpolationMode(
@@ -1672,7 +1881,7 @@ internal sealed class ComposerWindow : Window
         try
         {
             ComposerFrame frame = await Task.Run(
-                () => session.Render(renderer.Kind, camera, width, height, interactive, token),
+                () => session.Render(renderer.Kind, camera, width, height, interactive, token, gizmoMode),
                 token);
 
             if (token.IsCancellationRequested || (!interactive && requestVersion != renderVersion))
@@ -1844,6 +2053,7 @@ internal sealed class ComposerWindow : Window
         saveButton.IsEnabled = !busy;
         exportButton.IsEnabled = !busy;
         rendererBox.IsEnabled = !busy;
+        gizmoModeBox.IsEnabled = !busy;
         objectTree.IsEnabled = !busy;
         if (selectedObjectId.HasValue)
             SetInspectorEnabled(!busy);

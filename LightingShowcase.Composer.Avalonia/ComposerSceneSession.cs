@@ -795,7 +795,8 @@ internal sealed class ComposerSceneSession : IDisposable
         int width,
         int height,
         bool interactive,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        ComposerGizmoMode gizmoMode = ComposerGizmoMode.Translate)
     {
         sceneGate.Wait(cancellationToken);
         try
@@ -824,6 +825,10 @@ internal sealed class ComposerSceneSession : IDisposable
                 rasterCache = ShadowRasterRenderer.BuildCache(scene, cancellationToken);
             }
 
+            VulkanRasterTransformPreview? transformPreview = renderer == ComposerRendererKind.VulkanRaster
+                ? CreateVulkanTransformPreview()
+                : null;
+
             Stopwatch stopwatch = Stopwatch.StartNew();
             string details;
             RenderImage image = renderer switch
@@ -844,6 +849,7 @@ internal sealed class ComposerSceneSession : IDisposable
                     camera.ToBasis(),
                     width,
                     height,
+                    transformPreview,
                     cancellationToken,
                     out details),
 
@@ -882,13 +888,14 @@ internal sealed class ComposerSceneSession : IDisposable
                 _ => throw new ArgumentOutOfRangeException(nameof(renderer), renderer, "Unknown renderer.")
             };
 
-            if (selectedOverlayBounds is Aabb overlayBounds)
+            if (TryGetSelectionOverlayForRender(out Aabb overlayBounds, out IReadOnlyList<Triangle> overlayTriangles))
             {
                 ComposerOverlayRenderer.DrawSelection(
                     image,
                     camera,
                     overlayBounds,
-                    selectedOverlayTriangles);
+                    overlayTriangles,
+                    gizmoMode);
             }
 
             stopwatch.Stop();
@@ -907,6 +914,91 @@ internal sealed class ComposerSceneSession : IDisposable
             sceneGate.Release();
         }
     }
+
+    private VulkanRasterTransformPreview? CreateVulkanTransformPreview()
+    {
+        if (selectedObjectId is not int selectedId ||
+            scene.GroupById(selectedId) is not SceneObjectGroup target ||
+            IsIdentityTransform(target.Position, target.Rotation, target.Scale))
+        {
+            return null;
+        }
+
+        return new VulkanRasterTransformPreview(
+            target.Id,
+            target.SelfAndDescendants().Select(group => group.Id),
+            target.Pivot,
+            target.Position,
+            target.Rotation,
+            target.Scale);
+    }
+
+    private bool TryGetSelectionOverlayForRender(
+        out Aabb bounds,
+        out IReadOnlyList<Triangle> triangles)
+    {
+        if (selectedOverlayBounds is not Aabb baseBounds)
+        {
+            bounds = default;
+            triangles = Array.Empty<Triangle>();
+            return false;
+        }
+
+        if (selectedObjectId is not int selectedId ||
+            scene.GroupById(selectedId) is not SceneObjectGroup target ||
+            IsIdentityTransform(target.Position, target.Rotation, target.Scale))
+        {
+            bounds = baseBounds;
+            triangles = selectedOverlayTriangles;
+            return true;
+        }
+
+        bounds = TransformBounds(baseBounds, target);
+        Triangle[] transformed = new Triangle[selectedOverlayTriangles.Count];
+        for (int i = 0; i < transformed.Length; i++)
+            transformed[i] = TransformPreviewTriangle(selectedOverlayTriangles[i], target);
+        triangles = transformed;
+        return true;
+    }
+
+    private static Aabb TransformBounds(Aabb source, SceneObjectGroup target)
+    {
+        Vec3[] corners =
+        [
+            new(source.Min.X, source.Min.Y, source.Min.Z),
+            new(source.Max.X, source.Min.Y, source.Min.Z),
+            new(source.Max.X, source.Max.Y, source.Min.Z),
+            new(source.Min.X, source.Max.Y, source.Min.Z),
+            new(source.Min.X, source.Min.Y, source.Max.Z),
+            new(source.Max.X, source.Min.Y, source.Max.Z),
+            new(source.Max.X, source.Max.Y, source.Max.Z),
+            new(source.Min.X, source.Max.Y, source.Max.Z)
+        ];
+
+        Vec3 first = target.TransformPoint(corners[0]);
+        Vec3 min = first;
+        Vec3 max = first;
+        for (int i = 1; i < corners.Length; i++)
+        {
+            Vec3 point = target.TransformPoint(corners[i]);
+            min = new Vec3(Math.Min(min.X, point.X), Math.Min(min.Y, point.Y), Math.Min(min.Z, point.Z));
+            max = new Vec3(Math.Max(max.X, point.X), Math.Max(max.Y, point.Y), Math.Max(max.Z, point.Z));
+        }
+        return new Aabb(min, max);
+    }
+
+    private static Triangle TransformPreviewTriangle(Triangle triangle, SceneObjectGroup target) => new(
+        target.TransformPoint(triangle.A),
+        target.TransformPoint(triangle.B),
+        target.TransformPoint(triangle.C),
+        triangle.UvA,
+        triangle.UvB,
+        triangle.UvC,
+        target.TransformNormal(triangle.NormalA),
+        target.TransformNormal(triangle.NormalB),
+        target.TransformNormal(triangle.NormalC),
+        triangle.Material,
+        triangle.GroupId);
 
     public void Dispose()
     {

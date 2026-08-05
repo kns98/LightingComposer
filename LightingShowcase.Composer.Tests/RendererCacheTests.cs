@@ -50,11 +50,12 @@ public sealed class RendererCacheTests
         SceneCacheStamp before = session.CaptureSceneCacheStampForTests();
         ComposerObjectState state = session.GetObjectState(rootId)!;
 
+        Assert.True(session.SetSelectedObject(rootId));
         Assert.True(session.UpdateTransformTarget(
             rootId,
             new Vec3(2, 0, 0),
-            state.Rotation,
-            state.Scale));
+            state.Rotation + new Vec3(0, Math.PI / 4.0, 0),
+            new Vec3(1.25, 0.8, 1.1)));
 
         SceneCacheStamp pending = session.CaptureSceneCacheStampForTests();
         Assert.Equal(before.Revision, pending.Revision);
@@ -62,7 +63,10 @@ public sealed class RendererCacheTests
         Assert.True(session.CommitPendingTransform(rootId));
         SceneCacheStamp committed = session.CaptureSceneCacheStampForTests();
         Assert.True(committed.Revision > before.Revision);
-        AssertVec3(Vec3.Zero, session.GetObjectState(rootId)!.Position);
+        ComposerObjectState committedState = session.GetObjectState(rootId)!;
+        AssertVec3(Vec3.Zero, committedState.Position);
+        AssertVec3(Vec3.Zero, committedState.Rotation);
+        AssertVec3(new Vec3(1, 1, 1), committedState.Scale);
     }
 
     [Fact]

@@ -75,3 +75,14 @@ The normal suite also verifies that `.lscene` files reopen textures without the
 original image files, distinct in-memory textures are preserved, every advertised
 export route resolves to a registered exporter, and each format creates a new
 package directory containing its primary file, manifest, and related textures.
+
+## Live transform gizmo validation
+
+The opt-in GPU suite includes a Vulkan raster test that applies pending rotation and non-uniform scale without committing the scene. It verifies that:
+
+- the scene revision remains unchanged while dragging;
+- the render details report `live-transform=<selection id>`;
+- preview pixels change before the geometry bake; and
+- cancellation restores the identity pending transform.
+
+For an interactive timing check, select Vulkan raster, load a representative model, press `R` or `S`, and drag a gizmo. The frame details separate uniform update, command recording, GPU wait, readback, and total frame time. The hot path should show `cache=hot` and `live-transform=...`; it should not report a vertex-buffer refresh until pointer release.

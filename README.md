@@ -8,7 +8,7 @@ A standalone, platform-neutral scene composer and renderer built with Avalonia a
 - Insert multiple glTF/GLB, FBX, OBJ, 3DS, PLY, STL, and PropXML assets.
 - Browse objects in a recursive scene tree and select them from the tree or rendered viewport.
 - Orbit, pan, and zoom the preview on every rendering backend.
-- Highlight the selected object and draw overlaid selection bounds plus draggable X/Y/Z translation axes.
+- Highlight the selected object and draw overlaid move, rotation-ring, and scale gizmos for X/Y/Z transforms, including uniform scaling.
 - Edit position, rotation, and scale numerically; Enter or **Apply transform** bakes the change into vertex positions and normals, clears the fields, and redraws the active renderer.
 - Inserted assets are wrapped in one top-level group while retaining their imported child hierarchy.
 - Rename, show/hide, duplicate, delete, reset, frame, or ungroup any non-terminal group or mesh node.
@@ -67,7 +67,10 @@ A path may also be passed without the `compose` verb:
 ## Viewport controls
 
 - Left click: select the highest imported object group under the pointer.
-- Drag a red, green, or blue gizmo axis: stage a translation along X, Y, or Z. The geometry is baked once and Vulkan is refreshed when the pointer is released; pointer moves do not rebuild or reupload the scene.
+- `G`, `R`, and `S`: choose Move, Rotate, or Scale, matching Blender's primary transform shortcuts. The toolbar selector provides the same modes.
+- Drag a red, green, or blue move axis, rotation ring, or scale handle. The white center scale handle scales uniformly. Hold Shift for precision and Ctrl for snapping.
+- Vulkan raster previews the selected subtree live by updating a transform uniform and issuing draw ranges over the existing vertex buffers. Pointer moves do not rebuild or reupload geometry; release bakes once and preserves the existing undo/redo model.
+- Software raster and sufficiently fast Vulkan compute frames are coalesced and throttled as pseudo-real-time previews. CPU ray rendering waits for release.
 - Right drag: orbit.
 - Middle drag or Shift+right drag: pan.
 - Mouse wheel: zoom.
@@ -138,7 +141,9 @@ Transforms are authored as temporary editor values only until they are committed
 
 Selection is a cached post-process overlay and does not change scene materials or invalidate Vulkan geometry. At most 256 sampled triangles are retained for the orange wire overlay; the complete selected mesh is not traversed on every frame.
 
-Rotation and scale gizmo modes, GPU ID picking, and detailed benchmark export remain future extensions.
+GPU ID picking and detailed benchmark export remain future extensions.
+
+For the implementation and performance strategy, see [`GIZMO_TRANSFORM_PREVIEW.md`](GIZMO_TRANSFORM_PREVIEW.md).
 
 
 ## Automated tests
@@ -155,8 +160,8 @@ On Windows:
 .\run-tests.ps1
 ```
 
-The suite verifies baked local-geometry mutation, identity transform metadata after commit, exact undo/redo hashes, deferred gizmo commits, Vulkan cache revision handling, rendered-pixel changes, lazy triangle browsing without object growth, root/nested ungroup behavior, hierarchy expansion, and Visual Studio solution integrity.
-See `TESTING.md` for the optional Vulkan tests.
+The suite verifies baked local-geometry mutation, identity transform metadata after commit, exact undo/redo hashes, deferred move/rotation/scale commits, Vulkan cache revision handling, rendered-pixel changes, lazy triangle browsing without object growth, root/nested ungroup behavior, hierarchy expansion, and Visual Studio solution integrity.
+See `TESTING.md` for the optional Vulkan tests, including the live pending-transform preview.
 
 ## Self-contained scenes and portable exports
 
