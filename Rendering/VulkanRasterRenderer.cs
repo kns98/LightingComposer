@@ -116,6 +116,7 @@ public static class VulkanRasterRenderer
         public required ResourceSet PreviewResourceSet { get; init; }
         public required IReadOnlyDictionary<int, PreviewRangeSet> GroupRanges { get; init; }
         public Dictionary<int, PreviewRangeSet> PreviewRanges { get; } = new();
+        public MeshEditPatchState? ActiveMeshEdit { get; set; }
         public required int LightCount { get; init; }
         public required int OpaqueVertexCount { get; init; }
         public required int TransparentVertexCount { get; init; }
@@ -245,6 +246,20 @@ public static class VulkanRasterRenderer
     private sealed record PreviewRangeSet(
         IReadOnlyList<VertexRange> Opaque,
         IReadOnlyList<VertexRange> Transparent);
+
+    private readonly record struct RasterTrianglePatch(
+        bool Transparent,
+        uint VertexStart,
+        Triangle Source,
+        byte CornerMask,
+        RasterVertex[] OriginalVertices);
+
+    private sealed class MeshEditPatchState
+    {
+        public required int SelectionId { get; init; }
+        public required int GroupId { get; init; }
+        public required IReadOnlyList<RasterTrianglePatch> Patches { get; init; }
+    }
 
     [StructLayout(LayoutKind.Sequential)]
     private readonly struct RasterLight
@@ -562,6 +577,7 @@ public static class VulkanRasterRenderer
                 prepared.BoundingRadius = radius;
                 prepared.CacheStamp = SceneCacheStamp.Capture(scene);
                 prepared.PreviewRanges.Clear();
+                prepared.ActiveMeshEdit = null;
                 stopwatch.Stop();
                 details = $"Vulkan raster geometry refreshed in-place in {stopwatch.ElapsedMilliseconds} ms; allocations and textures were reused.";
                 Stage(details);
@@ -579,7 +595,7 @@ public static class VulkanRasterRenderer
         int height,
         CancellationToken cancellationToken,
         out string details) =>
-        Render(scene, cameraPosition, basis, width, height, (VulkanRasterTransformPreview?)null, cancellationToken, out details);
+        Render(scene, cameraPosition, basis, width, height, null, null, cancellationToken, out details);
 
     /// <summary>
     /// Renders with an optional editor-only transform. The preview updates one small
@@ -593,6 +609,22 @@ public static class VulkanRasterRenderer
         int height,
         VulkanRasterTransformPreview? preview,
         CancellationToken cancellationToken,
+        out string details) =>
+        Render(scene, cameraPosition, basis, width, height, preview, null, cancellationToken, out details);
+
+    /// <summary>
+    /// Renders with optional whole-object and mesh-component editor previews.
+    /// Component moves patch only affected vertices in the existing GPU buffers.
+    /// </summary>
+    public static RenderImage Render(
+        Scene scene,
+        Vec3 cameraPosition,
+        CameraBasis basis,
+        int width,
+        int height,
+        VulkanRasterTransformPreview? preview,
+        VulkanRasterMeshEditPreview? meshEditPreview,
+        CancellationToken cancellationToken,
         out string details)
     {
         // Serialize the Veldrid/Vulkan raster path against disposal and resize/backend
@@ -602,7 +634,9 @@ public static class VulkanRasterRenderer
         // managed exception.
         lock (RenderSync)
         {
-            return RenderLocked(scene, cameraPosition, basis, width, height, preview, cancellationToken, out details);
+            return RenderLocked(
+                scene, cameraPosition, basis, width, height, preview, meshEditPreview,
+                cancellationToken, out details);
         }
     }
 
@@ -614,6 +648,7 @@ public static class VulkanRasterRenderer
         int width,
         int height,
         VulkanRasterTransformPreview? preview,
+        VulkanRasterMeshEditPreview? meshEditPreview,
         CancellationToken cancellationToken,
         out string details)
     {
@@ -636,6 +671,11 @@ public static class VulkanRasterRenderer
         phase.Restart();
         PreparedRasterScene prepared = GetOrCreatePreparedScene(gd, resources, scene, cancellationToken);
         long prepareMs = phase.ElapsedMilliseconds;
+
+        phase.Restart();
+        bool hasMeshEditPreview = meshEditPreview != null && !meshEditPreview.IsIdentity;
+        UpdateMeshEditPreview(gd, prepared, meshEditPreview, cancellationToken);
+        long meshEditUploadMs = phase.ElapsedMilliseconds;
 
         phase.Restart();
         double cameraFar = ComputeCachedCameraFarPlane(prepared, cameraPosition);
@@ -707,9 +747,140 @@ public static class VulkanRasterRenderer
             ? $"triangles={prepared.TotalTriangleCount}/{prepared.SourceTriangleCount} ({prepared.NearClippedTriangleCount} invalid skipped)"
             : $"triangles={prepared.TotalTriangleCount}";
         string previewMode = hasPreview ? $", live-transform={preview!.SelectionId}" : string.Empty;
-        details = $"VULKAN RASTER PBR CACHED - {width}x{height}, revision={prepared.CacheStamp.Revision}, {triangleMode}, lights={prepared.LightCount}, {textureMode}, cache={(prepareMs == 0 ? "hot" : "ready")}{previewMode}, device={deviceMs}ms, targets={targetMs}ms, prepare={prepareMs}ms, uniform={uniformMs}ms, record={recordMs}ms, gpu+wait={gpuWaitMs}ms, readback={readbackMs}ms, total={total.ElapsedMilliseconds}ms";
+        if (hasMeshEditPreview)
+            previewMode += $", live-mesh-edit={meshEditPreview!.SelectionId}";
+        details = $"VULKAN RASTER PBR CACHED - {width}x{height}, revision={prepared.CacheStamp.Revision}, {triangleMode}, lights={prepared.LightCount}, {textureMode}, cache={(prepareMs == 0 ? "hot" : "ready")}{previewMode}, device={deviceMs}ms, targets={targetMs}ms, prepare={prepareMs}ms, mesh-edit-upload={meshEditUploadMs}ms, uniform={uniformMs}ms, record={recordMs}ms, gpu+wait={gpuWaitMs}ms, readback={readbackMs}ms, total={total.ElapsedMilliseconds}ms";
         Stage(details);
         return image;
+    }
+
+    private static void UpdateMeshEditPreview(
+        GraphicsDevice gd,
+        PreparedRasterScene prepared,
+        VulkanRasterMeshEditPreview? preview,
+        CancellationToken cancellationToken)
+    {
+        if (preview == null || preview.IsIdentity)
+        {
+            RestoreMeshEditPreview(gd, prepared);
+            return;
+        }
+
+        MeshEditPatchState? active = prepared.ActiveMeshEdit;
+        if (active == null ||
+            active.SelectionId != preview.SelectionId ||
+            active.GroupId != preview.GroupId)
+        {
+            RestoreMeshEditPreview(gd, prepared);
+            active = BuildMeshEditPatchState(prepared, preview);
+            prepared.ActiveMeshEdit = active;
+        }
+
+        int patchIndex = 0;
+        foreach (RasterTrianglePatch patch in active.Patches)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            Triangle source = patch.Source;
+            Vec3 a = (patch.CornerMask & 1) != 0 ? source.A + preview.WorldDelta : source.A;
+            Vec3 b = (patch.CornerMask & 2) != 0 ? source.B + preview.WorldDelta : source.B;
+            Vec3 c = (patch.CornerMask & 4) != 0 ? source.C + preview.WorldDelta : source.C;
+            Triangle moved = new(
+                a, b, c,
+                source.UvA, source.UvB, source.UvC,
+                source.Material,
+                source.GroupId);
+            int materialIndex = prepared.MaterialIds[source.Material];
+            RasterVertex[] vertices =
+            [
+                new RasterVertex(moved.A, moved.NormalA, moved.UvA, materialIndex),
+                new RasterVertex(moved.B, moved.NormalB, moved.UvB, materialIndex),
+                new RasterVertex(moved.C, moved.NormalC, moved.UvC, materialIndex)
+            ];
+            UploadTrianglePatch(gd, prepared, patch, vertices);
+
+            patchIndex++;
+            if ((patchIndex & 63) == 0)
+                ThrowIfCancellationRequested(cancellationToken, "upload Vulkan mesh edit preview");
+        }
+    }
+
+    private static MeshEditPatchState BuildMeshEditPatchState(
+        PreparedRasterScene prepared,
+        VulkanRasterMeshEditPreview preview)
+    {
+        Dictionary<int, byte> editByTriangle = new();
+        foreach (VulkanRasterMeshTriangleEdit edit in preview.TriangleEdits)
+        {
+            if (edit.TriangleIndex >= 0 && edit.CornerMask != 0)
+                editByTriangle[edit.TriangleIndex] = edit.CornerMask;
+        }
+
+        List<RasterTrianglePatch> patches = new(editByTriangle.Count);
+        uint opaqueCursor = 0;
+        uint transparentCursor = 0;
+        int localTriangleIndex = 0;
+        foreach (Triangle triangle in prepared.Scene.Triangles)
+        {
+            bool targetGroup = triangle.GroupId == preview.GroupId;
+            int targetTriangleIndex = targetGroup ? localTriangleIndex++ : -1;
+            if (!IsFinite(triangle.A) || !IsFinite(triangle.B) || !IsFinite(triangle.C) || !IsFinite(triangle.Normal))
+                continue;
+
+            bool transparent = IsTransparentMaterial(triangle.Material);
+            uint vertexStart = transparent ? transparentCursor : opaqueCursor;
+            if (targetTriangleIndex >= 0 && editByTriangle.TryGetValue(targetTriangleIndex, out byte cornerMask))
+            {
+                int materialIndex = prepared.MaterialIds[triangle.Material];
+                RasterVertex[] original =
+                [
+                    new RasterVertex(triangle.A, triangle.NormalA, triangle.UvA, materialIndex),
+                    new RasterVertex(triangle.B, triangle.NormalB, triangle.UvB, materialIndex),
+                    new RasterVertex(triangle.C, triangle.NormalC, triangle.UvC, materialIndex)
+                ];
+                patches.Add(new RasterTrianglePatch(
+                    transparent,
+                    vertexStart,
+                    triangle,
+                    cornerMask,
+                    original));
+            }
+
+            if (transparent)
+                transparentCursor += 3;
+            else
+                opaqueCursor += 3;
+        }
+
+        return new MeshEditPatchState
+        {
+            SelectionId = preview.SelectionId,
+            GroupId = preview.GroupId,
+            Patches = patches
+        };
+    }
+
+    private static void RestoreMeshEditPreview(GraphicsDevice gd, PreparedRasterScene prepared)
+    {
+        MeshEditPatchState? active = prepared.ActiveMeshEdit;
+        if (active == null)
+            return;
+
+        foreach (RasterTrianglePatch patch in active.Patches)
+            UploadTrianglePatch(gd, prepared, patch, patch.OriginalVertices);
+        prepared.ActiveMeshEdit = null;
+    }
+
+    private static void UploadTrianglePatch(
+        GraphicsDevice gd,
+        PreparedRasterScene prepared,
+        RasterTrianglePatch patch,
+        RasterVertex[] vertices)
+    {
+        DeviceBuffer destination = patch.Transparent
+            ? prepared.TransparentVertexBuffer
+            : prepared.OpaqueVertexBuffer;
+        uint byteOffset = checked(patch.VertexStart * (uint)Marshal.SizeOf<RasterVertex>());
+        gd.UpdateBuffer(destination, byteOffset, vertices);
     }
 
     private static void DrawVertexRanges(

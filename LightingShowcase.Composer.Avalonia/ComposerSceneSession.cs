@@ -33,7 +33,7 @@ internal sealed record ComposerModelEvidence(
 
 internal sealed record ComposerTriangleInfo(int Index, string Label);
 
-internal sealed class ComposerSceneSession : IDisposable
+internal sealed partial class ComposerSceneSession : IDisposable
 {
     private readonly SemaphoreSlim sceneGate = new(1, 1);
     private Scene scene;
@@ -208,13 +208,21 @@ internal sealed class ComposerSceneSession : IDisposable
         try
         {
             int? normalized = id.HasValue && scene.GroupById(id.Value) != null ? id : null;
-            bool changed = selectedObjectId != normalized || selectedTriangleIndex.HasValue;
+            bool changed = selectedObjectId != normalized || selectedTriangleIndex.HasValue || selectedMeshSelection.HasValue;
             if (!changed)
                 return false;
 
             selectedObjectId = normalized;
             selectedTriangleGroupId = null;
             selectedTriangleIndex = null;
+            selectedMeshSelection = null;
+            hoveredMeshSelection = null;
+            meshHoverVisible = true;
+            meshMovePreviewLocal = Vec3.Zero;
+            meshMovePreviewWorld = Vec3.Zero;
+            meshMoveAxisLock = ComposerGizmoAxis.None;
+            if (selectionMode != ComposerSelectionMode.Object)
+                selectionMode = ComposerSelectionMode.Object;
             RebuildSelectionOverlayCache();
             return true;
         }
@@ -241,6 +249,13 @@ internal sealed class ComposerSceneSession : IDisposable
             selectedObjectId = groupId;
             selectedTriangleGroupId = groupId;
             selectedTriangleIndex = localTriangleIndex;
+            selectionMode = ComposerSelectionMode.Face;
+            selectedMeshSelection = new ComposerMeshSelection(groupId, ComposerSelectionMode.Face, localTriangleIndex);
+            hoveredMeshSelection = null;
+            meshHoverVisible = true;
+            meshSelectionSerial = unchecked(meshSelectionSerial + 1);
+            meshMovePreviewLocal = Vec3.Zero;
+            meshMovePreviewWorld = Vec3.Zero;
             Triangle worldTriangle = TransformTriangleToWorld(group, group.LocalTriangles[localTriangleIndex]);
             selectedOverlayTriangles = new[] { worldTriangle };
             selectedOverlayBounds = BoundsOf(worldTriangle);
@@ -349,6 +364,14 @@ internal sealed class ComposerSceneSession : IDisposable
                 Path.GetFileNameWithoutExtension(path));
             editHistory.Clear();
             ScenePath = null;
+            meshTopologyByGroup.Clear();
+            selectedMeshSelection = null;
+            hoveredMeshSelection = null;
+            meshHoverVisible = true;
+            meshMovePreviewLocal = Vec3.Zero;
+            meshMovePreviewWorld = Vec3.Zero;
+            meshMoveAxisLock = ComposerGizmoAxis.None;
+            selectionMode = ComposerSelectionMode.Object;
             InvalidateRendererCaches();
             if (wasEmpty && scene.Triangles.Count > 0)
                 Camera.Reset(scene);
@@ -647,6 +670,14 @@ internal sealed class ComposerSceneSession : IDisposable
             ApplySelectionHighlightAndRebuild();
             selectedTriangleGroupId = null;
             selectedTriangleIndex = null;
+            selectedMeshSelection = null;
+            hoveredMeshSelection = null;
+            meshHoverVisible = true;
+            meshMovePreviewLocal = Vec3.Zero;
+            meshMovePreviewWorld = Vec3.Zero;
+            meshMoveAxisLock = ComposerGizmoAxis.None;
+            selectionMode = ComposerSelectionMode.Object;
+            meshTopologyByGroup.Clear();
             RebuildSelectionOverlayCache();
             ScenePath = null;
             RefreshRendererCachesAfterGeometryBake(CancellationToken.None);
@@ -668,6 +699,14 @@ internal sealed class ComposerSceneSession : IDisposable
             ApplySelectionHighlightAndRebuild();
             selectedTriangleGroupId = null;
             selectedTriangleIndex = null;
+            selectedMeshSelection = null;
+            hoveredMeshSelection = null;
+            meshHoverVisible = true;
+            meshMovePreviewLocal = Vec3.Zero;
+            meshMovePreviewWorld = Vec3.Zero;
+            meshMoveAxisLock = ComposerGizmoAxis.None;
+            selectionMode = ComposerSelectionMode.Object;
+            meshTopologyByGroup.Clear();
             RebuildSelectionOverlayCache();
             ScenePath = null;
             RefreshRendererCachesAfterGeometryBake(CancellationToken.None);
@@ -825,7 +864,10 @@ internal sealed class ComposerSceneSession : IDisposable
                 rasterCache = ShadowRasterRenderer.BuildCache(scene, cancellationToken);
             }
 
-            VulkanRasterTransformPreview? transformPreview = renderer == ComposerRendererKind.VulkanRaster
+            VulkanRasterMeshEditPreview? meshEditPreview = renderer == ComposerRendererKind.VulkanRaster
+                ? CreateVulkanMeshEditPreview()
+                : null;
+            VulkanRasterTransformPreview? transformPreview = renderer == ComposerRendererKind.VulkanRaster && meshEditPreview == null
                 ? CreateVulkanTransformPreview()
                 : null;
 
@@ -850,6 +892,7 @@ internal sealed class ComposerSceneSession : IDisposable
                     width,
                     height,
                     transformPreview,
+                    meshEditPreview,
                     cancellationToken,
                     out details),
 
@@ -888,7 +931,25 @@ internal sealed class ComposerSceneSession : IDisposable
                 _ => throw new ArgumentOutOfRangeException(nameof(renderer), renderer, "Unknown renderer.")
             };
 
-            if (TryGetSelectionOverlayForRender(out Aabb overlayBounds, out IReadOnlyList<Triangle> overlayTriangles))
+            if (selectionMode != ComposerSelectionMode.Object)
+            {
+                if (meshHoverVisible && TryBuildMeshHoverVisual(out ComposerMeshSelectionVisual hoverVisual))
+                    ComposerOverlayRenderer.DrawMeshHover(image, camera, hoverVisual);
+
+                if (TryBuildMeshSelectionVisual(out Aabb componentBounds, out ComposerMeshSelectionVisual componentVisual))
+                {
+                    ComposerOverlayRenderer.DrawSelection(
+                        image,
+                        camera,
+                        componentBounds,
+                        componentVisual.Faces,
+                        ComposerGizmoMode.Translate,
+                        componentVisual,
+                        drawBounds: false,
+                        axisConstraint: meshMoveAxisLock);
+                }
+            }
+            else if (TryGetSelectionOverlayForRender(out Aabb overlayBounds, out IReadOnlyList<Triangle> overlayTriangles))
             {
                 ComposerOverlayRenderer.DrawSelection(
                     image,
@@ -1032,8 +1093,16 @@ internal sealed class ComposerSceneSession : IDisposable
         selectedObjectId = null;
         selectedTriangleGroupId = null;
         selectedTriangleIndex = null;
+        selectedMeshSelection = null;
+        hoveredMeshSelection = null;
+        meshHoverVisible = true;
+        meshMovePreviewLocal = Vec3.Zero;
+        meshMovePreviewWorld = Vec3.Zero;
+        meshMoveAxisLock = ComposerGizmoAxis.None;
+        selectionMode = ComposerSelectionMode.Object;
         selectedOverlayBounds = null;
         selectedOverlayTriangles = Array.Empty<Triangle>();
+        meshTopologyByGroup.Clear();
     }
 
     private void RebuildSelectionOverlayCache()

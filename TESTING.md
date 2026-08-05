@@ -86,3 +86,13 @@ The opt-in GPU suite includes a Vulkan raster test that applies pending rotation
 - cancellation restores the identity pending transform.
 
 For an interactive timing check, select Vulkan raster, load a representative model, press `R` or `S`, and drag a gizmo. The frame details separate uniform update, command recording, GPU wait, readback, and total frame time. The hot path should show `cache=hot` and `live-transform=...`; it should not report a vertex-buffer refresh until pointer release.
+## Live component-edit validation
+
+The normal mesh-edit tests verify that entering Edge or Face mode does not expose an object-level bounding box before a component is picked. The opt-in GPU suite also moves a welded face without committing geometry and verifies that:
+
+- the scene revision stays unchanged during the drag;
+- render details report `live-mesh-edit=<selection id>`;
+- the Vulkan raster pixels change while the pointer is moving; and
+- cancellation leaves the authoritative mesh unchanged.
+
+For an interactive timing check, choose Vulkan raster, enter Edge or Face mode, click a visible component, and drag its move gizmo. The frame details report `mesh-edit-upload=...ms`; the cache should remain hot and no full geometry refresh should occur until pointer release.

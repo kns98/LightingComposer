@@ -63,6 +63,7 @@
     <Compile Include="../Rendering/ShadowRasterRenderer.cs" Link="Rendering/ShadowRasterRenderer.cs" />
     <Compile Include="../Rendering/VulkanRasterRenderer.cs" Link="Rendering/VulkanRasterRenderer.cs" />
     <Compile Include="../Rendering/VulkanRasterTransformPreview.cs" Link="Rendering/VulkanRasterTransformPreview.cs" />
+    <Compile Include="../Rendering/VulkanRasterMeshEditPreview.cs" Link="Rendering/VulkanRasterMeshEditPreview.cs" />
     <Compile Include="../Rendering/VeldridVulkanDevicePreflight.cs" Link="Rendering/VeldridVulkanDevicePreflight.cs" />
     <Compile Include="../Rendering/VulkanSceneComputeRenderer.cs" Link="Rendering/VulkanSceneComputeRenderer.cs" />
   </ItemGroup>

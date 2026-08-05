@@ -45,6 +45,10 @@ internal static class ComposerOverlayRenderer
 {
     private const uint BoundsColor = 0xff40c8ffu;
     private const uint SelectionWireColor = 0xff2080ffu;
+    private const uint ComponentPointColor = 0xff45e8ffu;
+    private const uint ComponentEdgeColor = 0xff55d8ffu;
+    private const uint HoverPointColor = 0xff56ff98u;
+    private const uint HoverEdgeColor = 0xff48ffb8u;
     private const int MaximumSelectionWireTriangles = 2500;
     private const uint OriginColor = 0xffffffffu;
     private const uint XAxisColor = 0xff4545f4u;
@@ -67,7 +71,10 @@ internal static class ComposerOverlayRenderer
         CameraDefinition camera,
         Aabb bounds,
         IEnumerable<Triangle>? selectedTriangles = null,
-        ComposerGizmoMode gizmoMode = ComposerGizmoMode.Translate)
+        ComposerGizmoMode gizmoMode = ComposerGizmoMode.Translate,
+        ComposerMeshSelectionVisual? meshSelection = null,
+        bool drawBounds = true,
+        ComposerGizmoAxis axisConstraint = ComposerGizmoAxis.None)
     {
         if (image == null) throw new ArgumentNullException(nameof(image));
         if (camera == null) throw new ArgumentNullException(nameof(camera));
@@ -79,8 +86,11 @@ internal static class ComposerOverlayRenderer
 
         if (selectedTriangles != null)
             DrawSelectedGeometryWireframe(image, camera, selectedTriangles);
+        if (meshSelection != null)
+            DrawMeshSelection(image, camera, meshSelection);
 
-        DrawBounds(image, camera, bounds);
+        if (drawBounds)
+            DrawBounds(image, camera, bounds);
         if (!TryCreateAxisGeometry(camera, bounds, image.Width, image.Height, out AxisGeometry geometry))
             return;
 
@@ -93,8 +103,72 @@ internal static class ComposerOverlayRenderer
                 DrawScaleGizmo(image, geometry);
                 break;
             default:
-                DrawTranslationGizmo(image, geometry);
+                DrawTranslationGizmo(image, geometry, axisConstraint);
                 break;
+        }
+    }
+
+
+    public static void DrawMeshHover(
+        RenderImage image,
+        CameraDefinition camera,
+        ComposerMeshSelectionVisual selection)
+    {
+        if (image == null) throw new ArgumentNullException(nameof(image));
+        if (camera == null) throw new ArgumentNullException(nameof(camera));
+        if (selection == null) throw new ArgumentNullException(nameof(selection));
+
+        DrawMeshVisual(
+            image,
+            camera,
+            selection,
+            HoverPointColor,
+            HoverEdgeColor,
+            selection.Mode == ComposerSelectionMode.Vertex ? 10 : 6,
+            edgeThickness: 7,
+            drawWhiteCenter: false);
+    }
+
+    private static void DrawMeshSelection(
+        RenderImage image,
+        CameraDefinition camera,
+        ComposerMeshSelectionVisual selection) =>
+        DrawMeshVisual(
+            image,
+            camera,
+            selection,
+            ComponentPointColor,
+            ComponentEdgeColor,
+            selection.Mode == ComposerSelectionMode.Vertex ? 8 : 5,
+            edgeThickness: 5,
+            drawWhiteCenter: true);
+
+    private static void DrawMeshVisual(
+        RenderImage image,
+        CameraDefinition camera,
+        ComposerMeshSelectionVisual selection,
+        uint pointColor,
+        uint edgeColor,
+        int radius,
+        int edgeThickness,
+        bool drawWhiteCenter)
+    {
+        foreach (ComposerWorldEdge edge in selection.Edges)
+        {
+            if (TryProject(edge.A, camera, image.Width, image.Height, out ProjectedPoint start) &&
+                TryProject(edge.B, camera, image.Width, image.Height, out ProjectedPoint end))
+            {
+                DrawLine(image, start.X, start.Y, end.X, end.Y, edgeColor, thickness: edgeThickness);
+            }
+        }
+
+        foreach (Vec3 point in selection.Points)
+        {
+            if (!TryProject(point, camera, image.Width, image.Height, out ProjectedPoint projected))
+                continue;
+            DrawDisc(image, (int)Math.Round(projected.X), (int)Math.Round(projected.Y), radius, pointColor);
+            if (drawWhiteCenter)
+                DrawDisc(image, (int)Math.Round(projected.X), (int)Math.Round(projected.Y), Math.Max(2, radius - 4), 0xffffffffu);
         }
     }
 
@@ -106,13 +180,25 @@ internal static class ComposerOverlayRenderer
         int height,
         double imageX,
         double imageY,
+        out ComposerGizmoHit hit) =>
+        TryHitGizmo(mode, camera, bounds, width, height, imageX, imageY, ComposerGizmoAxis.None, out hit);
+
+    public static bool TryHitGizmo(
+        ComposerGizmoMode mode,
+        CameraDefinition camera,
+        Aabb bounds,
+        int width,
+        int height,
+        double imageX,
+        double imageY,
+        ComposerGizmoAxis axisConstraint,
         out ComposerGizmoHit hit)
     {
         return mode switch
         {
             ComposerGizmoMode.Rotate => TryHitRotationRing(camera, bounds, width, height, imageX, imageY, out hit),
             ComposerGizmoMode.Scale => TryHitScaleHandle(camera, bounds, width, height, imageX, imageY, out hit),
-            _ => TryHitTranslationAxis(camera, bounds, width, height, imageX, imageY, out hit)
+            _ => TryHitTranslationAxis(camera, bounds, width, height, imageX, imageY, axisConstraint, out hit)
         };
     }
 
@@ -123,6 +209,17 @@ internal static class ComposerOverlayRenderer
         int height,
         double imageX,
         double imageY,
+        out ComposerGizmoHit hit) =>
+        TryHitTranslationAxis(camera, bounds, width, height, imageX, imageY, ComposerGizmoAxis.None, out hit);
+
+    public static bool TryHitTranslationAxis(
+        CameraDefinition camera,
+        Aabb bounds,
+        int width,
+        int height,
+        double imageX,
+        double imageY,
+        ComposerGizmoAxis axisConstraint,
         out ComposerGizmoHit hit)
     {
         hit = default;
@@ -133,9 +230,12 @@ internal static class ComposerOverlayRenderer
         ComposerGizmoHit best = default;
         double bestDistance = double.PositiveInfinity;
 
-        TestAxis(ComposerGizmoAxis.X, geometry.Center, geometry.XEnd);
-        TestAxis(ComposerGizmoAxis.Y, geometry.Center, geometry.YEnd);
-        TestAxis(ComposerGizmoAxis.Z, geometry.Center, geometry.ZEnd);
+        if (axisConstraint is ComposerGizmoAxis.None or ComposerGizmoAxis.X)
+            TestAxis(ComposerGizmoAxis.X, geometry.Center, geometry.XEnd);
+        if (axisConstraint is ComposerGizmoAxis.None or ComposerGizmoAxis.Y)
+            TestAxis(ComposerGizmoAxis.Y, geometry.Center, geometry.YEnd);
+        if (axisConstraint is ComposerGizmoAxis.None or ComposerGizmoAxis.Z)
+            TestAxis(ComposerGizmoAxis.Z, geometry.Center, geometry.ZEnd);
 
         if (bestDistance > hitRadius)
             return false;
@@ -401,11 +501,17 @@ internal static class ComposerOverlayRenderer
         }
     }
 
-    private static void DrawTranslationGizmo(RenderImage image, AxisGeometry geometry)
+    private static void DrawTranslationGizmo(
+        RenderImage image,
+        AxisGeometry geometry,
+        ComposerGizmoAxis axisConstraint)
     {
-        DrawAxis(image, geometry.Center, geometry.XEnd, XAxisColor, squareHandle: false);
-        DrawAxis(image, geometry.Center, geometry.YEnd, YAxisColor, squareHandle: false);
-        DrawAxis(image, geometry.Center, geometry.ZEnd, ZAxisColor, squareHandle: false);
+        if (axisConstraint is ComposerGizmoAxis.None or ComposerGizmoAxis.X)
+            DrawAxis(image, geometry.Center, geometry.XEnd, XAxisColor, squareHandle: false);
+        if (axisConstraint is ComposerGizmoAxis.None or ComposerGizmoAxis.Y)
+            DrawAxis(image, geometry.Center, geometry.YEnd, YAxisColor, squareHandle: false);
+        if (axisConstraint is ComposerGizmoAxis.None or ComposerGizmoAxis.Z)
+            DrawAxis(image, geometry.Center, geometry.ZEnd, ZAxisColor, squareHandle: false);
         DrawHandle(image, geometry.Center.X, geometry.Center.Y, OriginColor, radius: 4);
     }
 

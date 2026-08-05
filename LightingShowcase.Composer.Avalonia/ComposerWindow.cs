@@ -7,6 +7,7 @@ using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform;
 using Avalonia.Platform.Storage;
+using Avalonia.Threading;
 using LightingShowcase.CameraSystem;
 using LightingShowcase.Math3D;
 using LightingShowcase.Rendering;
@@ -22,6 +23,16 @@ internal sealed class ComposerWindow : Window
     }
 
     private sealed record GizmoModeChoice(ComposerGizmoMode Mode, string Label)
+    {
+        public override string ToString() => Label;
+    }
+
+    private sealed record SelectionModeChoice(ComposerSelectionMode Mode, string Label)
+    {
+        public override string ToString() => Label;
+    }
+
+    private sealed record MoveAxisChoice(ComposerGizmoAxis Axis, string Label)
     {
         public override string ToString() => Label;
     }
@@ -43,7 +54,8 @@ internal sealed class ComposerWindow : Window
             Vec3 startPosition,
             Vec3 startRotation,
             Vec3 startScale,
-            ComposerGizmoHit hit)
+            ComposerGizmoHit hit,
+            bool meshComponent = false)
         {
             SelectedId = selectedId;
             Mode = mode;
@@ -62,9 +74,11 @@ internal sealed class ComposerWindow : Window
             LastRotationVector = hit.RotationStartVector;
             LastPointerAngle = PointerAngle(startImagePoint.X, startImagePoint.Y, CenterX, CenterY);
             LastImagePoint = startImagePoint;
+            MeshComponent = meshComponent;
         }
 
         public int SelectedId { get; }
+        public bool MeshComponent { get; }
         public ComposerGizmoMode Mode { get; }
         public ComposerGizmoAxis Axis { get; }
         public Point StartImagePoint { get; }
@@ -99,6 +113,24 @@ internal sealed class ComposerWindow : Window
         new(ComposerGizmoMode.Scale, "Scale (S)")
     ];
 
+    private readonly SelectionModeChoice[] selectionModeChoices =
+    [
+        new(ComposerSelectionMode.Object, "Object (4)"),
+        new(ComposerSelectionMode.Vertex, "Vertex (1)"),
+        new(ComposerSelectionMode.Edge, "Edge (2)"),
+        new(ComposerSelectionMode.Face, "Face (3)")
+    ];
+
+    private readonly MoveAxisChoice[] moveAxisChoices =
+    [
+        new(ComposerGizmoAxis.None, "Axis: Auto (A)"),
+        new(ComposerGizmoAxis.X, "Lock X"),
+        new(ComposerGizmoAxis.Y, "Lock Y"),
+        new(ComposerGizmoAxis.Z, "Lock Z")
+    ];
+
+    private readonly string[] primitiveChoices = ["Cube", "Plane", "Sphere", "Cylinder"];
+
     private readonly ComposerSceneSession session = new();
     private readonly CancellationTokenSource lifetimeCancellation = new();
     private readonly Dictionary<ComposerRendererKind, double> lastFrameTimes = new();
@@ -108,6 +140,9 @@ internal sealed class ComposerWindow : Window
     private readonly TextBlock detailsText;
     private readonly ComboBox rendererBox;
     private readonly ComboBox gizmoModeBox;
+    private readonly ComboBox selectionModeBox;
+    private readonly ComboBox moveAxisBox;
+    private readonly ComboBox primitiveBox;
     private readonly ScrollViewer objectTree;
     private readonly StackPanel objectTreePanel;
     private readonly HashSet<int> expandedObjectIds = new();
@@ -119,12 +154,14 @@ internal sealed class ComposerWindow : Window
     private readonly Button newButton;
     private readonly Button openButton;
     private readonly Button insertButton;
+    private readonly Button addPrimitiveButton;
     private readonly Button saveButton;
     private readonly Button exportButton;
     private readonly Button undoButton;
     private readonly Button redoButton;
     private readonly Button duplicateButton;
     private readonly Button ungroupButton;
+    private readonly Button joinWeldButton;
     private readonly Button deleteButton;
     private readonly Button gridButton;
     private readonly Button applyButton;
@@ -161,6 +198,8 @@ internal sealed class ComposerWindow : Window
     private int lastRenderHeight = 1;
     private CancellationTokenSource? activeRenderCancellation;
     private CancellationTokenSource? resizeDebounceCancellation;
+    private readonly DispatcherTimer hoverPulseTimer;
+    private long lastHoverProbeTimestamp;
 
     public ComposerWindow(string[] startupArguments)
     {
@@ -173,12 +212,14 @@ internal sealed class ComposerWindow : Window
         newButton = NewButton("New");
         openButton = NewButton("Open…");
         insertButton = NewButton("Insert model…");
+        addPrimitiveButton = NewButton("Add primitive");
         saveButton = NewButton("Save scene…");
         exportButton = NewButton("Export package…");
         undoButton = NewButton("Undo");
         redoButton = NewButton("Redo");
         duplicateButton = NewButton("Duplicate");
         ungroupButton = NewButton("Ungroup");
+        joinWeldButton = NewButton("Join + weld");
         deleteButton = NewButton("Delete");
         gridButton = NewButton("Generate grid");
         applyButton = NewButton("Apply transform");
@@ -202,6 +243,25 @@ internal sealed class ComposerWindow : Window
             ItemsSource = gizmoModeChoices,
             SelectedIndex = 0,
             MinWidth = 112
+        };
+        selectionModeBox = new ComboBox
+        {
+            ItemsSource = selectionModeChoices,
+            SelectedIndex = 0,
+            MinWidth = 112
+        };
+        moveAxisBox = new ComboBox
+        {
+            ItemsSource = moveAxisChoices,
+            SelectedIndex = 0,
+            MinWidth = 108,
+            IsEnabled = false
+        };
+        primitiveBox = new ComboBox
+        {
+            ItemsSource = primitiveChoices,
+            SelectedIndex = 0,
+            MinWidth = 96
         };
         statusText = new TextBlock
         {
@@ -254,6 +314,22 @@ internal sealed class ComposerWindow : Window
             ClipToBounds = true
         };
 
+        hoverPulseTimer = new DispatcherTimer
+        {
+            Interval = TimeSpan.FromMilliseconds(280)
+        };
+        hoverPulseTimer.Tick += (_, _) =>
+        {
+            if (SelectedSelectionMode == ComposerSelectionMode.Object ||
+                SelectedRenderer.Kind is not (ComposerRendererKind.Raster or ComposerRendererKind.VulkanRaster))
+            {
+                return;
+            }
+            if (session.ToggleMeshHoverPulse())
+                _ = RequestRenderAsync(interactive: true);
+        };
+        hoverPulseTimer.Start();
+
         Content = BuildLayout();
         WireEvents();
         RefreshObjectTree();
@@ -277,7 +353,7 @@ internal sealed class ComposerWindow : Window
 
         Grid toolbar = new()
         {
-            ColumnDefinitions = new ColumnDefinitions("Auto,Auto,Auto,Auto,Auto,Auto,*,Auto,Auto,Auto"),
+            ColumnDefinitions = new ColumnDefinitions("Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,*,Auto,Auto,Auto,Auto,Auto"),
             ColumnSpacing = 8,
             Margin = new Thickness(10)
         };
@@ -287,20 +363,28 @@ internal sealed class ComposerWindow : Window
         Grid.SetColumn(openButton, 1);
         toolbar.Children.Add(insertButton);
         Grid.SetColumn(insertButton, 2);
+        toolbar.Children.Add(primitiveBox);
+        Grid.SetColumn(primitiveBox, 3);
+        toolbar.Children.Add(addPrimitiveButton);
+        Grid.SetColumn(addPrimitiveButton, 4);
         toolbar.Children.Add(saveButton);
-        Grid.SetColumn(saveButton, 3);
+        Grid.SetColumn(saveButton, 5);
         toolbar.Children.Add(undoButton);
-        Grid.SetColumn(undoButton, 4);
+        Grid.SetColumn(undoButton, 6);
         toolbar.Children.Add(redoButton);
-        Grid.SetColumn(redoButton, 5);
+        Grid.SetColumn(redoButton, 7);
         toolbar.Children.Add(pathText);
-        Grid.SetColumn(pathText, 6);
+        Grid.SetColumn(pathText, 8);
         toolbar.Children.Add(exportButton);
-        Grid.SetColumn(exportButton, 7);
+        Grid.SetColumn(exportButton, 9);
+        toolbar.Children.Add(selectionModeBox);
+        Grid.SetColumn(selectionModeBox, 10);
         toolbar.Children.Add(gizmoModeBox);
-        Grid.SetColumn(gizmoModeBox, 8);
+        Grid.SetColumn(gizmoModeBox, 11);
+        toolbar.Children.Add(moveAxisBox);
+        Grid.SetColumn(moveAxisBox, 12);
         toolbar.Children.Add(rendererBox);
-        Grid.SetColumn(rendererBox, 9);
+        Grid.SetColumn(rendererBox, 13);
         root.Children.Add(toolbar);
 
         Grid content = new()
@@ -359,7 +443,7 @@ internal sealed class ComposerWindow : Window
 
         Grid objectButtons = new()
         {
-            ColumnDefinitions = new ColumnDefinitions("*,*,*"),
+            ColumnDefinitions = new ColumnDefinitions("*,*,*,*"),
             ColumnSpacing = 8
         };
         objectButtons.Children.Add(duplicateButton);
@@ -367,6 +451,8 @@ internal sealed class ComposerWindow : Window
         Grid.SetColumn(ungroupButton, 1);
         objectButtons.Children.Add(deleteButton);
         Grid.SetColumn(deleteButton, 2);
+        objectButtons.Children.Add(joinWeldButton);
+        Grid.SetColumn(joinWeldButton, 3);
         panel.Children.Add(objectButtons);
         Grid.SetRow(objectButtons, 2);
 
@@ -416,7 +502,7 @@ internal sealed class ComposerWindow : Window
         stack.Children.Add(resetTransformButton);
         stack.Children.Add(new TextBlock
         {
-            Text = "Hierarchy: ▸/▾ expands group nodes. A … row lazily reveals triangle details in pages, so large meshes do not flood the tree. Ungroup promotes children or splits a mesh further. Apply bakes transforms into vertices; Ctrl+Z/Ctrl+Y undo and redo. Gizmos: G move, R rotate, S scale; Shift is precision and Ctrl snaps. Viewport: right drag orbits, middle drag pans, and wheel zooms.",
+            Text = "Hierarchy: ▸/▾ expands group nodes. Add Cube, Plane, Sphere, or Cylinder from the toolbar. Object/Vertex/Edge/Face modes use 4/1/2/3. Component editing starts with move only; shared imported corners are welded into common topology. Join + weld flattens an imported subtree into one editable mesh. Gizmos: G move, R rotate, S scale; Shift is precision and Ctrl snaps. Viewport: right drag orbits, middle drag pans, and wheel zooms.",
             TextWrapping = TextWrapping.Wrap,
             Opacity = 0.68,
             FontSize = 12,
@@ -435,12 +521,14 @@ internal sealed class ComposerWindow : Window
         newButton.Click += async (_, _) => await NewSceneAsync();
         openButton.Click += async (_, _) => await BrowseAndOpenAsync();
         insertButton.Click += async (_, _) => await BrowseAndInsertAsync();
+        addPrimitiveButton.Click += async (_, _) => await AddPrimitiveAsync();
         saveButton.Click += async (_, _) => await SaveSceneAsync();
         exportButton.Click += async (_, _) => await ExportPackageAsync();
         undoButton.Click += async (_, _) => await UndoAsync();
         redoButton.Click += async (_, _) => await RedoAsync();
         duplicateButton.Click += async (_, _) => await DuplicateSelectedAsync();
         ungroupButton.Click += async (_, _) => await UngroupSelectedAsync();
+        joinWeldButton.Click += async (_, _) => await JoinAndWeldSelectedAsync();
         deleteButton.Click += async (_, _) => await DeleteSelectedAsync();
         gridButton.Click += async (_, _) => await GenerateGridAsync();
         applyButton.Click += async (_, _) => await ApplyInspectorAsync();
@@ -452,23 +540,56 @@ internal sealed class ComposerWindow : Window
             detailsText.Text = SelectedRenderer.Description;
             _ = RequestRenderAsync(interactive: false);
         };
+        selectionModeBox.SelectionChanged += (_, _) =>
+        {
+            ComposerSelectionMode mode = SelectedSelectionMode;
+            session.SetSelectionMode(mode);
+            if (mode != ComposerSelectionMode.Object)
+                SelectGizmoMode(ComposerGizmoMode.Translate);
+            else
+                SelectMoveAxisLock(ComposerGizmoAxis.None);
+            gizmoModeBox.IsEnabled = mode == ComposerSelectionMode.Object;
+            moveAxisBox.IsEnabled = mode != ComposerSelectionMode.Object;
+            session.SetMeshMoveAxisLock(SelectedMoveAxisLock);
+            statusText.Text = mode == ComposerSelectionMode.Object
+                ? "Object selection mode."
+                : $"{mode} mode: move near a component to preview it, click to select, then drag an axis. X/Y/Z lock movement.";
+            _ = RequestRenderAsync(interactive: false);
+        };
         gizmoModeBox.SelectionChanged += (_, _) =>
         {
             statusText.Text = $"{SelectedGizmoMode} gizmo selected.";
             _ = RequestRenderAsync(interactive: false);
         };
+        moveAxisBox.SelectionChanged += (_, _) =>
+        {
+            session.SetMeshMoveAxisLock(SelectedMoveAxisLock);
+            if (SelectedSelectionMode != ComposerSelectionMode.Object)
+            {
+                statusText.Text = SelectedMoveAxisLock == ComposerGizmoAxis.None
+                    ? "Move axis unlocked. Click the X, Y, or Z gizmo axis."
+                    : $"Movement locked to {SelectedMoveAxisLock}. Only that gizmo axis is active.";
+                _ = RequestRenderAsync(interactive: false);
+            }
+        };
 
         viewport.PointerPressed += OnViewportPointerPressed;
         viewport.PointerMoved += OnViewportPointerMoved;
         viewport.PointerReleased += OnViewportPointerReleased;
+        viewport.PointerExited += (_, _) => ClearMeshHoverOverlay(requestRender: true);
         viewport.PointerCaptureLost += (_, _) =>
         {
             viewportDragMode = ViewportDragMode.None;
             leftPressed = false;
             if (gizmoDrag is GizmoDragState pending)
             {
-                session.CancelPendingTransform(pending.SelectedId);
-                LoadInspectorFromSelection();
+                if (pending.MeshComponent)
+                    session.CancelMeshElementMovePreview(pending.SelectedId);
+                else
+                {
+                    session.CancelPendingTransform(pending.SelectedId);
+                    LoadInspectorFromSelection();
+                }
             }
             gizmoDrag = null;
             _ = RequestRenderAsync(interactive: false);
@@ -476,6 +597,7 @@ internal sealed class ComposerWindow : Window
         viewport.PointerWheelChanged += (_, e) =>
         {
             if (!session.HasRenderableScene) return;
+            ClearMeshHoverOverlay(requestRender: false);
             session.Camera.Zoom(e.Delta.Y);
             _ = RequestRenderAsync(interactive: false);
             e.Handled = true;
@@ -489,6 +611,10 @@ internal sealed class ComposerWindow : Window
     private RendererChoice SelectedRenderer => rendererBox.SelectedItem as RendererChoice ?? rendererChoices[0];
     private ComposerGizmoMode SelectedGizmoMode =>
         (gizmoModeBox.SelectedItem as GizmoModeChoice)?.Mode ?? ComposerGizmoMode.Translate;
+    private ComposerSelectionMode SelectedSelectionMode =>
+        (selectionModeBox.SelectedItem as SelectionModeChoice)?.Mode ?? ComposerSelectionMode.Object;
+    private ComposerGizmoAxis SelectedMoveAxisLock =>
+        (moveAxisBox.SelectedItem as MoveAxisChoice)?.Axis ?? ComposerGizmoAxis.None;
 
     private async Task NewSceneAsync()
     {
@@ -503,12 +629,13 @@ internal sealed class ComposerWindow : Window
             pathText.Text = "Untitled composition";
             selectedObjectId = null;
             ClearVirtualTriangleSelection();
+            selectionModeBox.SelectedIndex = 0;
             expandedObjectIds.Clear();
             trianglePageOffsets.Clear();
             treeExpansionInitialized = false;
             RefreshObjectTree();
             SetInspectorEnabled(false);
-            statusText.Text = "New empty composition. Insert a model to begin.";
+            statusText.Text = "New empty composition. Add a primitive or insert a model to begin.";
             detailsText.Text = SelectedRenderer.Description;
         }
         catch (Exception ex)
@@ -570,6 +697,7 @@ internal sealed class ComposerWindow : Window
             pathText.Text = session.ScenePath ?? Path.GetFileName(path);
             selectedObjectId = null;
             ClearVirtualTriangleSelection();
+            selectionModeBox.SelectedIndex = 0;
             expandedObjectIds.Clear();
             trianglePageOffsets.Clear();
             treeExpansionInitialized = false;
@@ -602,6 +730,7 @@ internal sealed class ComposerWindow : Window
             pathText.Text = "Untitled composition (modified)";
             selectedObjectId = insertedId;
             ClearVirtualTriangleSelection();
+            selectionModeBox.SelectedIndex = 0;
             expandedObjectIds.Add(insertedId);
             RefreshObjectTree(insertedId);
             statusText.Text = $"Inserted {Path.GetFileName(path)} — {session.ObjectCount:N0} objects, {session.TriangleCount:N0} triangles{FormatImportDetails()}.";
@@ -610,6 +739,68 @@ internal sealed class ComposerWindow : Window
         catch (Exception ex)
         {
             statusText.Text = $"Insert failed: {ex.Message}";
+        }
+        finally
+        {
+            SetBusy(false);
+        }
+    }
+
+    private async Task AddPrimitiveAsync()
+    {
+        string primitiveName = primitiveBox.SelectedItem as string ?? primitiveChoices[0];
+        try
+        {
+            await StopCurrentRenderAsync();
+            SetBusy(true, $"Adding {primitiveName}…");
+            int insertedId = await Task.Run(
+                () => session.InsertPrimitive(primitiveName),
+                lifetimeCancellation.Token);
+            selectedObjectId = insertedId;
+            ClearVirtualTriangleSelection();
+            selectionModeBox.SelectedIndex = 0;
+            expandedObjectIds.Add(insertedId);
+            RefreshObjectTree(insertedId);
+            pathText.Text = "Untitled composition (modified)";
+            statusText.Text = $"Added {primitiveName}. Switch to Vertex, Edge, or Face mode to edit its welded topology.";
+            await RequestRenderAsync(interactive: false);
+        }
+        catch (Exception ex)
+        {
+            ReportOperationFailure("Could not add primitive", ex);
+        }
+        finally
+        {
+            SetBusy(false);
+        }
+    }
+
+    private async Task JoinAndWeldSelectedAsync()
+    {
+        if (selectedObjectId is not int id)
+            return;
+
+        try
+        {
+            await StopCurrentRenderAsync();
+            SetBusy(true, "Joining hierarchy and welding common vertices…");
+            bool joined = await Task.Run(
+                () => session.JoinAndWeldObject(id),
+                lifetimeCancellation.Token);
+            if (!joined)
+                throw new InvalidOperationException("The selected object has no editable mesh geometry.");
+
+            selectionModeBox.SelectedIndex = 0;
+            ClearVirtualTriangleSelection();
+            RefreshObjectTree(id);
+            UpdateHistoryButtons();
+            pathText.Text = "Untitled composition (modified)";
+            statusText.Text = $"Joined and welded the selected mesh; {session.LastImportDetails}.";
+            await RequestRenderAsync(interactive: false);
+        }
+        catch (Exception ex)
+        {
+            ReportOperationFailure("Join + weld failed", ex);
         }
         finally
         {
@@ -895,6 +1086,7 @@ internal sealed class ComposerWindow : Window
             selectedObjectId = preferred;
             pathText.Text = "Untitled composition (modified)";
             ClearVirtualTriangleSelection();
+            selectionModeBox.SelectedIndex = 0;
             RefreshObjectTree(preferred);
             ClearTransformTextBoxes();
             UpdateHistoryButtons();
@@ -925,6 +1117,7 @@ internal sealed class ComposerWindow : Window
             selectedObjectId = preferred;
             pathText.Text = "Untitled composition (modified)";
             ClearVirtualTriangleSelection();
+            selectionModeBox.SelectedIndex = 0;
             RefreshObjectTree(preferred);
             ClearTransformTextBoxes();
             UpdateHistoryButtons();
@@ -964,6 +1157,7 @@ internal sealed class ComposerWindow : Window
                 selectedObjectId = null;
             pathText.Text = "Untitled composition (modified)";
             ClearVirtualTriangleSelection();
+            selectionModeBox.SelectedIndex = 0;
             RefreshObjectTree(selectedObjectId);
             UpdateHistoryButtons();
             statusText.Text = $"Ungrouped into {promoted.Count:N0} node(s).";
@@ -1095,7 +1289,7 @@ internal sealed class ComposerWindow : Window
         {
             // Virtual triangle selection is restored after rebuilding the UI tree.
         }
-        else
+        else if (session.SelectionMode == ComposerSelectionMode.Object || !session.HasMeshComponentSelection)
         {
             selectedTriangleGroupId = null;
             selectedTriangleIndex = null;
@@ -1323,6 +1517,7 @@ internal sealed class ComposerWindow : Window
         resetTransformButton.IsEnabled = enabled;
         duplicateButton.IsEnabled = enabled;
         ungroupButton.IsEnabled = enabled && selectedObjectId is int id && session.CanUngroupObject(id);
+        joinWeldButton.IsEnabled = enabled && selectedObjectId is int joinId && session.CanJoinAndWeldObject(joinId);
         deleteButton.IsEnabled = enabled;
         gridButton.IsEnabled = enabled;
     }
@@ -1339,6 +1534,7 @@ internal sealed class ComposerWindow : Window
         if (point.Properties.IsMiddleButtonPressed ||
             (point.Properties.IsRightButtonPressed && e.KeyModifiers.HasFlag(KeyModifiers.Shift)))
         {
+            ClearMeshHoverOverlay(requestRender: false);
             viewportDragMode = ViewportDragMode.Pan;
             previousPointer = position;
             e.Pointer.Capture(viewport);
@@ -1348,6 +1544,7 @@ internal sealed class ComposerWindow : Window
 
         if (point.Properties.IsRightButtonPressed)
         {
+            ClearMeshHoverOverlay(requestRender: false);
             viewportDragMode = ViewportDragMode.Orbit;
             previousPointer = position;
             e.Pointer.Capture(viewport);
@@ -1359,6 +1556,7 @@ internal sealed class ComposerWindow : Window
         {
             if (TryBeginGizmoDrag(position))
             {
+                ClearMeshHoverOverlay(requestRender: false);
                 e.Pointer.Capture(viewport);
                 e.Handled = true;
                 return;
@@ -1373,17 +1571,20 @@ internal sealed class ComposerWindow : Window
 
     private void OnViewportPointerMoved(object? sender, PointerEventArgs e)
     {
+        Point current = e.GetPosition(viewport);
         if (gizmoDrag != null)
         {
-            UpdateGizmoDrag(e.GetPosition(viewport), e.KeyModifiers);
+            UpdateGizmoDrag(current, e.KeyModifiers);
             e.Handled = true;
             return;
         }
 
         if (viewportDragMode == ViewportDragMode.None)
+        {
+            UpdateMeshHover(current);
             return;
+        }
 
-        Point current = e.GetPosition(viewport);
         Vector delta = current - previousPointer;
         previousPointer = current;
 
@@ -1400,6 +1601,64 @@ internal sealed class ComposerWindow : Window
         e.Handled = true;
     }
 
+    private void UpdateMeshHover(Point viewportPoint)
+    {
+        if (SelectedSelectionMode == ComposerSelectionMode.Object ||
+            leftPressed ||
+            gizmoDrag != null ||
+            viewportDragMode != ViewportDragMode.None)
+        {
+            ClearMeshHoverOverlay(requestRender: false);
+            return;
+        }
+
+        long now = Stopwatch.GetTimestamp();
+        long minimumInterval = Math.Max(1, Stopwatch.Frequency / 30);
+        if (now - lastHoverProbeTimestamp < minimumInterval)
+            return;
+        lastHoverProbeTimestamp = now;
+
+        if (!TryViewportToImagePoint(viewportPoint, out Point imagePoint))
+        {
+            ClearMeshHoverOverlay(requestRender: true);
+            return;
+        }
+
+        double normalizedX = imagePoint.X / Math.Max(1, lastRenderWidth);
+        double normalizedY = imagePoint.Y / Math.Max(1, lastRenderHeight);
+        ComposerMeshPickResult? hover = session.UpdateMeshHover(
+            session.Camera.Snapshot(),
+            normalizedX,
+            normalizedY,
+            lastRenderWidth,
+            lastRenderHeight,
+            SelectedSelectionMode,
+            out bool changed);
+        if (!changed)
+            return;
+
+        if (hover != null)
+        {
+            string axisHint = SelectedMoveAxisLock == ComposerGizmoAxis.None
+                ? "X/Y/Z can lock movement after selection"
+                : $"movement locked to {SelectedMoveAxisLock}";
+            statusText.Text = $"Nearby {hover.Label} — click to select; {axisHint}.";
+        }
+        else
+        {
+            statusText.Text = $"{SelectedSelectionMode} mode: move near a component to preview it.";
+        }
+        _ = RequestRenderAsync(interactive: true);
+    }
+
+    private void ClearMeshHoverOverlay(bool requestRender)
+    {
+        if (!session.ClearMeshHover())
+            return;
+        if (requestRender && session.HasRenderableScene)
+            _ = RequestRenderAsync(interactive: true);
+    }
+
     private async void OnViewportPointerReleased(object? sender, PointerReleasedEventArgs e)
     {
         Point releasePoint = e.GetPosition(viewport);
@@ -1408,10 +1667,15 @@ internal sealed class ComposerWindow : Window
             UpdateGizmoDrag(releasePoint, e.KeyModifiers);
             int commitId = gizmoDrag.SelectedId;
             ComposerGizmoMode committedMode = gizmoDrag.Mode;
+            bool meshComponent = gizmoDrag.MeshComponent;
             gizmoDrag = null;
             e.Pointer.Capture(null);
             await StopCurrentRenderAsync();
-            bool committed = await Task.Run(() => session.CommitPendingTransform(commitId), lifetimeCancellation.Token);
+            bool committed = await Task.Run(
+                () => meshComponent
+                    ? session.CommitMeshElementMove(commitId)
+                    : session.CommitPendingTransform(commitId),
+                lifetimeCancellation.Token);
             if (!committed)
             {
                 statusText.Text = "The transform target no longer exists.";
@@ -1419,12 +1683,17 @@ internal sealed class ComposerWindow : Window
                 return;
             }
 
-            ClearVirtualTriangleSelection();
+            if (!meshComponent)
+            {
+                ClearVirtualTriangleSelection();
+                ClearTransformTextBoxes();
+            }
             RefreshObjectTree(commitId);
-            ClearTransformTextBoxes();
             UpdateHistoryButtons();
             pathText.Text = "Untitled composition (modified)";
-            statusText.Text = $"Baked {committedMode.ToString().ToLowerInvariant()} transform into geometry. {session.LastGeometryRefreshDetails}";
+            statusText.Text = meshComponent
+                ? $"Moved the selected {SelectedSelectionMode.ToString().ToLowerInvariant()} and baked shared welded vertices once. {session.LastGeometryRefreshDetails}"
+                : $"Baked {committedMode.ToString().ToLowerInvariant()} transform into geometry. {session.LastGeometryRefreshDetails}";
             await RequestRenderAsync(interactive: false);
             e.Handled = true;
             return;
@@ -1449,14 +1718,48 @@ internal sealed class ComposerWindow : Window
                 double normalizedX = imagePoint.X / Math.Max(1, lastRenderWidth);
                 double normalizedY = imagePoint.Y / Math.Max(1, lastRenderHeight);
                 CameraDefinition camera = session.Camera.Snapshot();
-                int? hitId = await Task.Run(() => session.PickObject(
-                    camera,
-                    normalizedX,
-                    normalizedY,
-                    lastRenderWidth,
-                    lastRenderHeight));
-                if (hitId.HasValue)
-                    SelectObject(hitId.Value);
+                if (SelectedSelectionMode == ComposerSelectionMode.Object)
+                {
+                    int? hitId = await Task.Run(() => session.PickObject(
+                        camera,
+                        normalizedX,
+                        normalizedY,
+                        lastRenderWidth,
+                        lastRenderHeight));
+                    if (hitId.HasValue)
+                        SelectObject(hitId.Value);
+                }
+                else
+                {
+                    ComposerSelectionMode mode = SelectedSelectionMode;
+                    ComposerMeshPickResult? picked = await Task.Run(() => session.PickMeshElement(
+                        camera,
+                        normalizedX,
+                        normalizedY,
+                        lastRenderWidth,
+                        lastRenderHeight,
+                        mode));
+                    if (picked != null)
+                    {
+                        selectedObjectId = picked.GroupId;
+                        if (picked.Mode == ComposerSelectionMode.Face)
+                        {
+                            selectedTriangleGroupId = picked.GroupId;
+                            selectedTriangleIndex = picked.ElementIndex;
+                        }
+                        else
+                        {
+                            selectedTriangleGroupId = null;
+                            selectedTriangleIndex = null;
+                        }
+                        RefreshObjectTree(picked.GroupId);
+                        string axisHint = SelectedMoveAxisLock == ComposerGizmoAxis.None
+                            ? "drag X, Y, or Z; press X/Y/Z to lock"
+                            : $"movement is locked to {SelectedMoveAxisLock}";
+                        statusText.Text = $"Selected {picked.Label}; {axisHint}. Shift is precise and Ctrl snaps.";
+                        await RequestRenderAsync(interactive: false);
+                    }
+                }
             }
             e.Handled = true;
         }
@@ -1465,15 +1768,19 @@ internal sealed class ComposerWindow : Window
     private bool TryBeginGizmoDrag(Point viewportPoint)
     {
         if (selectedObjectId is not int selectedId ||
-            session.GetTransformTargetState(selectedId) is not ComposerObjectState state ||
-            session.GetTransformTargetBounds(selectedId) is not Aabb bounds ||
+            session.GetActiveSelectionBounds() is not Aabb bounds ||
             !TryViewportToImagePoint(viewportPoint, out Point imagePoint))
         {
             return false;
         }
 
+        bool meshComponent = SelectedSelectionMode != ComposerSelectionMode.Object && session.HasMeshComponentSelection;
+        ComposerObjectState? state = session.GetTransformTargetState(selectedId);
+        if (!meshComponent && state == null)
+            return false;
+
         CameraDefinition camera = session.Camera.Snapshot();
-        ComposerGizmoMode mode = SelectedGizmoMode;
+        ComposerGizmoMode mode = meshComponent ? ComposerGizmoMode.Translate : SelectedGizmoMode;
         if (!ComposerOverlayRenderer.TryHitGizmo(
                 mode,
                 camera,
@@ -1482,6 +1789,7 @@ internal sealed class ComposerWindow : Window
                 lastRenderHeight,
                 imagePoint.X,
                 imagePoint.Y,
+                meshComponent ? SelectedMoveAxisLock : ComposerGizmoAxis.None,
                 out ComposerGizmoHit hit))
         {
             return false;
@@ -1492,11 +1800,14 @@ internal sealed class ComposerWindow : Window
             mode,
             hit.Axis,
             imagePoint,
-            state.Position,
-            state.Rotation,
-            state.Scale,
-            hit);
-        statusText.Text = $"Dragging {hit.Axis} {mode.ToString().ToLowerInvariant()} gizmo…";
+            meshComponent ? Vec3.Zero : state!.Position,
+            meshComponent ? Vec3.Zero : state!.Rotation,
+            meshComponent ? new Vec3(1, 1, 1) : state!.Scale,
+            hit,
+            meshComponent);
+        statusText.Text = meshComponent
+            ? $"Moving selected {SelectedSelectionMode.ToString().ToLowerInvariant()} on {hit.Axis}…"
+            : $"Dragging {hit.Axis} {mode.ToString().ToLowerInvariant()} gizmo…";
         return true;
     }
 
@@ -1587,31 +1898,41 @@ internal sealed class ComposerWindow : Window
             }
         }
 
-        if (!session.UpdateTransformTarget(
+        bool updated = drag.MeshComponent
+            ? session.UpdateMeshElementMovePreview(drag.SelectedId, updatedPosition)
+            : session.UpdateTransformTarget(
                 drag.SelectedId,
                 updatedPosition,
                 updatedRotation,
-                updatedScale))
+                updatedScale);
+        if (!updated)
         {
             gizmoDrag = null;
             statusText.Text = "The transform target no longer exists.";
             return;
         }
 
-        LoadInspectorFromSelection();
+        if (!drag.MeshComponent)
+            LoadInspectorFromSelection();
         pathText.Text = "Untitled composition (modified)";
 
         ComposerRendererKind renderer = SelectedRenderer.Kind;
         if (renderer == ComposerRendererKind.VulkanRaster || CanRenderContinuously(renderer))
         {
             _ = RequestRenderAsync(interactive: true);
-            statusText.Text = renderer == ComposerRendererKind.VulkanRaster
-                ? $"Live Vulkan {drag.Mode.ToString().ToLowerInvariant()} preview; release to bake once."
-                : $"Pseudo-real-time {drag.Mode.ToString().ToLowerInvariant()} preview; release for the final frame.";
+            statusText.Text = drag.MeshComponent
+                ? renderer == ComposerRendererKind.VulkanRaster
+                    ? $"Live Vulkan mesh deformation preview; release to bake welded vertices once."
+                    : $"Pseudo-real-time component overlay; release to rebuild welded vertices once."
+                : renderer == ComposerRendererKind.VulkanRaster
+                    ? $"Live Vulkan {drag.Mode.ToString().ToLowerInvariant()} preview; release to bake once."
+                    : $"Pseudo-real-time {drag.Mode.ToString().ToLowerInvariant()} preview; release for the final frame.";
         }
         else
         {
-            statusText.Text = $"{SelectedRenderer.Label}: release to render the {drag.Mode.ToString().ToLowerInvariant()} transform.";
+            statusText.Text = drag.MeshComponent
+                ? $"{SelectedRenderer.Label}: release to bake the component move."
+                : $"{SelectedRenderer.Label}: release to render the {drag.Mode.ToString().ToLowerInvariant()} transform.";
         }
     }
 
@@ -1681,6 +2002,7 @@ internal sealed class ComposerWindow : Window
         if (session.GetObjectState(id) == null)
             return;
 
+        selectionModeBox.SelectedIndex = 0;
         selectedObjectId = id;
         ClearVirtualTriangleSelection();
         RefreshObjectTree(id);
@@ -1692,11 +2014,12 @@ internal sealed class ComposerWindow : Window
         if (!session.SetSelectedTriangle(groupId, triangleIndex))
             return;
 
+        selectionModeBox.SelectedIndex = Array.FindIndex(selectionModeChoices, choice => choice.Mode == ComposerSelectionMode.Face);
         selectedObjectId = groupId;
         selectedTriangleGroupId = groupId;
         selectedTriangleIndex = triangleIndex;
         RefreshObjectTree(groupId);
-        statusText.Text = $"Selected virtual Triangle {triangleIndex + 1:N0}. It adds no scene node; transforms and ungroup target the owning mesh.";
+        statusText.Text = $"Selected Face {triangleIndex + 1:N0}. Drag the move gizmo to move its three welded vertices.";
         _ = RequestRenderAsync(interactive: false);
     }
 
@@ -1747,6 +2070,39 @@ internal sealed class ComposerWindow : Window
 
         if (e.Source is not TextBox && e.KeyModifiers == KeyModifiers.None)
         {
+            ComposerSelectionMode? selectionMode = e.Key switch
+            {
+                Key.D1 or Key.NumPad1 => ComposerSelectionMode.Vertex,
+                Key.D2 or Key.NumPad2 => ComposerSelectionMode.Edge,
+                Key.D3 or Key.NumPad3 => ComposerSelectionMode.Face,
+                Key.D4 or Key.NumPad4 => ComposerSelectionMode.Object,
+                _ => null
+            };
+            if (selectionMode.HasValue)
+            {
+                SelectSelectionMode(selectionMode.Value);
+                e.Handled = true;
+                return;
+            }
+
+            if (SelectedSelectionMode != ComposerSelectionMode.Object)
+            {
+                ComposerGizmoAxis? moveAxis = e.Key switch
+                {
+                    Key.X => ComposerGizmoAxis.X,
+                    Key.Y => ComposerGizmoAxis.Y,
+                    Key.Z => ComposerGizmoAxis.Z,
+                    Key.A => ComposerGizmoAxis.None,
+                    _ => null
+                };
+                if (moveAxis.HasValue)
+                {
+                    SelectMoveAxisLock(moveAxis.Value);
+                    e.Handled = true;
+                    return;
+                }
+            }
+
             ComposerGizmoMode? mode = e.Key switch
             {
                 Key.G => ComposerGizmoMode.Translate,
@@ -1800,8 +2156,28 @@ internal sealed class ComposerWindow : Window
         }
     }
 
+    private void SelectSelectionMode(ComposerSelectionMode mode)
+    {
+        int index = Array.FindIndex(selectionModeChoices, choice => choice.Mode == mode);
+        if (index >= 0)
+            selectionModeBox.SelectedIndex = index;
+    }
+
+    private void SelectMoveAxisLock(ComposerGizmoAxis axis)
+    {
+        int index = Array.FindIndex(moveAxisChoices, choice => choice.Axis == axis);
+        if (index >= 0)
+            moveAxisBox.SelectedIndex = index;
+    }
+
     private void SelectGizmoMode(ComposerGizmoMode mode)
     {
+        if (SelectedSelectionMode != ComposerSelectionMode.Object && mode != ComposerGizmoMode.Translate)
+        {
+            statusText.Text = "Vertex, edge, and face editing currently support move only.";
+            mode = ComposerGizmoMode.Translate;
+        }
+
         int index = Array.FindIndex(gizmoModeChoices, choice => choice.Mode == mode);
         if (index >= 0)
             gizmoModeBox.SelectedIndex = index;
@@ -2050,10 +2426,14 @@ internal sealed class ComposerWindow : Window
         newButton.IsEnabled = !busy;
         openButton.IsEnabled = !busy;
         insertButton.IsEnabled = !busy;
+        addPrimitiveButton.IsEnabled = !busy;
+        primitiveBox.IsEnabled = !busy;
         saveButton.IsEnabled = !busy;
         exportButton.IsEnabled = !busy;
         rendererBox.IsEnabled = !busy;
-        gizmoModeBox.IsEnabled = !busy;
+        selectionModeBox.IsEnabled = !busy;
+        gizmoModeBox.IsEnabled = !busy && SelectedSelectionMode == ComposerSelectionMode.Object;
+        moveAxisBox.IsEnabled = !busy && SelectedSelectionMode != ComposerSelectionMode.Object;
         objectTree.IsEnabled = !busy;
         if (selectedObjectId.HasValue)
             SetInspectorEnabled(!busy);
@@ -2080,6 +2460,7 @@ internal sealed class ComposerWindow : Window
 
     private void DisposeWindowResources()
     {
+        hoverPulseTimer.Stop();
         lifetimeCancellation.Cancel();
         activeRenderCancellation?.Cancel();
         resizeDebounceCancellation?.Cancel();

@@ -113,6 +113,51 @@ public sealed class GpuTransformIntegrationTests
         Assert.True(session.CancelPendingTransform(rootId));
     }
 
+    [Fact]
+    [Trait("Category", "Gpu")]
+    public void Vulkan_raster_previews_face_move_without_rebuilding_scene_geometry()
+    {
+        if (!string.Equals(
+                Environment.GetEnvironmentVariable("LIGHTINGSHOWCASE_RUN_GPU_TESTS"),
+                "1",
+                StringComparison.Ordinal))
+        {
+            output.WriteLine("GPU integration test not requested. Set LIGHTINGSHOWCASE_RUN_GPU_TESTS=1 to run it.");
+            return;
+        }
+
+        using ComposerSceneSession session = new();
+        int groupId = session.InsertPrimitive("Cube");
+        Assert.True(session.SetSelectedTriangle(groupId, 0));
+        session.FrameObject(groupId);
+        var camera = session.Camera.Snapshot();
+        SceneCacheStamp beforeStamp = session.CaptureSceneCacheStampForTests();
+
+        ComposerFrame before = session.Render(
+            ComposerRendererKind.VulkanRaster,
+            camera,
+            192,
+            144,
+            interactive: true,
+            CancellationToken.None);
+
+        Assert.True(session.UpdateMeshElementMovePreview(groupId, new Vec3(0.35, 0.2, 0.15)));
+        Assert.Equal(beforeStamp.Revision, session.CaptureSceneCacheStampForTests().Revision);
+
+        ComposerFrame preview = session.Render(
+            ComposerRendererKind.VulkanRaster,
+            camera,
+            192,
+            144,
+            interactive: true,
+            CancellationToken.None);
+
+        Assert.Contains("live-mesh-edit=", preview.Details, StringComparison.Ordinal);
+        Assert.NotEqual(HashPixels(before.Image), HashPixels(preview.Image));
+        Assert.Equal(beforeStamp.Revision, session.CaptureSceneCacheStampForTests().Revision);
+        Assert.True(session.CancelMeshElementMovePreview(groupId));
+    }
+
     private static ulong HashPixels(RenderImage image)
     {
         const ulong offset = 14695981039346656037UL;

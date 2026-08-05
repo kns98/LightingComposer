@@ -6,9 +6,12 @@ A standalone, platform-neutral scene composer and renderer built with Avalonia a
 
 - Open a scene or 3D model.
 - Insert multiple glTF/GLB, FBX, OBJ, 3DS, PLY, STL, and PropXML assets.
+- Add Cube, Plane, Sphere, and Cylinder primitives directly from the composer toolbar.
 - Browse objects in a recursive scene tree and select them from the tree or rendered viewport.
 - Orbit, pan, and zoom the preview on every rendering backend.
 - Highlight the selected object and draw overlaid move, rotation-ring, and scale gizmos for X/Y/Z transforms, including uniform scaling.
+- Switch among Object, Vertex, Edge, and Face selection. Mesh-component editing initially supports move only.
+- Reconstruct welded indexed topology from imported triangle meshes, and use **Join + weld** to flatten an imported subtree into one editable mesh.
 - Edit position, rotation, and scale numerically; Enter or **Apply transform** bakes the change into vertex positions and normals, clears the fields, and redraws the active renderer.
 - Inserted assets are wrapped in one top-level group while retaining their imported child hierarchy.
 - Rename, show/hide, duplicate, delete, reset, frame, or ungroup any non-terminal group or mesh node.
@@ -66,10 +69,13 @@ A path may also be passed without the `compose` verb:
 
 ## Viewport controls
 
-- Left click: select the highest imported object group under the pointer.
+- Left click in Object mode: select the highest imported object group under the pointer.
+- `1`, `2`, `3`, and `4`: switch to Vertex, Edge, Face, and Object selection. Edge and vertex picks must be close to the projected component; Face mode selects the directly clicked front face. Component modes hide the object bounding box until a component is selected, then show only the component highlight and move gizmo.
+- Choose Cube, Plane, Sphere, or Cylinder and press **Add primitive** to create an editable mesh object.
+- **Join + weld** bakes the selected hierarchy, flattens its descendants, and merges coincident positions into common vertex/edge topology. This operation is undoable.
 - `G`, `R`, and `S`: choose Move, Rotate, or Scale, matching Blender's primary transform shortcuts. The toolbar selector provides the same modes.
 - Drag a red, green, or blue move axis, rotation ring, or scale handle. The white center scale handle scales uniformly. Hold Shift for precision and Ctrl for snapping.
-- Vulkan raster previews the selected subtree live by updating a transform uniform and issuing draw ranges over the existing vertex buffers. Pointer moves do not rebuild or reupload geometry; release bakes once and preserves the existing undo/redo model.
+- Vulkan raster previews object transforms live through a transform uniform. Component movement patches only affected triangle vertices in the existing GPU buffers, so the rendered mesh deforms during the drag; shared welded vertices are committed once on release.
 - Software raster and sufficiently fast Vulkan compute frames are coalesced and throttled as pseudo-real-time previews. CPU ray rendering waits for release.
 - Right drag: orbit.
 - Middle drag or Shift+right drag: pan.
@@ -81,7 +87,7 @@ A path may also be passed without the `compose` verb:
 - `Ctrl+Z` / `Ctrl+Y`: undo or redo.
 - Use a disclosure arrow to open group nodes. Use the lazy `…` row to page triangle leaves without creating thousands of scene nodes.
 
-Viewport selection resolves to the highest top-level asset group, so clicking a model moves the complete inserted asset by default. The hierarchy panel has separate disclosure arrows for expanding and collapsing nodes. Selecting a child explicitly in the hierarchy makes position, rotation, scale, visibility, name, framing, and gizmo operations target that child node.
+Object-mode viewport selection resolves to the highest top-level asset group, so clicking a model moves the complete inserted asset by default. The hierarchy panel has separate disclosure arrows for expanding and collapsing nodes. Selecting a child explicitly in the hierarchy makes position, rotation, scale, visibility, name, framing, and gizmo operations target that child node.
 
 ## Command-line rendering
 
@@ -139,7 +145,7 @@ LightingShowcase.ObjectLibrary.*/     Built-in scene objects
 
 Transforms are authored as temporary editor values only until they are committed. A commit rewrites the selected subtree's triangle positions and inverse-transpose transformed normals, converts transformed procedural primitives to mesh authoring data, resets the node transform to identity, increments the scene revision, and refreshes the existing Vulkan raster vertex buffers in place. Textures, descriptor sets, pipelines, and render-target allocations remain cached. This means the commit has a one-time vertex upload cost, but there is no extra matrix or scene-graph transform cost on later frames.
 
-Selection is a cached post-process overlay and does not change scene materials or invalidate Vulkan geometry. At most 256 sampled triangles are retained for the orange wire overlay; the complete selected mesh is not traversed on every frame.
+Selection is a cached post-process overlay and does not change scene materials or invalidate Vulkan geometry. Component modes suppress the whole-object bounds. For Vulkan raster component movement, a small cached list of affected triangle-buffer offsets is patched during dragging and restored or replaced on cancellation, reselection, or commit. At most 256 sampled triangles are retained for the object wire overlay; the complete selected mesh is not traversed on every frame.
 
 GPU ID picking and detailed benchmark export remain future extensions.
 

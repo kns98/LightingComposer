@@ -2,9 +2,9 @@
 
 This executable provides the Avalonia scene-composition UI and the headless `render` command.
 
-Committed transforms are baked into triangle positions and normals. The UI clears the transform fields, records an undo command, refreshes the Vulkan raster vertex buffers in place, and redraws. The hierarchy uses lazy virtual triangle rows so inspecting a large mesh does not create additional renderable scene nodes. Any non-terminal selected node can be ungrouped.
+Committed transforms are baked into triangle positions and normals. The UI clears the transform fields, records an undo command, refreshes the Vulkan raster vertex buffers in place, and redraws. The hierarchy uses lazy virtual triangle rows so inspecting a large mesh does not create additional renderable scene nodes. Any non-terminal selected node can be ungrouped. The toolbar can also add Cube, Plane, Sphere, and Cylinder primitives; Object/Vertex/Edge/Face selection uses the 4/1/2/3 keys. Component editing starts with move only. Edge and face modes hide whole-object bounds, require direct component picking, and use live affected-vertex updates in Vulkan raster. **Join + weld** converts an imported hierarchy to one welded editable mesh.
 
-See the repository-level `README.md` and `TESTING.md` for usage and verification commands.
+See the repository-level `README.md`, `MESH_EDITING.md`, `VALIDATION_NOTES.md`, and `TESTING.md` for usage and verification commands.
 
 ## Export package
 
