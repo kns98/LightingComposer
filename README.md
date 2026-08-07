@@ -1,3 +1,16 @@
+#Running in Linux
+
+set this library link in your bin folder.
+
+LIBDL="$(ldconfig -p | awk '/libdl\.so\.2/ {print $NF; exit}')"
+test -n "$LIBDL" || {
+    echo "libdl.so.2 was not found"
+    exit 1
+}
+
+ln -sfn "$LIBDL" ./libdl.so
+ls -l ./libdl.so
+
 # LightingShowcase Avalonia Composer
 
 A standalone, platform-neutral scene composer and renderer built with Avalonia and .NET 8.
