@@ -2,7 +2,13 @@
 
 ## Add a primitive
 
-Choose **Cube**, **Plane**, **Sphere**, or **Cylinder** in the toolbar and press **Add primitive**. The new object is selected in Object mode and participates in the normal transform, undo, save, and export workflows.
+Choose **Plane**, **Cube**, **Circle**, **UV Sphere**, **Icosphere**, **Cylinder**, **Cone**, **Torus**, or **Grid** and press **Add primitive**. The new object starts as a parameterized procedural object and opens a modeless Parameters window. Length parameters are in meters. Monkey/Suzanne is intentionally not included.
+
+## Procedural object to mesh
+
+A newly added standard primitive keeps `PrimitiveKind` and `PrimitiveParameters` as its authoring source. `LocalTriangles` are the generated render/pick mesh. The Parameters window can be closed and reopened without losing this state.
+
+Choose **Convert to Mesh** when the procedural controls are no longer wanted. **Join + weld** also creates ordinary mesh authoring data. If a Vertex, Edge, or Face move is committed, the mesh edit becomes authoritative and primitive metadata is cleared automatically. Undo restores the prior procedural state where the operation has an undo record.
 
 ## Selection modes
 

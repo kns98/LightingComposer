@@ -129,7 +129,18 @@ internal sealed class ComposerWindow : Window
         new(ComposerGizmoAxis.Z, "Lock Z")
     ];
 
-    private readonly string[] primitiveChoices = ["Cube", "Plane", "Sphere", "Cylinder"];
+    private readonly string[] primitiveChoices =
+    [
+        "Plane",
+        "Cube",
+        "Circle",
+        "UV Sphere",
+        "Icosphere",
+        "Cylinder",
+        "Cone",
+        "Torus",
+        "Grid"
+    ];
 
     private readonly ComposerSceneSession session = new();
     private readonly CancellationTokenSource lifetimeCancellation = new();
@@ -164,6 +175,7 @@ internal sealed class ComposerWindow : Window
     private readonly Button joinWeldButton;
     private readonly Button deleteButton;
     private readonly Button gridButton;
+    private readonly Button parametersButton;
     private readonly Button applyButton;
     private readonly Button frameButton;
     private readonly Button resetTransformButton;
@@ -199,6 +211,7 @@ internal sealed class ComposerWindow : Window
     private CancellationTokenSource? activeRenderCancellation;
     private CancellationTokenSource? resizeDebounceCancellation;
     private readonly DispatcherTimer hoverPulseTimer;
+    private PrimitiveParametersWindow? primitiveParametersWindow;
     private long lastHoverProbeTimestamp;
 
     public ComposerWindow(string[] startupArguments)
@@ -222,6 +235,7 @@ internal sealed class ComposerWindow : Window
         joinWeldButton = NewButton("Join + weld");
         deleteButton = NewButton("Delete");
         gridButton = NewButton("Generate grid");
+        parametersButton = NewButton("Parameters…");
         applyButton = NewButton("Apply transform");
         frameButton = NewButton("Frame selected");
         resetTransformButton = NewButton("Reset transform");
@@ -468,7 +482,7 @@ internal sealed class ComposerWindow : Window
                 {
                     Heading("Performance stress grid"),
                     LabeledControl("Copies", copyCountBox),
-                    LabeledControl("Spacing", spacingBox),
+                    LabeledControl("Spacing (m)", spacingBox),
                     gridButton,
                     new TextBlock
                     {
@@ -491,7 +505,15 @@ internal sealed class ComposerWindow : Window
         stack.Children.Add(Heading("Inspector"));
         stack.Children.Add(LabeledControl("Name", nameBox));
         stack.Children.Add(visibleBox);
-        stack.Children.Add(Heading("Position"));
+        stack.Children.Add(parametersButton);
+        stack.Children.Add(new TextBlock
+        {
+            Text = "Scene length unit: meter (m). Primitive dimensions and object positions use meters.",
+            TextWrapping = TextWrapping.Wrap,
+            Opacity = 0.72,
+            FontSize = 12
+        });
+        stack.Children.Add(Heading("Position (m)"));
         stack.Children.Add(VectorRow(positionX, positionY, positionZ));
         stack.Children.Add(Heading("Rotation (degrees)"));
         stack.Children.Add(VectorRow(rotationX, rotationY, rotationZ));
@@ -502,7 +524,7 @@ internal sealed class ComposerWindow : Window
         stack.Children.Add(resetTransformButton);
         stack.Children.Add(new TextBlock
         {
-            Text = "Hierarchy: ▸/▾ expands group nodes. Add Cube, Plane, Sphere, or Cylinder from the toolbar. Object/Vertex/Edge/Face modes use 4/1/2/3. Component editing starts with move only; shared imported corners are welded into common topology. Join + weld flattens an imported subtree into one editable mesh. Gizmos: G move, R rotate, S scale; Shift is precision and Ctrl snaps. Viewport: right drag orbits, middle drag pans, and wheel zooms.",
+            Text = "Hierarchy: ▸/▾ expands group nodes. Standard primitives: Plane, Cube, Circle, UV Sphere, Icosphere, Cylinder, Cone, Torus, and Grid. Use Parameters… to edit real dimensions in meters while the object remains procedural. Convert to Mesh, Join + weld, or component geometry edits make it an ordinary mesh. Object/Vertex/Edge/Face modes use 4/1/2/3. Gizmos: G move, R rotate, S scale; Shift is precision and Ctrl snaps. Viewport: right drag orbits, middle drag pans, and wheel zooms.",
             TextWrapping = TextWrapping.Wrap,
             Opacity = 0.68,
             FontSize = 12,
@@ -531,6 +553,7 @@ internal sealed class ComposerWindow : Window
         joinWeldButton.Click += async (_, _) => await JoinAndWeldSelectedAsync();
         deleteButton.Click += async (_, _) => await DeleteSelectedAsync();
         gridButton.Click += async (_, _) => await GenerateGridAsync();
+        parametersButton.Click += (_, _) => OpenPrimitiveParameters();
         applyButton.Click += async (_, _) => await ApplyInspectorAsync();
         frameButton.Click += (_, _) => FrameSelected();
         resetTransformButton.Click += async (_, _) => await ResetSelectedTransformAsync();
@@ -543,6 +566,8 @@ internal sealed class ComposerWindow : Window
         selectionModeBox.SelectionChanged += (_, _) =>
         {
             ComposerSelectionMode mode = SelectedSelectionMode;
+            if (mode != ComposerSelectionMode.Object)
+                ClosePrimitiveParametersWindow();
             session.SetSelectionMode(mode);
             if (mode != ComposerSelectionMode.Object)
                 SelectGizmoMode(ComposerGizmoMode.Translate);
@@ -618,6 +643,7 @@ internal sealed class ComposerWindow : Window
 
     private async Task NewSceneAsync()
     {
+        ClosePrimitiveParametersWindow();
         CancelCurrentRender();
         SetBusy(true, "Creating a new composition…");
         try
@@ -689,6 +715,7 @@ internal sealed class ComposerWindow : Window
 
     private async Task LoadSceneAsync(string path)
     {
+        ClosePrimitiveParametersWindow();
         CancelCurrentRender();
         SetBusy(true, $"Loading {Path.GetFileName(path)}…");
         try
@@ -720,6 +747,7 @@ internal sealed class ComposerWindow : Window
 
     private async Task InsertModelAsync(string path)
     {
+        ClosePrimitiveParametersWindow();
         CancelCurrentRender();
         SetBusy(true, $"Inserting {Path.GetFileName(path)}…");
         try
@@ -749,20 +777,22 @@ internal sealed class ComposerWindow : Window
     private async Task AddPrimitiveAsync()
     {
         string primitiveName = primitiveBox.SelectedItem as string ?? primitiveChoices[0];
+        int? insertedId = null;
         try
         {
+            ClosePrimitiveParametersWindow();
             await StopCurrentRenderAsync();
             SetBusy(true, $"Adding {primitiveName}…");
-            int insertedId = await Task.Run(
+            insertedId = await Task.Run(
                 () => session.InsertPrimitive(primitiveName),
                 lifetimeCancellation.Token);
             selectedObjectId = insertedId;
             ClearVirtualTriangleSelection();
             selectionModeBox.SelectedIndex = 0;
-            expandedObjectIds.Add(insertedId);
+            expandedObjectIds.Add(insertedId.Value);
             RefreshObjectTree(insertedId);
             pathText.Text = "Untitled composition (modified)";
-            statusText.Text = $"Added {primitiveName}. Switch to Vertex, Edge, or Face mode to edit its welded topology.";
+            statusText.Text = $"Added {primitiveName}. Edit its procedural dimensions in meters in the Parameters window.";
             await RequestRenderAsync(interactive: false);
         }
         catch (Exception ex)
@@ -773,6 +803,9 @@ internal sealed class ComposerWindow : Window
         {
             SetBusy(false);
         }
+
+        if (insertedId.HasValue && selectedObjectId == insertedId)
+            OpenPrimitiveParameters();
     }
 
     private async Task JoinAndWeldSelectedAsync()
@@ -780,6 +813,7 @@ internal sealed class ComposerWindow : Window
         if (selectedObjectId is not int id)
             return;
 
+        ClosePrimitiveParametersWindow();
         try
         {
             await StopCurrentRenderAsync();
@@ -975,6 +1009,8 @@ internal sealed class ComposerWindow : Window
         if (selectedObjectId is not int id)
             return;
 
+        ClosePrimitiveParametersWindow();
+
         try
         {
             // Capture every Avalonia control value while still on the UI thread.
@@ -1075,6 +1111,7 @@ internal sealed class ComposerWindow : Window
 
     private async Task UndoAsync()
     {
+        ClosePrimitiveParametersWindow();
         if (!session.CanUndo)
             return;
 
@@ -1106,6 +1143,7 @@ internal sealed class ComposerWindow : Window
 
     private async Task RedoAsync()
     {
+        ClosePrimitiveParametersWindow();
         if (!session.CanRedo)
             return;
 
@@ -1137,6 +1175,7 @@ internal sealed class ComposerWindow : Window
 
     private async Task UngroupSelectedAsync()
     {
+        ClosePrimitiveParametersWindow();
         if (selectedObjectId is not int id)
             return;
         if (!session.CanUngroupObject(id))
@@ -1176,6 +1215,7 @@ internal sealed class ComposerWindow : Window
 
     private async Task DuplicateSelectedAsync()
     {
+        ClosePrimitiveParametersWindow();
         if (selectedObjectId is not int id)
             return;
 
@@ -1202,6 +1242,7 @@ internal sealed class ComposerWindow : Window
 
     private async Task DeleteSelectedAsync()
     {
+        ClosePrimitiveParametersWindow();
         if (selectedObjectId is not int id)
             return;
 
@@ -1505,6 +1546,7 @@ internal sealed class ComposerWindow : Window
     {
         nameBox.IsEnabled = enabled;
         visibleBox.IsEnabled = enabled;
+        parametersButton.IsEnabled = enabled && selectedObjectId is int parameterId && session.CanEditPrimitiveParameters(parameterId);
         foreach (TextBox box in new[]
                  {
                      positionX, positionY, positionZ,
@@ -1670,6 +1712,8 @@ internal sealed class ComposerWindow : Window
             bool meshComponent = gizmoDrag.MeshComponent;
             gizmoDrag = null;
             e.Pointer.Capture(null);
+            if (!meshComponent)
+                ClosePrimitiveParametersWindow();
             await StopCurrentRenderAsync();
             bool committed = await Task.Run(
                 () => meshComponent
@@ -1997,11 +2041,74 @@ internal sealed class ComposerWindow : Window
         return true;
     }
 
+    private void OpenPrimitiveParameters()
+    {
+        if (selectedObjectId is not int id)
+            return;
+
+        if (primitiveParametersWindow != null)
+        {
+            if (primitiveParametersWindow.ObjectId == id)
+            {
+                primitiveParametersWindow.Activate();
+                return;
+            }
+            ClosePrimitiveParametersWindow();
+        }
+
+        selectionModeBox.SelectedIndex = 0;
+        ComposerPrimitiveParameterModel? model = session.BeginPrimitiveParameterEdit(id);
+        if (model == null)
+        {
+            statusText.Text = "The selected object is an ordinary mesh and has no procedural parameters.";
+            LoadInspectorFromSelection();
+            return;
+        }
+
+        PrimitiveParametersWindow? dialog = null;
+        dialog = new PrimitiveParametersWindow(
+            session,
+            model,
+            onPreviewChanged: () =>
+            {
+                pathText.Text = "Untitled composition (modified)";
+                _ = RequestRenderAsync(interactive: true);
+            },
+            onCommittedOrConverted: () =>
+            {
+                RefreshObjectTree(id);
+                LoadInspectorFromSelection();
+                UpdateHistoryButtons();
+                pathText.Text = "Untitled composition (modified)";
+                _ = RequestRenderAsync(interactive: false);
+            },
+            onClosed: () =>
+            {
+                if (ReferenceEquals(primitiveParametersWindow, dialog))
+                    primitiveParametersWindow = null;
+                LoadInspectorFromSelection();
+            });
+        primitiveParametersWindow = dialog;
+        dialog.Show(this);
+        statusText.Text = $"Editing {model.PrimitiveName} parameters. All length values are meters (m).";
+    }
+
+    private void ClosePrimitiveParametersWindow()
+    {
+        PrimitiveParametersWindow? dialog = primitiveParametersWindow;
+        if (dialog == null)
+            return;
+        primitiveParametersWindow = null;
+        try { dialog.Close(); } catch { }
+    }
+
     private void SelectObject(int id)
     {
         if (session.GetObjectState(id) == null)
             return;
 
+        if (primitiveParametersWindow != null && primitiveParametersWindow.ObjectId != id)
+            ClosePrimitiveParametersWindow();
         selectionModeBox.SelectedIndex = 0;
         selectedObjectId = id;
         ClearVirtualTriangleSelection();
@@ -2435,6 +2542,8 @@ internal sealed class ComposerWindow : Window
         gizmoModeBox.IsEnabled = !busy && SelectedSelectionMode == ComposerSelectionMode.Object;
         moveAxisBox.IsEnabled = !busy && SelectedSelectionMode != ComposerSelectionMode.Object;
         objectTree.IsEnabled = !busy;
+        if (busy)
+            parametersButton.IsEnabled = false;
         if (selectedObjectId.HasValue)
             SetInspectorEnabled(!busy);
         if (busy)
@@ -2460,6 +2569,7 @@ internal sealed class ComposerWindow : Window
 
     private void DisposeWindowResources()
     {
+        ClosePrimitiveParametersWindow();
         hoverPulseTimer.Stop();
         lifetimeCancellation.Cancel();
         activeRenderCancellation?.Cancel();

@@ -8,16 +8,23 @@ public sealed class TorusPrimitive : PrimitiveBase
     public override string Kind => "torus";
     public override string DisplayName => "Torus";
     public override PrimitiveGizmoEditMetadata GizmoMetadata { get; } = new("Torus", true, "X/Z scale updates major radius; Y scale updates minor radius", "stored as object rotation");
-    public override Dictionary<string, double> CreateDefaultParameters() => Parameters(("originX", 0.0), ("originY", -0.58), ("originZ", 3.55), ("majorRadius", 0.48), ("minorRadius", 0.16), ("majorSegments", 40), ("tubeSegments", 16));
+    public override IReadOnlyList<PrimitiveParameterDescriptor> EditableParameters { get; } =
+    [
+        IntegerParameter("majorSegments", "Major Segments", 3, 512),
+        IntegerParameter("tubeSegments", "Minor Segments", 3, 256),
+        LengthParameter("majorRadius", "Major Radius"),
+        LengthParameter("minorRadius", "Minor Radius")
+    ];
+    public override Dictionary<string, double> CreateDefaultParameters() => Parameters(("originX", 0.0), ("originY", -0.58), ("originZ", 3.55), ("majorRadius", 1.0), ("minorRadius", 0.25), ("majorSegments", 48), ("tubeSegments", 16));
     public override Dictionary<string, double> CreateParametersFromBounds(Aabb bounds)
     {
         Vec3 size = bounds.Max - bounds.Min;
         Vec3 center = (bounds.Min + bounds.Max) * 0.5;
         double outer = Math.Max(Math.Max(1e-6, size.X), Math.Max(1e-6, size.Z)) * 0.5;
         double minor = Math.Max(1e-6, size.Y) * 0.5;
-        return Parameters(("originX", center.X), ("originY", center.Y), ("originZ", center.Z), ("majorRadius", Math.Max(1e-6, outer - minor)), ("minorRadius", minor), ("majorSegments", 40), ("tubeSegments", 16));
+        return Parameters(("originX", center.X), ("originY", center.Y), ("originZ", center.Z), ("majorRadius", Math.Max(1e-6, outer - minor)), ("minorRadius", minor), ("majorSegments", 48), ("tubeSegments", 16));
     }
-    public override void Build(SceneMaterials materials, IReadOnlyDictionary<string, double> p, Material material, AddTriangleCallback addTriangle) => AddTorus(addTriangle, Origin(p, 0, -0.58, 3.55), Size(p, "majorRadius", 0.48), Size(p, "minorRadius", 0.16), ReadInt(p, "majorSegments", 40, 3, 256), ReadInt(p, "tubeSegments", 16, 3, 128), material);
+    public override void Build(SceneMaterials materials, IReadOnlyDictionary<string, double> p, Material material, AddTriangleCallback addTriangle) => AddTorus(addTriangle, Origin(p, 0, -0.58, 3.55), Size(p, "majorRadius", 1.0), Size(p, "minorRadius", 0.25), ReadInt(p, "majorSegments", 48, 3, 512), ReadInt(p, "tubeSegments", 16, 3, 256), material);
     public override bool ApplyScaleDelta(IDictionary<string, double> p, char axis, double factor) => char.ToUpperInvariant(axis) == 'Y' ? Multiply(p, "minorRadius", factor) : Multiply(p, "majorRadius", factor);
 }
 

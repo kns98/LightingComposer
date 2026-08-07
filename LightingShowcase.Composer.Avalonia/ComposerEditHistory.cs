@@ -140,6 +140,40 @@ internal sealed class BakedTransformEditCommand : IComposerEditCommand
     }
 }
 
+/// <summary>Undo/redo for a small object geometry/metadata replacement such as procedural parameter edits.</summary>
+internal sealed class GeometryStateEditCommand : IComposerEditCommand
+{
+    private readonly int groupId;
+    private readonly BakedGeometryState before;
+    private readonly BakedGeometryState after;
+
+    public GeometryStateEditCommand(string description, int groupId, BakedGeometryState before, BakedGeometryState after)
+    {
+        Description = description;
+        this.groupId = groupId;
+        this.before = before;
+        this.after = after;
+    }
+
+    public string Description { get; }
+    public int? UndoSelectionId => groupId;
+    public int? RedoSelectionId => groupId;
+
+    public void Undo(Scene scene) => Restore(scene, before);
+    public void Redo(Scene scene) => Restore(scene, after);
+
+    private void Restore(Scene scene, BakedGeometryState state)
+    {
+        SceneObjectGroup group = scene.GroupById(groupId)
+            ?? throw new InvalidOperationException("The edited scene node no longer exists.");
+        state.Restore(scene);
+        foreach (SceneObjectGroup node in group.SelfAndDescendants().Reverse())
+            node.RecalculatePivot();
+        Scene.RecalculatePivotsToRoot(group.Parent);
+        scene.RebuildWorldGeometry();
+    }
+}
+
 /// <summary>Deep snapshot command used only for topology-changing edits such as ungroup/delete.</summary>
 internal sealed class SceneSnapshotEditCommand : IComposerEditCommand
 {

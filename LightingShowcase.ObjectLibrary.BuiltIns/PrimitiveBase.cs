@@ -3,8 +3,9 @@ using LightingShowcase.SceneGraph;
 
 namespace LightingShowcase.ObjectLibrary.BuiltIns;
 
-public abstract class PrimitiveBase : IScenePrimitive
+public abstract class PrimitiveBase : IScenePrimitive, IEditablePrimitiveDefinition
 {
+    public virtual IReadOnlyList<PrimitiveParameterDescriptor> EditableParameters => Array.Empty<PrimitiveParameterDescriptor>();
     public abstract string Kind { get; }
     public abstract string DisplayName { get; }
     public abstract PrimitiveGizmoEditMetadata GizmoMetadata { get; }
@@ -36,6 +37,21 @@ public abstract class PrimitiveBase : IScenePrimitive
         changed |= ApplyScaleDelta(parameters, 'Z', SanitizeScale(scale.Z));
         return changed;
     }
+
+    protected static PrimitiveParameterDescriptor LengthParameter(string key, string label, double min = 1e-6, double max = 10000.0, double step = 0.001) =>
+        new(key, label, PrimitiveParameterKind.Length, min, max, step, "m");
+
+    protected static PrimitiveParameterDescriptor IntegerParameter(string key, string label, int min, int max, int step = 1) =>
+        new(key, label, PrimitiveParameterKind.Integer, min, max, step);
+
+    protected static PrimitiveParameterDescriptor NumberParameter(string key, string label, double min, double max, double step) =>
+        new(key, label, PrimitiveParameterKind.Number, min, max, step);
+
+    protected static PrimitiveParameterDescriptor ToggleParameter(string key, string label) =>
+        new(key, label, PrimitiveParameterKind.Toggle, 0, 1, 1);
+
+    protected static PrimitiveParameterDescriptor ChoiceParameter(string key, string label, params string[] choices) =>
+        new(key, label, PrimitiveParameterKind.Choice, 0, Math.Max(0, choices.Length - 1), 1, "", choices);
 
     protected static Dictionary<string, double> Parameters(params (string Key, double Value)[] values)
     {
@@ -274,6 +290,130 @@ public abstract class PrimitiveBase : IScenePrimitive
             AddQuad(addTriangle, it0, it1, ot1, ot0, material);
             AddQuad(addTriangle, ib0, ob0, ob1, ib1, material);
         }
+    }
+
+    protected static void AddCircle(AddTriangleCallback addTriangle, Vec3 center, double radius, int vertices, int fillMode, Material material)
+    {
+        radius = Math.Max(1e-6, radius);
+        vertices = Math.Clamp(vertices, 3, 512);
+        // The renderer is triangle based. Both N-gon and triangle-fan authoring
+        // modes therefore become a fan in the render shadow mesh; fillMode 0
+        // intentionally produces no faces, matching Blender's "Nothing" option.
+        if (fillMode <= 0)
+            return;
+        AddDisk(addTriangle, center, radius, vertices, normalUp: true, material);
+    }
+
+    protected static void AddGrid(AddTriangleCallback addTriangle, Vec3 center, double width, double depth, int xSubdivisions, int ySubdivisions, Material material)
+    {
+        width = Math.Max(1e-6, width);
+        depth = Math.Max(1e-6, depth);
+        xSubdivisions = Math.Clamp(xSubdivisions, 1, 512);
+        ySubdivisions = Math.Clamp(ySubdivisions, 1, 512);
+        double x0 = center.X - width * 0.5;
+        double z0 = center.Z - depth * 0.5;
+        for (int y = 0; y < ySubdivisions; y++)
+        {
+            double v0 = y / (double)ySubdivisions;
+            double v1 = (y + 1) / (double)ySubdivisions;
+            double za = z0 + depth * v0;
+            double zb = z0 + depth * v1;
+            for (int x = 0; x < xSubdivisions; x++)
+            {
+                double u0 = x / (double)xSubdivisions;
+                double u1 = (x + 1) / (double)xSubdivisions;
+                double xa = x0 + width * u0;
+                double xb = x0 + width * u1;
+                addTriangle(new Vec3(xa, center.Y, za), new Vec3(xb, center.Y, za), new Vec3(xb, center.Y, zb), new Vec2(u0, v0), new Vec2(u1, v0), new Vec2(u1, v1), material);
+                addTriangle(new Vec3(xa, center.Y, za), new Vec3(xb, center.Y, zb), new Vec3(xa, center.Y, zb), new Vec2(u0, v0), new Vec2(u1, v1), new Vec2(u0, v1), material);
+            }
+        }
+    }
+
+    protected static void AddFrustum(AddTriangleCallback addTriangle, Vec3 origin, double bottomRadius, double topRadius, double height, int sides, bool capFill, Material material)
+    {
+        bottomRadius = Math.Max(0.0, bottomRadius);
+        topRadius = Math.Max(0.0, topRadius);
+        height = Math.Max(1e-6, height);
+        sides = Math.Clamp(sides, 3, 512);
+        Vec3 bottomCenter = origin - new Vec3(0, height * 0.5, 0);
+        Vec3 topCenter = origin + new Vec3(0, height * 0.5, 0);
+        for (int i = 0; i < sides; i++)
+        {
+            double a0 = 2.0 * Math.PI * i / sides;
+            double a1 = 2.0 * Math.PI * (i + 1) / sides;
+            Vec3 b0 = bottomCenter + new Vec3(Math.Cos(a0) * bottomRadius, 0, Math.Sin(a0) * bottomRadius);
+            Vec3 b1 = bottomCenter + new Vec3(Math.Cos(a1) * bottomRadius, 0, Math.Sin(a1) * bottomRadius);
+            Vec3 t0 = topCenter + new Vec3(Math.Cos(a0) * topRadius, 0, Math.Sin(a0) * topRadius);
+            Vec3 t1 = topCenter + new Vec3(Math.Cos(a1) * topRadius, 0, Math.Sin(a1) * topRadius);
+            if (bottomRadius > 1e-12 && topRadius > 1e-12)
+                AddQuad(addTriangle, b0, b1, t1, t0, material);
+            else if (bottomRadius > 1e-12)
+                EmitTriangle(addTriangle, b0, topCenter, b1, material);
+            else if (topRadius > 1e-12)
+                EmitTriangle(addTriangle, bottomCenter, t1, t0, material);
+        }
+        if (capFill && bottomRadius > 1e-12)
+            AddDisk(addTriangle, bottomCenter, bottomRadius, sides, normalUp: false, material);
+        if (capFill && topRadius > 1e-12)
+            AddDisk(addTriangle, topCenter, topRadius, sides, normalUp: true, material);
+    }
+
+    protected static void AddIcosphere(AddTriangleCallback addTriangle, Vec3 center, double radius, int subdivisions, Material material)
+    {
+        radius = Math.Max(1e-6, radius);
+        subdivisions = Math.Clamp(subdivisions, 1, 7);
+        double t = (1.0 + Math.Sqrt(5.0)) * 0.5;
+        List<Vec3> vertices =
+        [
+            new Vec3(-1, t, 0), new Vec3(1, t, 0), new Vec3(-1, -t, 0), new Vec3(1, -t, 0),
+            new Vec3(0, -1, t), new Vec3(0, 1, t), new Vec3(0, -1, -t), new Vec3(0, 1, -t),
+            new Vec3(t, 0, -1), new Vec3(t, 0, 1), new Vec3(-t, 0, -1), new Vec3(-t, 0, 1)
+        ];
+        for (int i = 0; i < vertices.Count; i++)
+            vertices[i] = vertices[i].Normalize();
+
+        List<(int A, int B, int C)> faces =
+        [
+            (0,11,5),(0,5,1),(0,1,7),(0,7,10),(0,10,11),
+            (1,5,9),(5,11,4),(11,10,2),(10,7,6),(7,1,8),
+            (3,9,4),(3,4,2),(3,2,6),(3,6,8),(3,8,9),
+            (4,9,5),(2,4,11),(6,2,10),(8,6,7),(9,8,1)
+        ];
+
+        // Blender's Subdivisions=1 is the base icosahedron. Each higher level
+        // splits every triangle into four while sharing midpoint vertices.
+        for (int level = 1; level < subdivisions; level++)
+        {
+            Dictionary<(int, int), int> midpointCache = new();
+            List<(int A, int B, int C)> next = new(faces.Count * 4);
+            foreach ((int a, int b, int c) in faces)
+            {
+                int ab = Midpoint(a, b);
+                int bc = Midpoint(b, c);
+                int ca = Midpoint(c, a);
+                next.Add((a, ab, ca));
+                next.Add((b, bc, ab));
+                next.Add((c, ca, bc));
+                next.Add((ab, bc, ca));
+            }
+            faces = next;
+
+            int Midpoint(int a, int b)
+            {
+                (int, int) key = a < b ? (a, b) : (b, a);
+                if (midpointCache.TryGetValue(key, out int existing))
+                    return existing;
+                Vec3 point = ((vertices[a] + vertices[b]) * 0.5).Normalize();
+                int index = vertices.Count;
+                vertices.Add(point);
+                midpointCache[key] = index;
+                return index;
+            }
+        }
+
+        foreach ((int a, int b, int c) in faces)
+            EmitTriangle(addTriangle, center + vertices[a] * radius, center + vertices[b] * radius, center + vertices[c] * radius, material);
     }
 
     protected static void AddDisk(AddTriangleCallback addTriangle, Vec3 center, double radius, int sides, bool normalUp, Material material)

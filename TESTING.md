@@ -45,6 +45,10 @@ PowerShell equivalent:
 - Every project referenced by the Visual Studio solution exists.
 - CPU and GPU renderer caches are tied to both Scene identity and Scene revision.
 
+## Parameterized primitive validation
+
+`ParameterizedPrimitiveTests` verifies that the Composer standard set contains Plane, Cube, Circle, UV Sphere, Icosphere, Cylinder, Cone, Torus, and Grid; every exposed length parameter declares meters (`m`); Cube parameter preview regenerates real geometry dimensions; one committed parameter batch can be undone and redone; and Convert to Mesh removes procedural editing while undo restores it. Monkey/Suzanne is not part of the standard Composer primitive set.
+
 ## Optional Vulkan verification
 
 The default suite does not require a Vulkan-capable CI runner. On a machine with

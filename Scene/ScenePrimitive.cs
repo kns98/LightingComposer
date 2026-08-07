@@ -14,6 +14,49 @@ namespace LightingShowcase.SceneGraph;
 /// </summary>
 public delegate void AddTriangleCallback(Vec3 a, Vec3 b, Vec3 c, Vec2 uvA, Vec2 uvB, Vec2 uvC, Material material);
 
+
+/// <summary>Editor control type for one authored primitive parameter.</summary>
+public enum PrimitiveParameterKind
+{
+    Length,
+    Integer,
+    Number,
+    Toggle,
+    Choice
+}
+
+/// <summary>
+/// Describes one editable procedural parameter. Length values are always stored
+/// in scene metres; the editor may display the UnitLabel but never rescales the
+/// authored value behind the user's back.
+/// </summary>
+public sealed record PrimitiveParameterDescriptor(
+    string Key,
+    string Label,
+    PrimitiveParameterKind Kind,
+    double Minimum,
+    double Maximum,
+    double Step,
+    string UnitLabel = "",
+    IReadOnlyList<string>? Choices = null)
+{
+    public double Normalize(double value)
+    {
+        if (!double.IsFinite(value))
+            value = Minimum;
+        value = Math.Clamp(value, Minimum, Maximum);
+        return Kind is PrimitiveParameterKind.Integer or PrimitiveParameterKind.Choice or PrimitiveParameterKind.Toggle
+            ? Math.Round(value)
+            : value;
+    }
+}
+
+/// <summary>Optional editor metadata for procedural definitions with user-editable parameters.</summary>
+public interface IEditablePrimitiveDefinition
+{
+    IReadOnlyList<PrimitiveParameterDescriptor> EditableParameters { get; }
+}
+
 /// <summary>
 /// Contract for insertable objects that can emit their own triangle shadow mesh and own
 /// the gizmo-to-parameter rules used by the editor. Implement this in an external

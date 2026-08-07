@@ -105,6 +105,13 @@ public sealed class Scene
         return group;
     }
 
+    /// <summary>Regenerates one parameterized object's render/pick shadow mesh using the scene's material catalog.</summary>
+    public bool RebuildParametricObject(SceneObjectGroup group)
+    {
+        if (group == null) throw new ArgumentNullException(nameof(group));
+        return ObjectLibraryRegistry.RebuildPrimitiveShadowGeometry(group, materials);
+    }
+
     /// <summary>Loads a native XML scene through the format plugin registry.</summary>
     public void LoadPropXmlFile(string filePath)
     {
