@@ -314,7 +314,6 @@ public sealed class SceneObjectGroup
     {
         if (material == null) throw new ArgumentNullException(nameof(material));
 
-        BakeCurrentTransform();
         ApplyMaterialRecursively(tri =>
         {
             Material updated = new(
@@ -343,6 +342,60 @@ public sealed class SceneObjectGroup
         RecalculatePivot();
     }
 
+    /// <summary>Assigns one complete immutable material to all triangles in this subtree without changing geometry.</summary>
+    public void ApplyMaterial(Material material)
+    {
+        if (material == null) throw new ArgumentNullException(nameof(material));
+        ApplyMaterialRecursively(tri => new Triangle(
+            tri.A, tri.B, tri.C,
+            tri.UvA, tri.UvB, tri.UvC,
+            tri.NormalA, tri.NormalB, tri.NormalC,
+            material,
+            tri.GroupId));
+        ColorOverride = null;
+    }
+
+    /// <summary>
+    /// Changes only the base color of every material in this subtree. Geometry,
+    /// object transforms, procedural metadata, texture maps and PBR values remain intact.
+    /// </summary>
+    public void ApplyBaseColor(Vec3 color)
+    {
+        ApplyMaterialRecursively(tri =>
+        {
+            Material updated = tri.Material.WithColor(color);
+            return new Triangle(
+                tri.A, tri.B, tri.C,
+                tri.UvA, tri.UvB, tri.UvC,
+                tri.NormalA, tri.NormalB, tri.NormalC,
+                updated,
+                tri.GroupId);
+        });
+        ColorOverride = null;
+    }
+
+    /// <summary>
+    /// Applies one material-library preset while preserving assigned image maps.
+    /// This is a material-only edit and deliberately does not bake object transforms
+    /// or convert parameterized primitives to ordinary meshes.
+    /// </summary>
+    public void ApplyMaterialPreset(Material preset)
+    {
+        if (preset == null) throw new ArgumentNullException(nameof(preset));
+
+        ApplyMaterialRecursively(tri =>
+        {
+            Material updated = tri.Material.WithPreset(preset);
+            return new Triangle(
+                tri.A, tri.B, tri.C,
+                tri.UvA, tri.UvB, tri.UvC,
+                tri.NormalA, tri.NormalB, tri.NormalC,
+                updated,
+                tri.GroupId);
+        });
+        ColorOverride = null;
+    }
+
     public void ApplyTexture(TextureMap texture)
     {
         ApplyTexture(texture, TextureRepeatWorldUnits, forceBoxProjection: true);
@@ -353,7 +406,6 @@ public sealed class SceneObjectGroup
     {
         if (texture == null) throw new ArgumentNullException(nameof(texture));
 
-        BakeCurrentTransform();
         Aabb bounds = GetWorldBounds();
         double safeTileWorldUnits = SanitizeTileWorldUnits(tileWorldUnits);
         ApplyMaterialRecursively(tri =>
@@ -379,11 +431,10 @@ public sealed class SceneObjectGroup
                 tri.Material.AlphaCutoff,
                 tri.Material.DoubleSided);
 
-            // Manual replacement textures should preserve authored atlas UVs
-            // from OBJ/glTF imports.  Editor-created primitives normally still
-            // have the default unit triangle UVs, so they fall through to box
-            // projection and tile like before.
-            if (!forceBoxProjection && !HasDefaultUnitUvs(tri))
+            // When box projection is disabled, preserve authored UVs exactly.
+            // This is important for imported glTF/OBJ meshes and also gives the
+            // material editor an explicit choice between model UVs and meter-based tiling.
+            if (!forceBoxProjection)
                 return new Triangle(tri.A, tri.B, tri.C, tri.UvA, tri.UvB, tri.UvC, tri.NormalA, tri.NormalB, tri.NormalC, updated, tri.GroupId);
 
             return new Triangle(
@@ -395,6 +446,7 @@ public sealed class SceneObjectGroup
                 updated,
                 tri.GroupId);
         });
+        ObjectLibraryRegistry.StoreParametricTextureProjection(this, safeTileWorldUnits, forceBoxProjection);
         ColorOverride = null;
         RecalculatePivot();
     }
@@ -402,7 +454,6 @@ public sealed class SceneObjectGroup
     /// <summary>Reprojects existing textured triangles using a chosen scene-unit tile size.</summary>
     public void RetileTexture(double tileWorldUnits)
     {
-        BakeCurrentTransform();
         Aabb bounds = GetWorldBounds();
         double safeTileWorldUnits = SanitizeTileWorldUnits(tileWorldUnits);
         ApplyMaterialRecursively(tri =>
@@ -419,6 +470,7 @@ public sealed class SceneObjectGroup
                 tri.Material,
                 tri.GroupId);
         });
+        ObjectLibraryRegistry.StoreParametricTextureProjection(this, safeTileWorldUnits, forceBoxProjection: true);
         ColorOverride = null;
         RecalculatePivot();
     }
@@ -463,12 +515,12 @@ public sealed class SceneObjectGroup
 
     public void ClearTexture()
     {
-        BakeCurrentTransform();
         ApplyMaterialRecursively(tri =>
         {
             Material updated = tri.Material.WithTexture(null);
             return new Triangle(tri.A, tri.B, tri.C, tri.UvA, tri.UvB, tri.UvC, tri.NormalA, tri.NormalB, tri.NormalC, updated, tri.GroupId);
         });
+        ObjectLibraryRegistry.ClearParametricTextureProjection(this);
         ColorOverride = null;
         RecalculatePivot();
     }
@@ -478,7 +530,6 @@ public sealed class SceneObjectGroup
     {
         if (materialTransform == null) throw new ArgumentNullException(nameof(materialTransform));
 
-        BakeCurrentTransform();
         ApplyMaterialRecursively(tri =>
         {
             Material updated = materialTransform(tri.Material);

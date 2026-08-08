@@ -9,6 +9,9 @@ namespace LightingShowcase.SceneGraph;
 
 public static class ObjectLibraryRegistry
 {
+    private const string TextureProjectionModeKey = "__composerTextureBoxProjection";
+    private const string TextureTileMetersKey = "__composerTextureTileMeters";
+
     public static string[] Names => ScenePrimitiveRegistry.DisplayNames;
 
     public static void EnsureInitialized() => ScenePrimitiveRegistry.EnsureInitialized();
@@ -87,7 +90,69 @@ public static class ObjectLibraryRegistry
             group.PrimitiveParameters,
             (a, b, c, uvA, uvB, uvC, mat) => group.AddTriangle(a, b, c, uvA, uvB, uvC, mat));
         definition.Build(materials, group.PrimitiveParameters, material, addTriangle);
+
+        // Keep an explicitly assigned meter-based texture projection stable when
+        // shape parameters regenerate the procedural shadow mesh. The material
+        // itself survives because it was captured before LocalTriangles.Clear().
+        if (material.Texture != null &&
+            group.PrimitiveParameters.TryGetValue(TextureProjectionModeKey, out double boxProjection) &&
+            boxProjection >= 0.5)
+        {
+            double tileMeters = group.PrimitiveParameters.TryGetValue(TextureTileMetersKey, out double storedTile) &&
+                                double.IsFinite(storedTile) && storedTile > 1e-6
+                ? storedTile
+                : 0.25;
+            group.RetileTexture(tileMeters);
+        }
+
         group.RecalculatePivot();
+        return true;
+    }
+
+    /// <summary>
+    /// Stores editor-only texture projection metadata alongside procedural shape
+    /// parameters. Hidden keys are ignored by the parameter dialog but survive
+    /// parameter edits, transforms, undo/redo, and native scene serialization.
+    /// </summary>
+    public static void StoreParametricTextureProjection(SceneObjectGroup group, double tileWorldUnits, bool forceBoxProjection)
+    {
+        if (group == null) throw new ArgumentNullException(nameof(group));
+        if (!group.HasParametricPrimitive || group.Children.Count > 0)
+            return;
+
+        group.PrimitiveParameters[TextureProjectionModeKey] = forceBoxProjection ? 1.0 : 0.0;
+        if (forceBoxProjection)
+            group.PrimitiveParameters[TextureTileMetersKey] = double.IsFinite(tileWorldUnits) && tileWorldUnits > 1e-6
+                ? tileWorldUnits
+                : 0.25;
+        else
+            group.PrimitiveParameters.Remove(TextureTileMetersKey);
+    }
+
+    public static void ClearParametricTextureProjection(SceneObjectGroup group)
+    {
+        if (group == null) throw new ArgumentNullException(nameof(group));
+        group.PrimitiveParameters.Remove(TextureProjectionModeKey);
+        group.PrimitiveParameters.Remove(TextureTileMetersKey);
+    }
+
+    public static bool TryGetParametricTextureProjection(SceneObjectGroup group, out bool boxProjection, out double tileWorldUnits)
+    {
+        if (group == null) throw new ArgumentNullException(nameof(group));
+        boxProjection = false;
+        tileWorldUnits = 0.25;
+        if (!group.HasParametricPrimitive || group.Children.Count > 0 ||
+            !group.PrimitiveParameters.TryGetValue(TextureProjectionModeKey, out double mode))
+        {
+            return false;
+        }
+
+        boxProjection = mode >= 0.5;
+        if (group.PrimitiveParameters.TryGetValue(TextureTileMetersKey, out double storedTile) &&
+            double.IsFinite(storedTile) && storedTile > 1e-6)
+        {
+            tileWorldUnits = storedTile;
+        }
         return true;
     }
 

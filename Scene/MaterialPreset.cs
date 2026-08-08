@@ -26,7 +26,7 @@ public sealed class MaterialPreset
     public override string ToString() => $"{Category} - {Name}";
 }
 
-/// <summary>Shared material preset library exposed by the Selection tab.</summary>
+/// <summary>Shared material preset library exposed by the Composer material editor.</summary>
 public static class MaterialPresetLibrary
 {
     public static IReadOnlyList<MaterialPreset> Common { get; } = new List<MaterialPreset>

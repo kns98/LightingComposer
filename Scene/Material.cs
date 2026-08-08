@@ -217,4 +217,55 @@ public sealed class Material
             TransmissionTexture, Ior, Thickness, AttenuationColor, AttenuationDistance,
             Clearcoat, ClearcoatRoughness, ClearcoatUsesTransmissionTexture);
     }
+
+    /// <summary>Returns a copy with a different base color while preserving all other PBR and texture data.</summary>
+    public Material WithColor(Vec3 color)
+    {
+        return new Material(
+            color, Emission, LightId, Texture, EmissionColor, EmissiveTexture,
+            Alpha, AlphaBlend, Metallic, Roughness, Transmission,
+            MetallicRoughnessTexture, NormalTexture, OcclusionTexture,
+            NormalScale, OcclusionStrength, AlphaMode, AlphaCutoff, DoubleSided,
+            TransmissionTexture, Ior, Thickness, AttenuationColor, AttenuationDistance,
+            Clearcoat, ClearcoatRoughness, ClearcoatUsesTransmissionTexture);
+    }
+
+    /// <summary>
+    /// Copies the visible/PBR values from a material-library preset while retaining
+    /// this material's texture maps and light association. This lets a user choose
+    /// a metal/plastic/glass preset without unexpectedly discarding an assigned image.
+    /// </summary>
+    public Material WithPreset(Material preset)
+    {
+        if (preset == null) throw new ArgumentNullException(nameof(preset));
+
+        return new Material(
+            preset.Color,
+            preset.Emission,
+            LightId,
+            Texture,
+            preset.EmissionColor,
+            EmissiveTexture,
+            preset.Alpha,
+            preset.AlphaBlend,
+            preset.Metallic,
+            preset.Roughness,
+            preset.Transmission,
+            MetallicRoughnessTexture,
+            NormalTexture,
+            OcclusionTexture,
+            preset.NormalScale,
+            preset.OcclusionStrength,
+            preset.AlphaMode,
+            preset.AlphaCutoff,
+            preset.DoubleSided,
+            TransmissionTexture,
+            preset.Ior,
+            preset.Thickness,
+            preset.AttenuationColor,
+            preset.AttenuationDistance,
+            preset.Clearcoat,
+            preset.ClearcoatRoughness,
+            preset.ClearcoatUsesTransmissionTexture);
+    }
 }

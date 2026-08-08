@@ -7,6 +7,7 @@ A standalone, platform-neutral scene composer and renderer built with Avalonia a
 - Open a scene or 3D model.
 - Insert multiple glTF/GLB, FBX, OBJ, 3DS, PLY, STL, and PropXML assets.
 - Add Blender-style Plane, Cube, Circle, UV Sphere, Icosphere, Cylinder, Cone, Torus, and Grid primitives directly from the composer toolbar (Monkey/Suzanne intentionally omitted).
+- Open a closable floating **Material** editor with a categorized PBR preset library, exact RGB/hex base-color setter, and image texture assignment.
 - Browse objects in a recursive scene tree and select them from the tree or rendered viewport.
 - Orbit, pan, and zoom the preview on every rendering backend.
 - Highlight the selected object and draw overlaid move, rotation-ring, and scale gizmos for X/Y/Z transforms, including uniform scaling.
@@ -72,6 +73,7 @@ A path may also be passed without the `compose` verb:
 - Left click in Object mode: select the highest imported object group under the pointer. Click empty viewport space to deselect the current object.
 - `1`, `2`, `3`, and `4`: switch to Vertex, Edge, Face, and Object selection. Edge and vertex picks must be close to the projected component; Face mode selects the directly clicked front face. Component modes hide the object bounding box until a component is selected, then show only the component highlight and move gizmo.
 - Choose Plane, Cube, Circle, UV Sphere, Icosphere, Cylinder, Cone, Torus, or Grid and press **Add primitive**. A closable floating **Parameters** window opens for procedural editing.
+- Use **Material…** in the Inspector to apply a library preset, set an exact RGB/hex color, or assign/clear a base-color texture for the selected object/subtree.
 - **Join + weld** bakes the selected hierarchy, flattens its descendants, and merges coincident positions into common vertex/edge topology. This operation is undoable.
 - `G`, `R`, and `S`: choose Move, Rotate, or Scale, matching Blender's primary transform shortcuts. The toolbar selector provides the same modes.
 - Drag a red, green, or blue move axis, rotation ring, or scale handle. The white center scale handle scales uniformly. Hold Shift for precision and Ctrl for snapping. In Object mode, Composer uses the transform gizmo as the selection cue and does not draw an additional object bounding box or triangle wireframe before, during, or after a transform.
@@ -106,6 +108,19 @@ The standard primitive set mirrors Blender's Add → Mesh primitives except Monk
 - Grid — X/Y subdivisions, width, depth
 
 The parameter window is modeless and can be closed and reopened while the object remains procedural. Parameter changes regenerate only that object's shadow mesh and are grouped into undoable edit batches. **Convert to Mesh**, **Join + weld**, or a committed Vertex/Edge/Face geometry edit removes the procedural metadata and leaves the generated triangles as an ordinary editable mesh. Saved `.lscene` files retain the primitive kind and parameter values while the object is still procedural. See [`PARAMETERIZED_PRIMITIVES.md`](PARAMETERIZED_PRIMITIVES.md).
+
+## Materials, exact color, and textures
+
+Select an object and press **Material…** in the Inspector to open a modeless, closable material editor. The built-in material library includes categorized metal, paint, plastic, glass, stone, organic, liquid, and emissive presets. Applying a preset changes the material's PBR values while retaining any base-color/normal/metallic-roughness texture maps already assigned to the object.
+
+Base color can be entered as exact 0–255 RGB channels or hexadecimal `#RRGGBB`. Material and color edits are independent of geometry: moving, rotating, scaling, recoloring, or assigning a texture to a parameterized primitive does **not** convert it to a mesh. The material is reused whenever its procedural shadow mesh is regenerated.
+
+The base-color texture setter accepts PNG, JPEG, BMP, TGA, GIF, PSD, and HDR images supported by the existing managed texture decoder. Two UV modes are available:
+
+- **Box-project UVs using real-world tile size** — enter the repeat size in meters, such as `0.3 m` for a 30 cm material tile. For parameterized primitives, this projection mode and tile size are stored as hidden procedural metadata and reapplied after parameter changes.
+- **Use authored UVs** — preserves imported/model UV coordinates exactly.
+
+Preset, color, texture, and clear-texture operations each create an undo entry. Material edits invalidate renderer material/texture caches but do not alter object topology.
 
 ## Command-line rendering
 
@@ -184,7 +199,7 @@ On Windows:
 .\run-tests.ps1
 ```
 
-The suite verifies parameterized primitive registration and meter units, procedural regeneration/undo/redo/conversion, baked local-geometry mutation, identity transform metadata after commit, exact undo/redo hashes, deferred move/rotation/scale commits, Vulkan cache revision handling, rendered-pixel changes, lazy triangle browsing without object growth, root/nested ungroup behavior, hierarchy expansion, and Visual Studio solution integrity.
+The suite verifies parameterized primitive registration and meter units, procedural regeneration/undo/redo/conversion, material-library/color/texture edits and texture persistence through procedural regeneration, baked local-geometry mutation, identity transform metadata after commit, exact undo/redo hashes, deferred move/rotation/scale commits, Vulkan cache revision handling, rendered-pixel changes, lazy triangle browsing without object growth, root/nested ungroup behavior, hierarchy expansion, and Visual Studio solution integrity.
 See `TESTING.md` for the optional Vulkan tests, including the live pending-transform preview.
 
 ## Self-contained scenes and portable exports

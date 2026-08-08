@@ -93,12 +93,19 @@ internal sealed class PrimitiveParametersWindow : Window
     /// forward so closing this modeless window cannot undo the transform.
     /// </summary>
     public void RebaseAfterExternalTransform()
+        => RebaseAfterExternalEdit("Object transform applied. Procedural parameters are still editable.");
+
+    /// <summary>
+    /// Starts a fresh parameter-edit baseline after another modeless editor changes
+    /// the same procedural object (for example a material or texture assignment).
+    /// </summary>
+    public void RebaseAfterExternalEdit(string message)
     {
         previewTimer.Stop();
         previewDirty = false;
         batchHasChanges = false;
         if (session.BeginPrimitiveParameterEdit(objectId) != null)
-            statusText.Text = "Object transform applied. Procedural parameters are still editable.";
+            statusText.Text = message;
     }
 
     private Control BuildContent()

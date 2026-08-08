@@ -176,6 +176,7 @@ internal sealed class ComposerWindow : Window
     private readonly Button deleteButton;
     private readonly Button gridButton;
     private readonly Button parametersButton;
+    private readonly Button materialButton;
     private readonly Button applyButton;
     private readonly Button frameButton;
     private readonly Button resetTransformButton;
@@ -212,6 +213,7 @@ internal sealed class ComposerWindow : Window
     private CancellationTokenSource? resizeDebounceCancellation;
     private readonly DispatcherTimer hoverPulseTimer;
     private PrimitiveParametersWindow? primitiveParametersWindow;
+    private MaterialEditorWindow? materialEditorWindow;
     private long lastHoverProbeTimestamp;
 
     public ComposerWindow(string[] startupArguments)
@@ -236,6 +238,7 @@ internal sealed class ComposerWindow : Window
         deleteButton = NewButton("Delete");
         gridButton = NewButton("Generate grid");
         parametersButton = NewButton("Parameters…");
+        materialButton = NewButton("Material…");
         applyButton = NewButton("Apply transform");
         frameButton = NewButton("Frame selected");
         resetTransformButton = NewButton("Reset transform");
@@ -505,7 +508,15 @@ internal sealed class ComposerWindow : Window
         stack.Children.Add(Heading("Inspector"));
         stack.Children.Add(LabeledControl("Name", nameBox));
         stack.Children.Add(visibleBox);
-        stack.Children.Add(parametersButton);
+        Grid editButtons = new()
+        {
+            ColumnDefinitions = new ColumnDefinitions("*,*"),
+            ColumnSpacing = 8
+        };
+        editButtons.Children.Add(parametersButton);
+        editButtons.Children.Add(materialButton);
+        Grid.SetColumn(materialButton, 1);
+        stack.Children.Add(editButtons);
         stack.Children.Add(new TextBlock
         {
             Text = "Scene length unit: meter (m). Primitive dimensions and object positions use meters.",
@@ -524,7 +535,7 @@ internal sealed class ComposerWindow : Window
         stack.Children.Add(resetTransformButton);
         stack.Children.Add(new TextBlock
         {
-            Text = "Hierarchy: ▸/▾ expands group nodes. Standard primitives: Plane, Cube, Circle, UV Sphere, Icosphere, Cylinder, Cone, Torus, and Grid. Use Parameters… to edit real dimensions in meters while the object remains procedural. Convert to Mesh, Join + weld, or component geometry edits make it an ordinary mesh. Object/Vertex/Edge/Face modes use 4/1/2/3. Gizmos: G move, R rotate, S scale; Shift is precision and Ctrl snaps. Viewport: right drag orbits, middle drag pans, and wheel zooms.",
+            Text = "Hierarchy: ▸/▾ expands group nodes. Standard primitives: Plane, Cube, Circle, UV Sphere, Icosphere, Cylinder, Cone, Torus, and Grid. Use Parameters… to edit real dimensions in meters while the object remains procedural. Material… opens the material library, exact color setter, and image texture controls. Convert to Mesh, Join + weld, or component geometry edits make it an ordinary mesh. Object/Vertex/Edge/Face modes use 4/1/2/3. Gizmos: G move, R rotate, S scale; Shift is precision and Ctrl snaps. Viewport: right drag orbits, middle drag pans, and wheel zooms.",
             TextWrapping = TextWrapping.Wrap,
             Opacity = 0.68,
             FontSize = 12,
@@ -554,6 +565,7 @@ internal sealed class ComposerWindow : Window
         deleteButton.Click += async (_, _) => await DeleteSelectedAsync();
         gridButton.Click += async (_, _) => await GenerateGridAsync();
         parametersButton.Click += (_, _) => OpenPrimitiveParameters();
+        materialButton.Click += (_, _) => OpenMaterialEditor();
         applyButton.Click += async (_, _) => await ApplyInspectorAsync();
         frameButton.Click += (_, _) => FrameSelected();
         resetTransformButton.Click += async (_, _) => await ResetSelectedTransformAsync();
@@ -567,7 +579,10 @@ internal sealed class ComposerWindow : Window
         {
             ComposerSelectionMode mode = SelectedSelectionMode;
             if (mode != ComposerSelectionMode.Object)
+            {
                 ClosePrimitiveParametersWindow();
+                CloseMaterialEditorWindow();
+            }
             session.SetSelectionMode(mode);
             if (mode != ComposerSelectionMode.Object)
                 SelectGizmoMode(ComposerGizmoMode.Translate);
@@ -644,6 +659,7 @@ internal sealed class ComposerWindow : Window
     private async Task NewSceneAsync()
     {
         ClosePrimitiveParametersWindow();
+        CloseMaterialEditorWindow();
         CancelCurrentRender();
         SetBusy(true, "Creating a new composition…");
         try
@@ -716,6 +732,7 @@ internal sealed class ComposerWindow : Window
     private async Task LoadSceneAsync(string path)
     {
         ClosePrimitiveParametersWindow();
+        CloseMaterialEditorWindow();
         CancelCurrentRender();
         SetBusy(true, $"Loading {Path.GetFileName(path)}…");
         try
@@ -748,6 +765,7 @@ internal sealed class ComposerWindow : Window
     private async Task InsertModelAsync(string path)
     {
         ClosePrimitiveParametersWindow();
+        CloseMaterialEditorWindow();
         CancelCurrentRender();
         SetBusy(true, $"Inserting {Path.GetFileName(path)}…");
         try
@@ -781,6 +799,7 @@ internal sealed class ComposerWindow : Window
         try
         {
             ClosePrimitiveParametersWindow();
+            CloseMaterialEditorWindow();
             await StopCurrentRenderAsync();
             SetBusy(true, $"Adding {primitiveName}…");
             insertedId = await Task.Run(
@@ -814,6 +833,7 @@ internal sealed class ComposerWindow : Window
             return;
 
         ClosePrimitiveParametersWindow();
+        CloseMaterialEditorWindow();
         try
         {
             await StopCurrentRenderAsync();
@@ -1115,6 +1135,7 @@ internal sealed class ComposerWindow : Window
     private async Task UndoAsync()
     {
         ClosePrimitiveParametersWindow();
+        CloseMaterialEditorWindow();
         if (!session.CanUndo)
             return;
 
@@ -1147,6 +1168,7 @@ internal sealed class ComposerWindow : Window
     private async Task RedoAsync()
     {
         ClosePrimitiveParametersWindow();
+        CloseMaterialEditorWindow();
         if (!session.CanRedo)
             return;
 
@@ -1179,6 +1201,7 @@ internal sealed class ComposerWindow : Window
     private async Task UngroupSelectedAsync()
     {
         ClosePrimitiveParametersWindow();
+        CloseMaterialEditorWindow();
         if (selectedObjectId is not int id)
             return;
         if (!session.CanUngroupObject(id))
@@ -1219,6 +1242,7 @@ internal sealed class ComposerWindow : Window
     private async Task DuplicateSelectedAsync()
     {
         ClosePrimitiveParametersWindow();
+        CloseMaterialEditorWindow();
         if (selectedObjectId is not int id)
             return;
 
@@ -1246,6 +1270,7 @@ internal sealed class ComposerWindow : Window
     private async Task DeleteSelectedAsync()
     {
         ClosePrimitiveParametersWindow();
+        CloseMaterialEditorWindow();
         if (selectedObjectId is not int id)
             return;
 
@@ -1550,6 +1575,7 @@ internal sealed class ComposerWindow : Window
         nameBox.IsEnabled = enabled;
         visibleBox.IsEnabled = enabled;
         parametersButton.IsEnabled = enabled && selectedObjectId is int parameterId && session.CanEditPrimitiveParameters(parameterId);
+        materialButton.IsEnabled = enabled && selectedObjectId is int materialId && session.GetMaterialModel(materialId) != null;
         foreach (TextBox box in new[]
                  {
                      positionX, positionY, positionZ,
@@ -2129,9 +2155,67 @@ internal sealed class ComposerWindow : Window
         try { dialog.Close(); } catch { }
     }
 
+    private void OpenMaterialEditor()
+    {
+        if (selectedObjectId is not int id)
+            return;
+
+        if (materialEditorWindow != null)
+        {
+            if (materialEditorWindow.ObjectId == id)
+            {
+                materialEditorWindow.Activate();
+                return;
+            }
+            CloseMaterialEditorWindow();
+        }
+
+        selectionModeBox.SelectedIndex = 0;
+        ComposerMaterialModel? model = session.GetMaterialModel(id);
+        if (model == null)
+        {
+            statusText.Text = "The selected object has no material-bearing mesh geometry.";
+            return;
+        }
+
+        MaterialEditorWindow? dialog = null;
+        dialog = new MaterialEditorWindow(
+            session,
+            model,
+            onMaterialChanged: () =>
+            {
+                if (primitiveParametersWindow?.ObjectId == id)
+                    primitiveParametersWindow.RebaseAfterExternalEdit("Material changed. Procedural geometry parameters remain editable.");
+                RefreshObjectTree(id);
+                LoadInspectorFromSelection();
+                UpdateHistoryButtons();
+                pathText.Text = "Untitled composition (modified)";
+                statusText.Text = "Material updated. Procedural geometry, when present, was preserved.";
+                _ = RequestRenderAsync(interactive: false);
+            },
+            onClosed: () =>
+            {
+                if (ReferenceEquals(materialEditorWindow, dialog))
+                    materialEditorWindow = null;
+            });
+        materialEditorWindow = dialog;
+        dialog.Show(this);
+        statusText.Text = "Material editor opened. Presets, exact RGB/hex color, and image textures apply to the selected object.";
+    }
+
+    private void CloseMaterialEditorWindow()
+    {
+        MaterialEditorWindow? dialog = materialEditorWindow;
+        if (dialog == null)
+            return;
+        materialEditorWindow = null;
+        try { dialog.Close(); } catch { }
+    }
+
     private void DeselectObjectFromViewport()
     {
         ClosePrimitiveParametersWindow();
+        CloseMaterialEditorWindow();
         selectedObjectId = null;
         ClearVirtualTriangleSelection();
         session.SetSelectedObject(null);
@@ -2146,6 +2230,8 @@ internal sealed class ComposerWindow : Window
 
         if (primitiveParametersWindow != null && primitiveParametersWindow.ObjectId != id)
             ClosePrimitiveParametersWindow();
+        if (materialEditorWindow != null && materialEditorWindow.ObjectId != id)
+            CloseMaterialEditorWindow();
         selectionModeBox.SelectedIndex = 0;
         selectedObjectId = id;
         ClearVirtualTriangleSelection();
@@ -2616,6 +2702,7 @@ internal sealed class ComposerWindow : Window
     private void DisposeWindowResources()
     {
         ClosePrimitiveParametersWindow();
+        CloseMaterialEditorWindow();
         hoverPulseTimer.Stop();
         lifetimeCancellation.Cancel();
         activeRenderCancellation?.Cancel();

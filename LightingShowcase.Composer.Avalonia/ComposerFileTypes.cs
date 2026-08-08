@@ -40,6 +40,17 @@ internal static class ComposerFileTypes
         new("STL models") { Patterns = ["*.stl"] }
     ];
 
+    public static readonly IReadOnlyList<FilePickerFileType> TexturePickerTypes =
+    [
+        new("Image textures")
+        {
+            Patterns = ["*.png", "*.jpg", "*.jpeg", "*.bmp", "*.tga", "*.gif", "*.psd", "*.hdr"]
+        },
+        new("PNG images") { Patterns = ["*.png"] },
+        new("JPEG images") { Patterns = ["*.jpg", "*.jpeg"] },
+        new("Other supported images") { Patterns = ["*.bmp", "*.tga", "*.gif", "*.psd", "*.hdr"] }
+    ];
+
     public static readonly FilePickerFileType ComposerScene = new("LightingShowcase Composer scene")
     {
         Patterns = ["*.lscene"],

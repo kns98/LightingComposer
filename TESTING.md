@@ -100,3 +100,15 @@ The normal mesh-edit tests verify that entering Edge or Face mode does not expos
 - cancellation leaves the authoritative mesh unchanged.
 
 For an interactive timing check, choose Vulkan raster, enter Edge or Face mode, click a visible component, and drag its move gizmo. The frame details report `mesh-edit-upload=...ms`; the cache should remain hot and no full geometry refresh should occur until pointer release.
+
+## Material editor regression coverage
+
+`MaterialEditingTests` covers the Composer material workflow:
+
+- applying a built-in PBR material preset without converting a procedural primitive to mesh;
+- setting an exact base color while retaining procedural parameters;
+- assigning a decoded image texture with a real-world box-projection tile size in meters;
+- regenerating a procedural primitive after a parameter change while retaining its texture and meter-based projection metadata;
+- undoing material edits back to the previous immutable triangle/material state.
+
+For interactive validation, select an object, open **Material…**, apply a library preset, set an RGB/hex color, then browse to a texture. With box projection enabled, enter a tile size such as `0.25` m. On a parameterized primitive, change a geometry parameter afterward and confirm that both the material and texture remain assigned.

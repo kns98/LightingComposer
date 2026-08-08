@@ -376,7 +376,10 @@ public static class BinarySceneFile
                 Material material = ReadMaterialOrRef(reader, sceneFilePath, version, textureTable, materialTable);
                 string readyMadeName = ObjectLibraryRegistry.ReadyMadeNameForPrimitiveKind(primitiveKind, sourceName);
                 SceneObjectGroup temporary = ObjectLibraryRegistry.Insert(scene, new SceneMaterials(), readyMadeName);
-                temporary.ApplyColor(material);
+                // Restore the complete authored material, including base-color
+                // texture/PBR values. ApplyColor() intentionally changes only the
+                // color factor and would discard a saved texture on procedural objects.
+                temporary.ApplyMaterial(material);
                 scene.ObjectGroups.Remove(temporary);
                 foreach (Triangle tri in temporary.LocalTriangles)
                     group.AddTriangle(tri.A, tri.B, tri.C, tri.UvA, tri.UvB, tri.UvC, tri.Material);
