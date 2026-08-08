@@ -87,6 +87,20 @@ internal sealed class PrimitiveParametersWindow : Window
         Closed += (_, _) => onClosed();
     }
 
+    /// <summary>
+    /// Starts a fresh parameter edit batch after an external object transform.
+    /// The visible shape values do not change, but the session baseline must move
+    /// forward so closing this modeless window cannot undo the transform.
+    /// </summary>
+    public void RebaseAfterExternalTransform()
+    {
+        previewTimer.Stop();
+        previewDirty = false;
+        batchHasChanges = false;
+        if (session.BeginPrimitiveParameterEdit(objectId) != null)
+            statusText.Text = "Object transform applied. Procedural parameters are still editable.";
+    }
+
     private Control BuildContent()
     {
         StackPanel fields = new() { Spacing = 10 };

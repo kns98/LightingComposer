@@ -140,6 +140,71 @@ internal sealed class BakedTransformEditCommand : IComposerEditCommand
     }
 }
 
+/// <summary>
+/// Undo/redo for a non-destructive transform of a parameterized primitive. Only
+/// the small parameter dictionary is retained; the shadow mesh is regenerated on
+/// undo/redo, keeping large grid/sphere edits much cheaper than triangle snapshots.
+/// </summary>
+internal sealed class ParametricTransformEditCommand : IComposerEditCommand
+{
+    private readonly int groupId;
+    private readonly KeyValuePair<string, double>[] beforeParameters;
+    private readonly KeyValuePair<string, double>[] afterParameters;
+    private readonly string beforeName;
+    private readonly string afterName;
+    private readonly bool beforeVisible;
+    private readonly bool afterVisible;
+
+    public ParametricTransformEditCommand(
+        int groupId,
+        IEnumerable<KeyValuePair<string, double>> beforeParameters,
+        IEnumerable<KeyValuePair<string, double>> afterParameters,
+        string beforeName,
+        string afterName,
+        bool beforeVisible,
+        bool afterVisible)
+    {
+        this.groupId = groupId;
+        this.beforeParameters = beforeParameters.ToArray();
+        this.afterParameters = afterParameters.ToArray();
+        this.beforeName = beforeName;
+        this.afterName = afterName;
+        this.beforeVisible = beforeVisible;
+        this.afterVisible = afterVisible;
+    }
+
+    public string Description => "Transform parameterized object";
+    public int? UndoSelectionId => groupId;
+    public int? RedoSelectionId => groupId;
+
+    public void Undo(Scene scene) => Restore(scene, beforeParameters, beforeName, beforeVisible);
+    public void Redo(Scene scene) => Restore(scene, afterParameters, afterName, afterVisible);
+
+    private void Restore(
+        Scene scene,
+        IReadOnlyList<KeyValuePair<string, double>> parameters,
+        string name,
+        bool visible)
+    {
+        SceneObjectGroup group = scene.GroupById(groupId)
+            ?? throw new InvalidOperationException("The transformed procedural object no longer exists.");
+
+        group.PrimitiveParameters.Clear();
+        foreach (KeyValuePair<string, double> parameter in parameters)
+            group.PrimitiveParameters[parameter.Key] = parameter.Value;
+        group.Position = Vec3.Zero;
+        group.Rotation = Vec3.Zero;
+        group.Scale = new Vec3(1, 1, 1);
+        group.Name = name;
+        group.Visible = visible;
+
+        if (!scene.RebuildParametricObject(group))
+            throw new InvalidOperationException("The procedural object could not be regenerated during undo/redo.");
+        Scene.RecalculatePivotsToRoot(group.Parent);
+        scene.RebuildWorldGeometry();
+    }
+}
+
 /// <summary>Undo/redo for a small object geometry/metadata replacement such as procedural parameter edits.</summary>
 internal sealed class GeometryStateEditCommand : IComposerEditCommand
 {

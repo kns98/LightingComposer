@@ -20,3 +20,5 @@ write atomically through a temporary file, and use fast compression. Shared
 materials and textures are deduplicated by object reference, so a texture is not
 rehashed once for every triangle that uses it. The status bar displays elapsed
 save time for large scenes.
+
+Parameterized primitives retain their procedural parameters after object Move/Rotate/Scale. Only topology edits, Join + weld, or explicit Convert to Mesh make them ordinary meshes.

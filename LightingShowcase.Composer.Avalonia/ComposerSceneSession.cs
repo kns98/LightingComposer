@@ -456,15 +456,52 @@ internal sealed partial class ComposerSceneSession : IDisposable
             if (selectedGroup == null)
                 return false;
 
-            // Canonicalize any temporary gizmo preview first, then bake the new
-            // inspector transform into the actual triangle positions and normals.
-            selectedGroup.BakeCurrentTransform();
-            BakedGeometryState beforeGeometry = BakedGeometryState.Capture(selectedGroup);
-            Vec3 fixedPivot = selectedGroup.Pivot;
             string beforeName = selectedGroup.Name;
             bool beforeVisible = selectedGroup.Visible;
             string afterName = string.IsNullOrWhiteSpace(name) ? beforeName : name.Trim();
 
+            if (selectedGroup.HasParametricPrimitive && selectedGroup.Children.Count == 0)
+            {
+                // A modeless parameter window may have an active preview batch.
+                // Finish that batch before changing the hidden authored transform
+                // so closing the dialog later cannot restore pre-transform geometry.
+                if (primitiveParameterPreview?.GroupId == selectedGroup.Id)
+                    CommitPrimitiveParameterEditCore(selectedGroup.Id);
+
+                KeyValuePair<string, double>[] beforeParameters = selectedGroup.PrimitiveParameters.ToArray();
+                Vec3 fixedPivot = selectedGroup.Pivot;
+                if (!ObjectLibraryRegistry.AccumulateParametricTransform(
+                        selectedGroup, fixedPivot, position, rotationRadians, scale) ||
+                    !scene.RebuildParametricObject(selectedGroup))
+                {
+                    return false;
+                }
+
+                selectedGroup.Name = afterName;
+                selectedGroup.Visible = visible;
+                Scene.RecalculatePivotsToRoot(selectedGroup.Parent);
+                scene.RebuildWorldGeometry();
+                meshTopologyByGroup.Remove(selectedGroup.Id);
+                RebuildSelectionOverlayCache();
+
+                editHistory.PushApplied(new ParametricTransformEditCommand(
+                    selectedGroup.Id,
+                    beforeParameters,
+                    selectedGroup.PrimitiveParameters,
+                    beforeName,
+                    afterName,
+                    beforeVisible,
+                    visible));
+
+                ScenePath = null;
+                RefreshRendererCachesAfterGeometryBake(CancellationToken.None);
+                return true;
+            }
+
+            // Ordinary meshes retain the original bake-to-geometry workflow.
+            selectedGroup.BakeCurrentTransform();
+            BakedGeometryState beforeGeometry = BakedGeometryState.Capture(selectedGroup);
+            Vec3 meshFixedPivot = selectedGroup.Pivot;
             selectedGroup.BakeTransform(position, rotationRadians, scale);
             selectedGroup.Name = afterName;
             selectedGroup.Visible = visible;
@@ -475,7 +512,7 @@ internal sealed partial class ComposerSceneSession : IDisposable
             editHistory.PushApplied(new BakedTransformEditCommand(
                 selectedGroup.Id,
                 beforeGeometry,
-                fixedPivot,
+                meshFixedPivot,
                 position,
                 rotationRadians,
                 scale,
@@ -569,6 +606,35 @@ internal sealed partial class ComposerSceneSession : IDisposable
                 return true;
 
             Vec3 fixedPivot = target.Pivot;
+            if (target.HasParametricPrimitive && target.Children.Count == 0)
+            {
+                if (primitiveParameterPreview?.GroupId == target.Id)
+                    CommitPrimitiveParameterEditCore(target.Id);
+
+                KeyValuePair<string, double>[] beforeParameters = target.PrimitiveParameters.ToArray();
+                if (!ObjectLibraryRegistry.AccumulateParametricTransform(target, fixedPivot, position, rotation, scale) ||
+                    !scene.RebuildParametricObject(target))
+                {
+                    return false;
+                }
+
+                Scene.RecalculatePivotsToRoot(target.Parent);
+                scene.RebuildWorldGeometry();
+                meshTopologyByGroup.Remove(target.Id);
+                RebuildSelectionOverlayCache();
+                editHistory.PushApplied(new ParametricTransformEditCommand(
+                    target.Id,
+                    beforeParameters,
+                    target.PrimitiveParameters,
+                    target.Name,
+                    target.Name,
+                    target.Visible,
+                    target.Visible));
+                ScenePath = null;
+                RefreshRendererCachesAfterGeometryBake(CancellationToken.None);
+                return true;
+            }
+
             BakedGeometryState beforeGeometry = BakedGeometryState.Capture(target);
             target.BakeCurrentTransform();
             Scene.RecalculatePivotsToRoot(target.Parent);
@@ -835,8 +901,10 @@ internal sealed partial class ComposerSceneSession : IDisposable
         int height,
         bool interactive,
         CancellationToken cancellationToken,
-        ComposerGizmoMode gizmoMode = ComposerGizmoMode.Translate)
+        ComposerGizmoMode gizmoMode = ComposerGizmoMode.Translate,
+        bool objectGizmoOnly = false)
     {
+        _ = objectGizmoOnly; // Retained for call-site compatibility; Object mode is always gizmo-only now.
         sceneGate.Wait(cancellationToken);
         try
         {
@@ -949,14 +1017,18 @@ internal sealed partial class ComposerSceneSession : IDisposable
                         axisConstraint: meshMoveAxisLock);
                 }
             }
-            else if (TryGetSelectionOverlayForRender(out Aabb overlayBounds, out IReadOnlyList<Triangle> overlayTriangles))
+            else if (TryGetSelectionOverlayForRender(out Aabb overlayBounds, out _))
             {
+                // Object mode uses the transform gizmo as the sole selection cue.
+                // Do not restore bounds or a sampled triangle wireframe when a drag
+                // finishes; those extra outlines obscure the shaded result.
                 ComposerOverlayRenderer.DrawSelection(
                     image,
                     camera,
                     overlayBounds,
-                    overlayTriangles,
-                    gizmoMode);
+                    selectedTriangles: null,
+                    gizmoMode: gizmoMode,
+                    drawBounds: false);
             }
 
             stopwatch.Stop();

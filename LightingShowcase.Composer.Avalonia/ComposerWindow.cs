@@ -1064,7 +1064,10 @@ internal sealed class ComposerWindow : Window
             RefreshObjectTree(id);
             ClearTransformTextBoxes();
             UpdateHistoryButtons();
-            statusText.Text = $"Baked transform into {appliedState.Name}; scene revision {afterEvidence.SceneRevision}. {session.LastGeometryRefreshDetails}";
+            bool retainedParameters = session.CanEditPrimitiveParameters(id);
+            statusText.Text = retainedParameters
+                ? $"Applied transform to {appliedState.Name}; procedural parameters were preserved. Scene revision {afterEvidence.SceneRevision}. {session.LastGeometryRefreshDetails}"
+                : $"Baked transform into {appliedState.Name}; scene revision {afterEvidence.SceneRevision}. {session.LastGeometryRefreshDetails}";
             await RequestRenderAsync(interactive: false);
         }
         catch (Exception ex)
@@ -1712,8 +1715,6 @@ internal sealed class ComposerWindow : Window
             bool meshComponent = gizmoDrag.MeshComponent;
             gizmoDrag = null;
             e.Pointer.Capture(null);
-            if (!meshComponent)
-                ClosePrimitiveParametersWindow();
             await StopCurrentRenderAsync();
             bool committed = await Task.Run(
                 () => meshComponent
@@ -1732,12 +1733,18 @@ internal sealed class ComposerWindow : Window
                 ClearVirtualTriangleSelection();
                 ClearTransformTextBoxes();
             }
+            bool retainedParameters = !meshComponent && session.CanEditPrimitiveParameters(commitId);
+            if (retainedParameters && primitiveParametersWindow?.ObjectId == commitId)
+                primitiveParametersWindow.RebaseAfterExternalTransform();
+
             RefreshObjectTree(commitId);
             UpdateHistoryButtons();
             pathText.Text = "Untitled composition (modified)";
             statusText.Text = meshComponent
                 ? $"Moved the selected {SelectedSelectionMode.ToString().ToLowerInvariant()} and baked shared welded vertices once. {session.LastGeometryRefreshDetails}"
-                : $"Baked {committedMode.ToString().ToLowerInvariant()} transform into geometry. {session.LastGeometryRefreshDetails}";
+                : retainedParameters
+                    ? $"Applied {committedMode.ToString().ToLowerInvariant()} transform; procedural parameters were preserved. {session.LastGeometryRefreshDetails}"
+                    : $"Baked {committedMode.ToString().ToLowerInvariant()} transform into mesh geometry. {session.LastGeometryRefreshDetails}";
             await RequestRenderAsync(interactive: false);
             e.Handled = true;
             return;
@@ -1757,51 +1764,71 @@ internal sealed class ComposerWindow : Window
             leftPressed = false;
             e.Pointer.Capture(null);
             Vector movement = releasePoint - leftPressPoint;
-            if (movement.Length <= 5.0 && TryViewportToImagePoint(releasePoint, out Point imagePoint))
+            if (movement.Length <= 5.0)
             {
-                double normalizedX = imagePoint.X / Math.Max(1, lastRenderWidth);
-                double normalizedY = imagePoint.Y / Math.Max(1, lastRenderHeight);
-                CameraDefinition camera = session.Camera.Snapshot();
-                if (SelectedSelectionMode == ComposerSelectionMode.Object)
+                if (!TryViewportToImagePoint(releasePoint, out Point imagePoint))
                 {
-                    int? hitId = await Task.Run(() => session.PickObject(
-                        camera,
-                        normalizedX,
-                        normalizedY,
-                        lastRenderWidth,
-                        lastRenderHeight));
-                    if (hitId.HasValue)
-                        SelectObject(hitId.Value);
+                    if (SelectedSelectionMode == ComposerSelectionMode.Object)
+                    {
+                        DeselectObjectFromViewport();
+                        await RequestRenderAsync(interactive: false);
+                    }
                 }
                 else
                 {
-                    ComposerSelectionMode mode = SelectedSelectionMode;
-                    ComposerMeshPickResult? picked = await Task.Run(() => session.PickMeshElement(
-                        camera,
-                        normalizedX,
-                        normalizedY,
-                        lastRenderWidth,
-                        lastRenderHeight,
-                        mode));
-                    if (picked != null)
+                    double normalizedX = imagePoint.X / Math.Max(1, lastRenderWidth);
+                    double normalizedY = imagePoint.Y / Math.Max(1, lastRenderHeight);
+                    CameraDefinition camera = session.Camera.Snapshot();
+                    if (SelectedSelectionMode == ComposerSelectionMode.Object)
                     {
-                        selectedObjectId = picked.GroupId;
-                        if (picked.Mode == ComposerSelectionMode.Face)
+                        int? hitId = await Task.Run(() => session.PickObject(
+                            camera,
+                            normalizedX,
+                            normalizedY,
+                            lastRenderWidth,
+                            lastRenderHeight));
+                        if (hitId.HasValue)
                         {
-                            selectedTriangleGroupId = picked.GroupId;
-                            selectedTriangleIndex = picked.ElementIndex;
+                            SelectObject(hitId.Value);
                         }
                         else
                         {
-                            selectedTriangleGroupId = null;
-                            selectedTriangleIndex = null;
+                            // A normal viewport click on empty space clears object
+                            // selection, matching common DCC viewport behavior.
+                            DeselectObjectFromViewport();
+                            await RequestRenderAsync(interactive: false);
                         }
-                        RefreshObjectTree(picked.GroupId);
-                        string axisHint = SelectedMoveAxisLock == ComposerGizmoAxis.None
-                            ? "drag X, Y, or Z; press X/Y/Z to lock"
-                            : $"movement is locked to {SelectedMoveAxisLock}";
-                        statusText.Text = $"Selected {picked.Label}; {axisHint}. Shift is precise and Ctrl snaps.";
-                        await RequestRenderAsync(interactive: false);
+                    }
+                    else
+                    {
+                        ComposerSelectionMode mode = SelectedSelectionMode;
+                        ComposerMeshPickResult? picked = await Task.Run(() => session.PickMeshElement(
+                            camera,
+                            normalizedX,
+                            normalizedY,
+                            lastRenderWidth,
+                            lastRenderHeight,
+                            mode));
+                        if (picked != null)
+                        {
+                            selectedObjectId = picked.GroupId;
+                            if (picked.Mode == ComposerSelectionMode.Face)
+                            {
+                                selectedTriangleGroupId = picked.GroupId;
+                                selectedTriangleIndex = picked.ElementIndex;
+                            }
+                            else
+                            {
+                                selectedTriangleGroupId = null;
+                                selectedTriangleIndex = null;
+                            }
+                            RefreshObjectTree(picked.GroupId);
+                            string axisHint = SelectedMoveAxisLock == ComposerGizmoAxis.None
+                                ? "drag X, Y, or Z; press X/Y/Z to lock"
+                                : $"movement is locked to {SelectedMoveAxisLock}";
+                            statusText.Text = $"Selected {picked.Label}; {axisHint}. Shift is precise and Ctrl snaps.";
+                            await RequestRenderAsync(interactive: false);
+                        }
                     }
                 }
             }
@@ -2102,6 +2129,16 @@ internal sealed class ComposerWindow : Window
         try { dialog.Close(); } catch { }
     }
 
+    private void DeselectObjectFromViewport()
+    {
+        ClosePrimitiveParametersWindow();
+        selectedObjectId = null;
+        ClearVirtualTriangleSelection();
+        session.SetSelectedObject(null);
+        RefreshObjectTree();
+        statusText.Text = "Selection cleared.";
+    }
+
     private void SelectObject(int id)
     {
         if (session.GetObjectState(id) == null)
@@ -2352,6 +2389,7 @@ internal sealed class ComposerWindow : Window
     {
         RendererChoice renderer = SelectedRenderer;
         ComposerGizmoMode gizmoMode = SelectedGizmoMode;
+        bool objectGizmoOnly = gizmoDrag is { MeshComponent: false };
         (int width, int height) = ChooseRenderSize(renderer.Kind, interactive);
         CameraDefinition camera = session.Camera.Snapshot();
         RenderOptions.SetBitmapInterpolationMode(
@@ -2364,7 +2402,15 @@ internal sealed class ComposerWindow : Window
         try
         {
             ComposerFrame frame = await Task.Run(
-                () => session.Render(renderer.Kind, camera, width, height, interactive, token, gizmoMode),
+                () => session.Render(
+                    renderer.Kind,
+                    camera,
+                    width,
+                    height,
+                    interactive,
+                    token,
+                    gizmoMode,
+                    objectGizmoOnly),
                 token);
 
             if (token.IsCancellationRequested || (!interactive && requestVersion != renderVersion))

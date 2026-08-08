@@ -1,16 +1,3 @@
-#Running in Linux
-
-set this library link in your bin folder.
-
-LIBDL="$(ldconfig -p | awk '/libdl\.so\.2/ {print $NF; exit}')"
-test -n "$LIBDL" || {
-    echo "libdl.so.2 was not found"
-    exit 1
-}
-
-ln -sfn "$LIBDL" ./libdl.so
-ls -l ./libdl.so
-
 # LightingShowcase Avalonia Composer
 
 A standalone, platform-neutral scene composer and renderer built with Avalonia and .NET 8.
@@ -82,12 +69,12 @@ A path may also be passed without the `compose` verb:
 
 ## Viewport controls
 
-- Left click in Object mode: select the highest imported object group under the pointer.
+- Left click in Object mode: select the highest imported object group under the pointer. Click empty viewport space to deselect the current object.
 - `1`, `2`, `3`, and `4`: switch to Vertex, Edge, Face, and Object selection. Edge and vertex picks must be close to the projected component; Face mode selects the directly clicked front face. Component modes hide the object bounding box until a component is selected, then show only the component highlight and move gizmo.
 - Choose Plane, Cube, Circle, UV Sphere, Icosphere, Cylinder, Cone, Torus, or Grid and press **Add primitive**. A closable floating **Parameters** window opens for procedural editing.
 - **Join + weld** bakes the selected hierarchy, flattens its descendants, and merges coincident positions into common vertex/edge topology. This operation is undoable.
 - `G`, `R`, and `S`: choose Move, Rotate, or Scale, matching Blender's primary transform shortcuts. The toolbar selector provides the same modes.
-- Drag a red, green, or blue move axis, rotation ring, or scale handle. The white center scale handle scales uniformly. Hold Shift for precision and Ctrl for snapping.
+- Drag a red, green, or blue move axis, rotation ring, or scale handle. The white center scale handle scales uniformly. Hold Shift for precision and Ctrl for snapping. In Object mode, Composer uses the transform gizmo as the selection cue and does not draw an additional object bounding box or triangle wireframe before, during, or after a transform.
 - Vulkan raster previews object transforms live through a transform uniform. Component movement patches only affected triangle vertices in the existing GPU buffers, so the rendered mesh deforms during the drag; shared welded vertices are committed once on release.
 - Software raster and sufficiently fast Vulkan compute frames are coalesced and throttled as pseudo-real-time previews. CPU ray rendering waits for release.
 - Right drag: orbit.
@@ -174,9 +161,9 @@ LightingShowcase.ObjectLibrary.*/     Built-in scene objects
 
 ## Transform and Vulkan behavior
 
-Transforms are authored as temporary editor values only until they are committed. A commit rewrites the selected subtree's triangle positions and inverse-transpose transformed normals, converts transformed procedural primitives to mesh authoring data, resets the node transform to identity, increments the scene revision, and refreshes the existing Vulkan raster vertex buffers in place. Textures, descriptor sets, pipelines, and render-target allocations remain cached. This means the commit has a one-time vertex upload cost, but there is no extra matrix or scene-graph transform cost on later frames.
+Transforms are authored as temporary editor values while dragging. For ordinary meshes, commit rewrites triangle positions/normals as before. Parameterized primitives instead accumulate Move/Rotate/Scale into a hidden authored affine layer, regenerate their shadow mesh, and keep all procedural shape parameters editable. The node transform fields still return to identity, so later render frames keep the same baked-geometry performance model. Vertex/edge/face editing, Join + weld, or explicit Convert to Mesh are the operations that intentionally discard the procedural definition. Vulkan raster refreshes the existing vertex buffers in place; textures, descriptor sets, pipelines, and render-target allocations remain cached.
 
-Selection is a cached post-process overlay and does not change scene materials or invalidate Vulkan geometry. Component modes suppress the whole-object bounds. For Vulkan raster component movement, a small cached list of affected triangle-buffer offsets is patched during dragging and restored or replaced on cancellation, reselection, or commit. At most 256 sampled triangles are retained for the object wire overlay; the complete selected mesh is not traversed on every frame.
+Selection is a cached post-process overlay and does not change scene materials or invalidate Vulkan geometry. Object mode displays only the active transform gizmo; it does not add a bounding box or sampled triangle wireframe. Component modes show only their component highlight/gizmo. For Vulkan raster component movement, a small cached list of affected triangle-buffer offsets is patched during dragging and restored or replaced on cancellation, reselection, or commit.
 
 GPU ID picking and detailed benchmark export remain future extensions.
 

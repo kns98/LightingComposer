@@ -72,6 +72,56 @@ public sealed class ParameterizedPrimitiveTests
     }
 
     [Fact]
+    public void ObjectTransformsPreserveProceduralParametersUntilTopologyIsEdited()
+    {
+        using ComposerSceneSession session = new();
+        int id = session.InsertPrimitive("Cube");
+        ComposerModelEvidence before = Assert.IsType<ComposerModelEvidence>(session.GetModelEvidence(id));
+
+        Assert.True(session.UpdateTransformTarget(
+            id,
+            new LightingShowcase.Math3D.Vec3(1.25, 0.5, -0.75),
+            new LightingShowcase.Math3D.Vec3(0.15, 0.35, -0.10),
+            new LightingShowcase.Math3D.Vec3(1.5, 0.8, 1.2)));
+        Assert.True(session.CommitPendingTransform(id));
+
+        Assert.True(session.CanEditPrimitiveParameters(id));
+        ComposerPrimitiveParameterModel retained = Assert.IsType<ComposerPrimitiveParameterModel>(session.GetPrimitiveParameterModel(id));
+        Assert.Equal(1.0, retained.Values["width"], 8);
+        Assert.Equal(1.0, retained.Values["height"], 8);
+        Assert.Equal(1.0, retained.Values["depth"], 8);
+
+        ComposerModelEvidence transformed = Assert.IsType<ComposerModelEvidence>(session.GetModelEvidence(id));
+        Assert.NotEqual(before.WorldGeometryHash, transformed.WorldGeometryHash);
+        Assert.Equal(LightingShowcase.Math3D.Vec3.Zero, transformed.Position);
+        Assert.Equal(LightingShowcase.Math3D.Vec3.Zero, transformed.Rotation);
+        Assert.Equal(new LightingShowcase.Math3D.Vec3(1, 1, 1), transformed.Scale);
+
+        // Editing a shape parameter regenerates from the primitive definition and
+        // reapplies the retained authored transform instead of snapping back.
+        Assert.NotNull(session.BeginPrimitiveParameterEdit(id));
+        Assert.True(session.PreviewPrimitiveParameters(id, new Dictionary<string, double>
+        {
+            ["width"] = 2.0,
+            ["height"] = 1.0,
+            ["depth"] = 1.0
+        }));
+        Assert.True(session.CommitPrimitiveParameterEdit(id));
+        Assert.True(session.CanEditPrimitiveParameters(id));
+        ComposerModelEvidence resized = Assert.IsType<ComposerModelEvidence>(session.GetModelEvidence(id));
+        Assert.NotEqual(transformed.WorldGeometryHash, resized.WorldGeometryHash);
+
+        // First undo restores the transformed 1 m cube; second undo removes the
+        // authored transform while retaining the primitive definition.
+        Assert.Equal(id, session.Undo());
+        Assert.True(session.CanEditPrimitiveParameters(id));
+        Assert.Equal(transformed.WorldGeometryHash, Assert.IsType<ComposerModelEvidence>(session.GetModelEvidence(id)).WorldGeometryHash);
+        Assert.Equal(id, session.Undo());
+        Assert.True(session.CanEditPrimitiveParameters(id));
+        Assert.Equal(before.WorldGeometryHash, Assert.IsType<ComposerModelEvidence>(session.GetModelEvidence(id)).WorldGeometryHash);
+    }
+
+    [Fact]
     public void ConvertToMeshRemovesParametersAndUndoRestoresThem()
     {
         using ComposerSceneSession session = new();

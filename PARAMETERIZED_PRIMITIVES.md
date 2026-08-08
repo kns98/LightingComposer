@@ -46,7 +46,7 @@ The object becomes an ordinary mesh when:
 - **Join + weld** is applied; or
 - a Vertex, Edge, or Face geometry move is committed.
 
-The current transform-bake workflow also turns procedural geometry into ordinary authored triangles when a transform is baked, matching Composer's existing rule that baked triangles become the source of truth.
+Object **Move, Rotate, and Scale do not convert a procedural primitive to mesh**. Composer accumulates those object transforms in a hidden authored affine layer, regenerates the shadow mesh, and keeps the shape controls available. This preserves exact repeated transforms, including rotated non-uniform scaling, without exposing implementation-only transform values in the Parameters window.
 
 ## Rendering behavior
 
