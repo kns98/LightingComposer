@@ -22,6 +22,23 @@ internal sealed record ComposerMaterialProperties(
     double NormalScale,
     double OcclusionStrength);
 
+
+internal sealed record ComposerTextureSlotModel(
+    MaterialTextureSlot Slot,
+    string Label,
+    string? Name,
+    string? Path,
+    double OffsetU,
+    double OffsetV,
+    double ScaleU,
+    double ScaleV,
+    double RotationDegrees,
+    TextureAddressMode WrapU,
+    TextureAddressMode WrapV)
+{
+    public bool HasTexture => !string.IsNullOrWhiteSpace(Name) || !string.IsNullOrWhiteSpace(Path);
+}
+
 internal sealed record ComposerMaterialModel(
     int ObjectId,
     string ObjectName,
@@ -47,7 +64,8 @@ internal sealed record ComposerMaterialModel(
     string? TexturePath,
     bool HasStoredTextureProjection,
     bool UsesBoxProjection,
-    double TextureTileMeters)
+    double TextureTileMeters,
+    IReadOnlyList<ComposerTextureSlotModel> TextureSlots)
 {
     public ComposerMaterialProperties DirectProperties => new(
         Metallic,
@@ -67,6 +85,9 @@ internal sealed record ComposerMaterialModel(
         ClearcoatRoughness,
         NormalScale,
         OcclusionStrength);
+
+    public ComposerTextureSlotModel TextureSlot(MaterialTextureSlot slot) =>
+        TextureSlots.First(entry => entry.Slot == slot);
 }
 
 internal sealed partial class ComposerSceneSession
@@ -109,7 +130,10 @@ internal sealed partial class ComposerSceneSession
                 material.Texture?.SourcePath,
                 hasStoredProjection,
                 boxProjection,
-                tileMeters);
+                tileMeters,
+                Enum.GetValues<MaterialTextureSlot>()
+                    .Select(slot => CreateTextureSlotModel(slot, material.GetTexture(slot)))
+                    .ToArray());
         }
         finally
         {
@@ -170,25 +194,135 @@ internal sealed partial class ComposerSceneSession
                 material.ClearcoatUsesTransmissionTexture)));
     }
 
-    public bool SetObjectTexture(int id, string path, double tileMeters, bool boxProjection)
+    public bool SetObjectTexture(int id, string path, double tileMeters, bool boxProjection) =>
+        SetObjectTexture(id, MaterialTextureSlot.BaseColor, path, tileMeters, boxProjection);
+
+    /// <summary>Assigns an image file to one PBR texture input.</summary>
+    public bool SetObjectTexture(
+        int id,
+        MaterialTextureSlot slot,
+        string path,
+        double tileMeters,
+        bool boxProjection)
     {
         if (string.IsNullOrWhiteSpace(path))
             throw new ArgumentException("Select an image texture file.", nameof(path));
         if (!double.IsFinite(tileMeters) || tileMeters <= 1e-6)
             throw new ArgumentOutOfRangeException(nameof(tileMeters), "Texture tile size must be greater than zero meters.");
+        if (!Enum.IsDefined(typeof(MaterialTextureSlot), slot))
+            throw new ArgumentOutOfRangeException(nameof(slot));
 
         // Decode before taking the scene lock; large image files should not block
         // viewport/session reads while their pixels are being loaded.
         TextureMap texture = TextureMap.FromFile(path);
         return ApplyMaterialEdit(
             id,
-            $"Set texture: {Path.GetFileName(path)}",
-            group => group.ApplyTexture(texture, tileMeters, boxProjection));
+            $"Set {TextureSlotLabel(slot)} texture: {Path.GetFileName(path)}",
+            group =>
+            {
+                if (!boxProjection)
+                {
+                    group.SetTextureProjectionMode(tileMeters, boxProjection: false);
+                    if (group.HasParametricPrimitive && group.Children.Count == 0)
+                        scene.RebuildPrimitiveShadowGeometry(group);
+                }
+                group.ApplyTexture(slot, texture, tileMeters, boxProjection);
+            });
     }
 
-    public bool ClearObjectTexture(int id)
+    public bool ClearObjectTexture(int id) => ClearObjectTexture(id, MaterialTextureSlot.BaseColor);
+
+    public bool ClearObjectTexture(int id, MaterialTextureSlot slot)
     {
-        return ApplyMaterialEdit(id, "Clear base-color texture", group => group.ClearTexture());
+        if (!Enum.IsDefined(typeof(MaterialTextureSlot), slot))
+            throw new ArgumentOutOfRangeException(nameof(slot));
+        return ApplyMaterialEdit(id, $"Clear {TextureSlotLabel(slot)} texture", group => group.ClearTexture(slot));
+    }
+
+    /// <summary>
+    /// Applies per-image UV transform/addressing controls to one texture input. Rotation
+    /// is entered in degrees in the Composer UI and stored as radians on TextureMap.
+    /// </summary>
+    public bool SetObjectTextureMapping(
+        int id,
+        MaterialTextureSlot slot,
+        double offsetU,
+        double offsetV,
+        double scaleU,
+        double scaleV,
+        double rotationDegrees,
+        TextureAddressMode wrapU,
+        TextureAddressMode wrapV)
+    {
+        ValidateTextureMapping(offsetU, offsetV, scaleU, scaleV, rotationDegrees, wrapU, wrapV);
+        return ApplyMaterialEdit(
+            id,
+            $"Map {TextureSlotLabel(slot)} texture",
+            group => group.ApplyTextureMapping(
+                slot,
+                offsetU,
+                offsetV,
+                scaleU,
+                scaleV,
+                rotationDegrees * Math.PI / 180.0,
+                wrapU,
+                wrapV));
+    }
+
+    /// <summary>
+    /// Chooses the shared geometry UV source. Box projection generates one UV channel in
+    /// real-world meters for all texture slots; authored/current UV mode leaves triangle
+    /// UVs unchanged. Per-slot transforms remain independent.
+    /// </summary>
+    public bool SetObjectTextureProjectionMode(int id, double tileMeters, bool boxProjection)
+    {
+        if (!double.IsFinite(tileMeters) || tileMeters <= 1e-6)
+            throw new ArgumentOutOfRangeException(nameof(tileMeters), "Texture tile size must be greater than zero meters.");
+        return ApplyMaterialEdit(
+            id,
+            boxProjection ? "Use box-projected texture UVs" : "Use authored/current texture UVs",
+            group =>
+            {
+                group.SetTextureProjectionMode(tileMeters, boxProjection);
+                if (!boxProjection && group.HasParametricPrimitive && group.Children.Count == 0)
+                    scene.RebuildPrimitiveShadowGeometry(group);
+            });
+    }
+
+    public bool SetObjectTextureMappingAndProjection(
+        int id,
+        MaterialTextureSlot slot,
+        double tileMeters,
+        bool boxProjection,
+        double offsetU,
+        double offsetV,
+        double scaleU,
+        double scaleV,
+        double rotationDegrees,
+        TextureAddressMode wrapU,
+        TextureAddressMode wrapV)
+    {
+        if (!double.IsFinite(tileMeters) || tileMeters <= 1e-6)
+            throw new ArgumentOutOfRangeException(nameof(tileMeters), "Texture tile size must be greater than zero meters.");
+        ValidateTextureMapping(offsetU, offsetV, scaleU, scaleV, rotationDegrees, wrapU, wrapV);
+        return ApplyMaterialEdit(
+            id,
+            $"Map {TextureSlotLabel(slot)} texture",
+            group =>
+            {
+                group.SetTextureProjectionMode(tileMeters, boxProjection);
+                if (!boxProjection && group.HasParametricPrimitive && group.Children.Count == 0)
+                    scene.RebuildPrimitiveShadowGeometry(group);
+                group.ApplyTextureMapping(
+                    slot,
+                    offsetU,
+                    offsetV,
+                    scaleU,
+                    scaleV,
+                    rotationDegrees * Math.PI / 180.0,
+                    wrapU,
+                    wrapV);
+            });
     }
 
     private bool ApplyMaterialEdit(int id, string description, Action<SceneObjectGroup> apply)
@@ -225,6 +359,50 @@ internal sealed partial class ComposerSceneSession
         {
             sceneGate.Release();
         }
+    }
+
+    private static ComposerTextureSlotModel CreateTextureSlotModel(MaterialTextureSlot slot, TextureMap? texture) => new(
+        slot,
+        TextureSlotLabel(slot),
+        texture?.Name,
+        texture?.SourcePath,
+        texture?.OffsetU ?? 0.0,
+        texture?.OffsetV ?? 0.0,
+        texture?.ScaleU ?? 1.0,
+        texture?.ScaleV ?? 1.0,
+        (texture?.Rotation ?? 0.0) * 180.0 / Math.PI,
+        texture?.WrapU ?? TextureAddressMode.Repeat,
+        texture?.WrapV ?? TextureAddressMode.Repeat);
+
+    internal static string TextureSlotLabel(MaterialTextureSlot slot) => slot switch
+    {
+        MaterialTextureSlot.BaseColor => "Base color",
+        MaterialTextureSlot.MetallicRoughness => "Metallic / roughness",
+        MaterialTextureSlot.Normal => "Normal",
+        MaterialTextureSlot.Emissive => "Emissive",
+        MaterialTextureSlot.Transmission => "Transmission",
+        MaterialTextureSlot.Occlusion => "Occlusion",
+        _ => slot.ToString()
+    };
+
+    private static void ValidateTextureMapping(
+        double offsetU,
+        double offsetV,
+        double scaleU,
+        double scaleV,
+        double rotationDegrees,
+        TextureAddressMode wrapU,
+        TextureAddressMode wrapV)
+    {
+        if (!double.IsFinite(offsetU) || !double.IsFinite(offsetV))
+            throw new ArgumentOutOfRangeException(nameof(offsetU), "Texture offsets must be finite values.");
+        if (!double.IsFinite(scaleU) || Math.Abs(scaleU) <= 1e-9 ||
+            !double.IsFinite(scaleV) || Math.Abs(scaleV) <= 1e-9)
+            throw new ArgumentOutOfRangeException(nameof(scaleU), "Texture U/V scale must be finite and non-zero.");
+        if (!double.IsFinite(rotationDegrees))
+            throw new ArgumentOutOfRangeException(nameof(rotationDegrees), "Texture rotation must be finite degrees.");
+        if (!Enum.IsDefined(typeof(TextureAddressMode), wrapU) || !Enum.IsDefined(typeof(TextureAddressMode), wrapV))
+            throw new ArgumentOutOfRangeException(nameof(wrapU), "Choose a valid texture address mode.");
     }
 
     private static void ValidateColor(Vec3 color)

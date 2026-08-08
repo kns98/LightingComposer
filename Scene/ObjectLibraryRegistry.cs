@@ -94,7 +94,7 @@ public static class ObjectLibraryRegistry
         // Keep an explicitly assigned meter-based texture projection stable when
         // shape parameters regenerate the procedural shadow mesh. The material
         // itself survives because it was captured before LocalTriangles.Clear().
-        if (material.Texture != null &&
+        if (material.HasAnyTexture &&
             group.PrimitiveParameters.TryGetValue(TextureProjectionModeKey, out double boxProjection) &&
             boxProjection >= 0.5)
         {
@@ -117,9 +117,10 @@ public static class ObjectLibraryRegistry
     public static void StoreParametricTextureProjection(SceneObjectGroup group, double tileWorldUnits, bool forceBoxProjection)
     {
         if (group == null) throw new ArgumentNullException(nameof(group));
-        if (!group.HasParametricPrimitive || group.Children.Count > 0)
-            return;
 
+        // Texture mapping metadata is useful for imported meshes as well as procedural
+        // primitives. Imported objects have no PrimitiveKind, so these hidden keys do
+        // not make them parametric and are safely ignored by the parameter editor.
         group.PrimitiveParameters[TextureProjectionModeKey] = forceBoxProjection ? 1.0 : 0.0;
         if (forceBoxProjection)
             group.PrimitiveParameters[TextureTileMetersKey] = double.IsFinite(tileWorldUnits) && tileWorldUnits > 1e-6
@@ -141,11 +142,8 @@ public static class ObjectLibraryRegistry
         if (group == null) throw new ArgumentNullException(nameof(group));
         boxProjection = false;
         tileWorldUnits = 0.25;
-        if (!group.HasParametricPrimitive || group.Children.Count > 0 ||
-            !group.PrimitiveParameters.TryGetValue(TextureProjectionModeKey, out double mode))
-        {
+        if (!group.PrimitiveParameters.TryGetValue(TextureProjectionModeKey, out double mode))
             return false;
-        }
 
         boxProjection = mode >= 0.5;
         if (group.PrimitiveParameters.TryGetValue(TextureTileMetersKey, out double storedTile) &&

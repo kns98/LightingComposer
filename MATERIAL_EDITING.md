@@ -1,45 +1,56 @@
-# Material library, direct PBR properties, color, and texture editing
+# Material library, direct PBR properties, texture maps, and UV mapping
 
-Lighting Composer exposes material editing from **Inspector → Material…**. The editor is modeless and closable, and targets the currently selected object/subtree. Library presets are optional starting points: the underlying renderer-backed material values can also be entered directly.
+Lighting Composer exposes material editing from **Inspector → Material…**. The editor is modeless and closable, and targets the currently selected object/subtree. Library presets are optional starting points: the underlying renderer-backed material values and image maps can also be entered directly.
 
-## Material library
+## Material library and direct properties
 
 The built-in PBR preset library is defined by `MaterialPresetLibrary.Common` and includes metals, paint, plastics, glass, stone, organic materials, liquids, and emissive surfaces. Applying a preset changes scalar/PBR appearance values while retaining image maps already assigned to the current material.
 
-## Direct material properties
-
-The floating editor exposes the material values already consumed by the renderers rather than storing UI-only metadata. Press **Apply properties** to create one undoable material edit while preserving base color and all assigned texture maps.
-
-Direct controls include:
-
-- metallic and roughness;
-- transmission and opacity;
-- index of refraction (IOR);
-- emission strength and emission color;
-- alpha mode and alpha cutoff;
-- double-sided rendering;
-- thickness in meters;
-- attenuation color and attenuation distance in meters;
-- clearcoat and clearcoat roughness;
-- normal-map scale and occlusion strength.
-
-Presets refresh these controls after application, so a preset can be selected and then numerically tuned. Direct material edits do not convert parameterized primitives to meshes.
+The floating editor exposes metallic, roughness, transmission, opacity, IOR, emission strength/color, alpha mode/cutoff, double-sided rendering, thickness and attenuation distance in meters, attenuation color, clearcoat, clearcoat roughness, normal scale, and occlusion strength. Press **Apply properties** to create one undoable material edit while preserving base color and all assigned texture maps.
 
 ## Exact base color
 
-Base color can be entered either as `#RRGGBB` or as R/G/B channels from 0 to 255. The UI shows a swatch before the color is applied. Color changes are material-only edits and do not bake geometry or destroy procedural primitive parameters.
+Base color can be entered either as `#RRGGBB` or as R/G/B channels from 0 to 255. Color changes are material-only edits and do not bake geometry or destroy procedural primitive parameters.
 
-## Base-color textures
+## Texture maps
 
-The texture setter uses the existing managed `TextureMap` decoder. It accepts PNG, JPEG, BMP, TGA, GIF, PSD, and HDR inputs.
+The Material window exposes the renderer-backed PBR image inputs independently:
 
-Two UV modes are available:
+- Base color
+- Metallic / roughness
+- Normal
+- Emissive
+- Transmission
+- Occlusion
 
-- **Box projection**: generates UVs from object position and a repeat/tile size expressed in scene meters. This is useful for architectural and product-scale materials.
-- **Authored UVs**: preserves the UV coordinates already stored on imported or generated triangles.
+Each slot has its own **Browse…** and **Clear** controls. The existing managed `TextureMap` decoder accepts PNG, JPEG, BMP, TGA, GIF, PSD, and HDR inputs. Assigning a map preserves every other material property and texture slot.
 
-For procedural primitives, the box-projection flag and tile size are stored as hidden double parameters (`__composerTextureBoxProjection` and `__composerTextureTileMeters`). They are intentionally omitted from the public Parameters window, but survive transforms, parameter edits, undo/redo, and `.lscene` serialization. When procedural geometry is regenerated, meter-based box projection is reapplied automatically.
+## Texture mapping
+
+All current `Triangle` objects carry one stored UV channel. The Material window therefore exposes a shared geometry UV source plus a per-texture transform.
+
+**UV source**:
+
+- **Authored / current UVs** leaves the UV values currently stored on the mesh unchanged. This is the correct choice for imported glTF/GLB assets such as the stained-glass lamp, where the imported UV layout determines which image region lands on each piece.
+- **Box projection (meters)** regenerates the shared triangle UV channel from geometry and a real-world tile size. This is useful for wood, stone, brick, fabric, and other repeating materials.
+
+For parameterized primitives, switching from box projection back to authored/current UVs regenerates the primitive so its normal generated UVs return immediately. For imported ordinary meshes, box projection replaces the stored UV channel; use undo/reload to recover an earlier imported layout.
+
+For the selected texture slot, the editor can set:
+
+- Offset U / V
+- Scale U / V
+- Rotation in degrees
+- Wrap U / V: Repeat, ClampToEdge, or MirroredRepeat
+
+These values are stored directly on `TextureMap` and are consumed by the existing raster and ray renderers. Texture transforms are independent for each map even though all maps currently sample the same triangle UV channel.
+
+The **UV set** row is intentionally read-only in this release because Composer's `Triangle` model currently retains one UV channel. Supporting multiple imported `TEXCOORD_n` sets and per-face UV vertex editing requires the planned dedicated UV Editor rather than silently pretending the extra data exists.
+
+## Procedural objects and persistence
+
+Material, color, and texture-map changes do not convert parameterized primitives to meshes. The material is reused whenever a primitive regenerates. Texture projection metadata is stored as hidden Composer metadata so the selected projection mode survives parameter edits, transforms, undo/redo, and native `.lscene` serialization. Texture image transforms and address modes are also serialized by the existing texture table.
 
 ## Undo and renderer behavior
 
-Preset, direct-property, base-color, texture assignment, and clear-texture actions each create an undo command using immutable triangle references. Topology does not change. Material changes invalidate prepared material/texture renderer resources so the next frame rebuilds the relevant cached scene data.
+Preset, direct-property, base-color, texture assignment, per-slot mapping, projection-mode, and clear-texture actions create undo commands using immutable triangle references. Topology does not change. Material changes invalidate prepared material/texture renderer resources so the next frame rebuilds the relevant cached scene data.

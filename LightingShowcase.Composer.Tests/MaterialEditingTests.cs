@@ -191,4 +191,105 @@ public sealed class MaterialEditingTests
         Assert.True(session.CanEditPrimitiveParameters(id));
     }
 
+    [Fact]
+    public void TextureSlotsAndPerTextureMappingAreEditableIndependently()
+    {
+        string texturePath = Path.Combine(Path.GetTempPath(), $"lighting-composer-slot-texture-{Guid.NewGuid():N}.png");
+        try
+        {
+            TextureMap.FromRgbaBytes("slot.png", 1, 1, [200, 120, 60, 255]).SavePng(texturePath);
+
+            using ComposerSceneSession session = new();
+            int id = session.InsertPrimitive("Cube");
+            Assert.True(session.SetObjectTexture(id, MaterialTextureSlot.BaseColor, texturePath, 0.25, boxProjection: false));
+            Assert.True(session.SetObjectTexture(id, MaterialTextureSlot.Normal, texturePath, 0.25, boxProjection: false));
+            Assert.True(session.SetObjectTextureMappingAndProjection(
+                id,
+                MaterialTextureSlot.Normal,
+                tileMeters: 0.25,
+                boxProjection: false,
+                offsetU: 0.125,
+                offsetV: -0.25,
+                scaleU: 2.0,
+                scaleV: 0.5,
+                rotationDegrees: 30.0,
+                wrapU: TextureAddressMode.ClampToEdge,
+                wrapV: TextureAddressMode.MirroredRepeat));
+
+            ComposerMaterialModel? model = session.GetMaterialModel(id);
+            Assert.NotNull(model);
+            ComposerTextureSlotModel baseColor = model!.TextureSlot(MaterialTextureSlot.BaseColor);
+            ComposerTextureSlotModel normal = model.TextureSlot(MaterialTextureSlot.Normal);
+            Assert.True(baseColor.HasTexture);
+            Assert.True(normal.HasTexture);
+            Assert.Equal(0.0, baseColor.OffsetU, 6);
+            Assert.Equal(0.125, normal.OffsetU, 6);
+            Assert.Equal(-0.25, normal.OffsetV, 6);
+            Assert.Equal(2.0, normal.ScaleU, 6);
+            Assert.Equal(0.5, normal.ScaleV, 6);
+            Assert.Equal(30.0, normal.RotationDegrees, 6);
+            Assert.Equal(TextureAddressMode.ClampToEdge, normal.WrapU);
+            Assert.Equal(TextureAddressMode.MirroredRepeat, normal.WrapV);
+            Assert.True(session.CanEditPrimitiveParameters(id));
+
+            Assert.True(session.ClearObjectTexture(id, MaterialTextureSlot.Normal));
+            ComposerMaterialModel? cleared = session.GetMaterialModel(id);
+            Assert.NotNull(cleared);
+            Assert.True(cleared!.TextureSlot(MaterialTextureSlot.BaseColor).HasTexture);
+            Assert.False(cleared.TextureSlot(MaterialTextureSlot.Normal).HasTexture);
+        }
+        finally
+        {
+            try { File.Delete(texturePath); } catch { }
+        }
+    }
+
+    [Fact]
+    public void SecondaryTextureMappingRoundTripsThroughComposerScene()
+    {
+        string texturePath = Path.Combine(Path.GetTempPath(), $"lighting-composer-emissive-texture-{Guid.NewGuid():N}.png");
+        string scenePath = Path.Combine(Path.GetTempPath(), $"lighting-composer-emissive-scene-{Guid.NewGuid():N}.lscene");
+        try
+        {
+            TextureMap.FromRgbaBytes("emissive.png", 1, 1, [255, 180, 40, 255]).SavePng(texturePath);
+            using (ComposerSceneSession writer = new())
+            {
+                int id = writer.InsertPrimitive("Cylinder");
+                Assert.True(writer.SetObjectTexture(id, MaterialTextureSlot.Emissive, texturePath, 0.3, boxProjection: true));
+                Assert.True(writer.SetObjectTextureMappingAndProjection(
+                    id,
+                    MaterialTextureSlot.Emissive,
+                    0.3,
+                    true,
+                    0.2,
+                    0.1,
+                    1.5,
+                    0.75,
+                    12.0,
+                    TextureAddressMode.Repeat,
+                    TextureAddressMode.ClampToEdge));
+                writer.Save(scenePath, CancellationToken.None);
+            }
+
+            using ComposerSceneSession reader = new();
+            reader.Load(scenePath, CancellationToken.None);
+            int loadedId = Assert.Single(reader.GetObjectInfos()).Id;
+            ComposerMaterialModel? model = reader.GetMaterialModel(loadedId);
+            Assert.NotNull(model);
+            Assert.True(model!.UsesBoxProjection);
+            Assert.Equal(0.3, model.TextureTileMeters, 6);
+            ComposerTextureSlotModel emissive = model.TextureSlot(MaterialTextureSlot.Emissive);
+            Assert.True(emissive.HasTexture);
+            Assert.Equal(0.2, emissive.OffsetU, 6);
+            Assert.Equal(1.5, emissive.ScaleU, 6);
+            Assert.Equal(12.0, emissive.RotationDegrees, 6);
+            Assert.Equal(TextureAddressMode.ClampToEdge, emissive.WrapV);
+        }
+        finally
+        {
+            try { File.Delete(texturePath); } catch { }
+            try { File.Delete(scenePath); } catch { }
+        }
+    }
+
 }

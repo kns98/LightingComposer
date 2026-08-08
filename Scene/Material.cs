@@ -18,6 +18,17 @@ public enum MaterialAlphaMode
     Blend = 2
 }
 
+/// <summary>Texture inputs supported by the shared PBR material model.</summary>
+public enum MaterialTextureSlot
+{
+    BaseColor,
+    MetallicRoughness,
+    Normal,
+    Emissive,
+    Transmission,
+    Occlusion
+}
+
 /// <summary>Surface material definition used by shading and texture lookup.</summary>
 public sealed class Material
 {
@@ -206,17 +217,55 @@ public sealed class Material
             : Math.Pow((value + 0.055) / 1.055, 2.4);
     }
 
-    /// <summary>Returns a copy with a different base texture while preserving emission data.</summary>
-    public Material WithTexture(TextureMap? texture)
+
+    /// <summary>True when at least one renderer-backed image map is assigned.</summary>
+    public bool HasAnyTexture => Texture != null || MetallicRoughnessTexture != null || NormalTexture != null ||
+                                 EmissiveTexture != null || TransmissionTexture != null || OcclusionTexture != null;
+
+    /// <summary>Returns the image map assigned to one PBR texture input.</summary>
+    public TextureMap? GetTexture(MaterialTextureSlot slot) => slot switch
     {
+        MaterialTextureSlot.BaseColor => Texture,
+        MaterialTextureSlot.MetallicRoughness => MetallicRoughnessTexture,
+        MaterialTextureSlot.Normal => NormalTexture,
+        MaterialTextureSlot.Emissive => EmissiveTexture,
+        MaterialTextureSlot.Transmission => TransmissionTexture,
+        MaterialTextureSlot.Occlusion => OcclusionTexture,
+        _ => null
+    };
+
+    /// <summary>Returns a copy with one PBR image map replaced, retaining every other material value.</summary>
+    public Material WithTexture(MaterialTextureSlot slot, TextureMap? texture)
+    {
+        TextureMap? baseColor = Texture;
+        TextureMap? metallicRoughness = MetallicRoughnessTexture;
+        TextureMap? normal = NormalTexture;
+        TextureMap? emissive = EmissiveTexture;
+        TextureMap? transmission = TransmissionTexture;
+        TextureMap? occlusion = OcclusionTexture;
+
+        switch (slot)
+        {
+            case MaterialTextureSlot.BaseColor: baseColor = texture; break;
+            case MaterialTextureSlot.MetallicRoughness: metallicRoughness = texture; break;
+            case MaterialTextureSlot.Normal: normal = texture; break;
+            case MaterialTextureSlot.Emissive: emissive = texture; break;
+            case MaterialTextureSlot.Transmission: transmission = texture; break;
+            case MaterialTextureSlot.Occlusion: occlusion = texture; break;
+            default: throw new ArgumentOutOfRangeException(nameof(slot));
+        }
+
         return new Material(
-            Color, Emission, LightId, texture, EmissionColor, EmissiveTexture,
+            Color, Emission, LightId, baseColor, EmissionColor, emissive,
             Alpha, AlphaBlend, Metallic, Roughness, Transmission,
-            MetallicRoughnessTexture, NormalTexture, OcclusionTexture,
+            metallicRoughness, normal, occlusion,
             NormalScale, OcclusionStrength, AlphaMode, AlphaCutoff, DoubleSided,
-            TransmissionTexture, Ior, Thickness, AttenuationColor, AttenuationDistance,
+            transmission, Ior, Thickness, AttenuationColor, AttenuationDistance,
             Clearcoat, ClearcoatRoughness, ClearcoatUsesTransmissionTexture);
     }
+
+    /// <summary>Returns a copy with a different base texture while preserving emission data.</summary>
+    public Material WithTexture(TextureMap? texture) => WithTexture(MaterialTextureSlot.BaseColor, texture);
 
     /// <summary>Returns a copy with a different base color while preserving all other PBR and texture data.</summary>
     public Material WithColor(Vec3 color)

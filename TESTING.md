@@ -111,4 +111,4 @@ For an interactive timing check, choose Vulkan raster, enter Edge or Face mode, 
 - regenerating a procedural primitive after a parameter change while retaining its texture and meter-based projection metadata;
 - undoing material edits back to the previous immutable triangle/material state.
 
-For interactive validation, select an object, open **Material…**, apply a library preset, set an RGB/hex color, then browse to a texture. With box projection enabled, enter a tile size such as `0.25` m. On a parameterized primitive, change a geometry parameter afterward and confirm that both the material and texture remain assigned.
+For interactive validation, select an object, open **Material…**, apply a library preset, set an RGB/hex color, then assign Base Color and Normal (or another) texture slots. Pick a mapping target, change offset/scale/rotation and U/V wrap, and confirm the active renderer updates. With box projection enabled, enter a tile size such as `0.25` m. On a parameterized primitive, change a geometry parameter afterward and confirm that material, texture slots, and projection metadata remain assigned.

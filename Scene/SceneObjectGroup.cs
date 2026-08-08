@@ -398,11 +398,25 @@ public sealed class SceneObjectGroup
 
     public void ApplyTexture(TextureMap texture)
     {
-        ApplyTexture(texture, TextureRepeatWorldUnits, forceBoxProjection: true);
+        ApplyTexture(MaterialTextureSlot.BaseColor, texture, TextureRepeatWorldUnits, forceBoxProjection: true);
     }
 
-    /// <summary>Assigns a texture and projects UVs in scene units so long faces tile instead of stretching one bitmap copy.</summary>
+    /// <summary>Assigns a base-color texture, retaining the original public API.</summary>
     public void ApplyTexture(TextureMap texture, double tileWorldUnits, bool forceBoxProjection = true)
+    {
+        ApplyTexture(MaterialTextureSlot.BaseColor, texture, tileWorldUnits, forceBoxProjection);
+    }
+
+    /// <summary>
+    /// Assigns one PBR texture slot. All slots share the triangle UV channel; when box
+    /// projection is requested those UVs are regenerated once in scene-meter units.
+    /// Per-texture offset/scale/rotation and addressing remain properties of TextureMap.
+    /// </summary>
+    public void ApplyTexture(
+        MaterialTextureSlot slot,
+        TextureMap texture,
+        double tileWorldUnits,
+        bool forceBoxProjection = false)
     {
         if (texture == null) throw new ArgumentNullException(nameof(texture));
 
@@ -410,32 +424,16 @@ public sealed class SceneObjectGroup
         double safeTileWorldUnits = SanitizeTileWorldUnits(tileWorldUnits);
         ApplyMaterialRecursively(tri =>
         {
-            Material updated = new(
-                tri.Material.Color,
-                tri.Material.Emission,
-                tri.Material.LightId,
-                texture,
-                tri.Material.EmissionColor,
-                tri.Material.EmissiveTexture,
-                tri.Material.Alpha,
-                tri.Material.AlphaBlend,
-                tri.Material.Metallic,
-                tri.Material.Roughness,
-                tri.Material.Transmission,
-                tri.Material.MetallicRoughnessTexture,
-                tri.Material.NormalTexture,
-                tri.Material.OcclusionTexture,
-                tri.Material.NormalScale,
-                tri.Material.OcclusionStrength,
-                tri.Material.AlphaMode,
-                tri.Material.AlphaCutoff,
-                tri.Material.DoubleSided);
-
-            // When box projection is disabled, preserve authored UVs exactly.
-            // This is important for imported glTF/OBJ meshes and also gives the
-            // material editor an explicit choice between model UVs and meter-based tiling.
+            Material updated = tri.Material.WithTexture(slot, texture);
             if (!forceBoxProjection)
-                return new Triangle(tri.A, tri.B, tri.C, tri.UvA, tri.UvB, tri.UvC, tri.NormalA, tri.NormalB, tri.NormalC, updated, tri.GroupId);
+            {
+                return new Triangle(
+                    tri.A, tri.B, tri.C,
+                    tri.UvA, tri.UvB, tri.UvC,
+                    tri.NormalA, tri.NormalB, tri.NormalC,
+                    updated,
+                    tri.GroupId);
+            }
 
             return new Triangle(
                 tri.A, tri.B, tri.C,
@@ -451,14 +449,49 @@ public sealed class SceneObjectGroup
         RecalculatePivot();
     }
 
-    /// <summary>Reprojects existing textured triangles using a chosen scene-unit tile size.</summary>
+    /// <summary>
+    /// Updates the transform and address mode of one texture slot without touching geometry,
+    /// materials in other slots, or procedural primitive parameters.
+    /// </summary>
+    public void ApplyTextureMapping(
+        MaterialTextureSlot slot,
+        double offsetU,
+        double offsetV,
+        double scaleU,
+        double scaleV,
+        double rotationRadians,
+        TextureAddressMode wrapU,
+        TextureAddressMode wrapV)
+    {
+        ApplyMaterialRecursively(tri =>
+        {
+            TextureMap? texture = tri.Material.GetTexture(slot);
+            if (texture == null)
+                return tri;
+
+            TextureMap mapped = texture
+                .WithAddressing(wrapU, wrapV)
+                .WithTextureTransform(offsetU, offsetV, scaleU, scaleV, rotationRadians);
+            Material updated = tri.Material.WithTexture(slot, mapped);
+            return new Triangle(
+                tri.A, tri.B, tri.C,
+                tri.UvA, tri.UvB, tri.UvC,
+                tri.NormalA, tri.NormalB, tri.NormalC,
+                updated,
+                tri.GroupId);
+        });
+        ColorOverride = null;
+        RecalculatePivot();
+    }
+
+    /// <summary>Reprojects all textured triangles using a chosen scene-unit tile size.</summary>
     public void RetileTexture(double tileWorldUnits)
     {
         Aabb bounds = GetWorldBounds();
         double safeTileWorldUnits = SanitizeTileWorldUnits(tileWorldUnits);
         ApplyMaterialRecursively(tri =>
         {
-            if (tri.Material.Texture == null)
+            if (!tri.Material.HasAnyTexture)
                 return tri;
 
             return new Triangle(
@@ -475,6 +508,46 @@ public sealed class SceneObjectGroup
         RecalculatePivot();
     }
 
+    /// <summary>
+    /// Changes the shared UV projection mode. Authored/current UV mode is non-destructive:
+    /// it stops future box reprojection but does not attempt to reconstruct UVs that were
+    /// already overwritten on an imported mesh. Parametric primitives regain generated UVs
+    /// on their next procedural regeneration.
+    /// </summary>
+    public void SetTextureProjectionMode(double tileWorldUnits, bool boxProjection)
+    {
+        double safeTileWorldUnits = SanitizeTileWorldUnits(tileWorldUnits);
+        if (boxProjection)
+            RetileTexture(safeTileWorldUnits);
+        else
+            ObjectLibraryRegistry.StoreParametricTextureProjection(this, safeTileWorldUnits, forceBoxProjection: false);
+    }
+
+    public void ClearTexture()
+    {
+        ClearTexture(MaterialTextureSlot.BaseColor);
+    }
+
+    /// <summary>Clears one PBR texture input while retaining the remaining texture maps.</summary>
+    public void ClearTexture(MaterialTextureSlot slot)
+    {
+        ApplyMaterialRecursively(tri =>
+        {
+            Material updated = tri.Material.WithTexture(slot, null);
+            return ReferenceEquals(updated, tri.Material)
+                ? tri
+                : new Triangle(
+                    tri.A, tri.B, tri.C,
+                    tri.UvA, tri.UvB, tri.UvC,
+                    tri.NormalA, tri.NormalB, tri.NormalC,
+                    updated,
+                    tri.GroupId);
+        });
+        if (!SelfAndDescendants().Any(group => group.LocalTriangles.Any(tri => tri.Material.HasAnyTexture)))
+            ObjectLibraryRegistry.ClearParametricTextureProjection(this);
+        ColorOverride = null;
+        RecalculatePivot();
+    }
 
     /// <summary>Counts local mesh triangles in this group and every child group.</summary>
     public int CountLocalTrianglesRecursively()
@@ -511,18 +584,6 @@ public sealed class SceneObjectGroup
 
         foreach (SceneObjectGroup child in Children)
             child.SimplifyLocalGeometryRecursively(keepFraction);
-    }
-
-    public void ClearTexture()
-    {
-        ApplyMaterialRecursively(tri =>
-        {
-            Material updated = tri.Material.WithTexture(null);
-            return new Triangle(tri.A, tri.B, tri.C, tri.UvA, tri.UvB, tri.UvC, tri.NormalA, tri.NormalB, tri.NormalC, updated, tri.GroupId);
-        });
-        ObjectLibraryRegistry.ClearParametricTextureProjection(this);
-        ColorOverride = null;
-        RecalculatePivot();
     }
 
     /// <summary>Applies a material transformer to every local triangle in this group and its descendants.</summary>

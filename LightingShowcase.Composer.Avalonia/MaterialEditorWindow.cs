@@ -17,6 +17,16 @@ namespace LightingShowcase.Composer;
 /// </summary>
 internal sealed class MaterialEditorWindow : Window
 {
+    private sealed record TextureSlotChoice(MaterialTextureSlot Slot, string Label)
+    {
+        public override string ToString() => Label;
+    }
+
+    private sealed record ProjectionChoice(bool BoxProjection, string Label)
+    {
+        public override string ToString() => Label;
+    }
+
     private readonly ComposerSceneSession session;
     private readonly int objectId;
     private readonly Action onMaterialChanged;
@@ -47,12 +57,22 @@ internal sealed class MaterialEditorWindow : Window
     private readonly TextBox alphaCutoffBox;
     private readonly CheckBox doubleSidedBox;
 
-    private readonly TextBox texturePathBox;
+    private readonly Dictionary<MaterialTextureSlot, TextBox> texturePathBoxes = new();
+    private readonly ComboBox mappingSlotBox;
+    private readonly ComboBox projectionModeBox;
+    private readonly ComboBox uvSetBox;
     private readonly TextBox tileMetersBox;
-    private readonly CheckBox boxProjectionBox;
+    private readonly TextBox offsetUBox;
+    private readonly TextBox offsetVBox;
+    private readonly TextBox scaleUBox;
+    private readonly TextBox scaleVBox;
+    private readonly TextBox rotationBox;
+    private readonly ComboBox wrapUBox;
+    private readonly ComboBox wrapVBox;
     private readonly TextBlock materialDetails;
     private readonly TextBlock statusText;
     private bool synchronizingColor;
+    private ComposerMaterialModel? currentModel;
 
     public int ObjectId => objectId;
 
@@ -68,9 +88,9 @@ internal sealed class MaterialEditorWindow : Window
         objectId = model.ObjectId;
 
         Title = $"Material — {model.ObjectName}";
-        Width = 540;
-        Height = 840;
-        MinWidth = 450;
+        Width = 620;
+        Height = 900;
+        MinWidth = 500;
         MinHeight = 560;
         CanResize = true;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
@@ -120,13 +140,38 @@ internal sealed class MaterialEditorWindow : Window
         alphaCutoffBox = PropertyBox();
         doubleSidedBox = new CheckBox { Content = "Render both sides" };
 
-        texturePathBox = new TextBox { IsReadOnly = true, Watermark = "No base-color texture" };
-        tileMetersBox = new TextBox { TextAlignment = TextAlignment.Right, MinWidth = 90 };
-        boxProjectionBox = new CheckBox
+        foreach (MaterialTextureSlot slot in Enum.GetValues<MaterialTextureSlot>())
+            texturePathBoxes[slot] = new TextBox { IsReadOnly = true, Watermark = $"No {ComposerSceneSession.TextureSlotLabel(slot).ToLowerInvariant()} texture" };
+
+        TextureSlotChoice[] mappingSlots = Enum.GetValues<MaterialTextureSlot>()
+            .Select(slot => new TextureSlotChoice(slot, ComposerSceneSession.TextureSlotLabel(slot)))
+            .ToArray();
+        mappingSlotBox = new ComboBox { ItemsSource = mappingSlots, SelectedIndex = 0, MinWidth = 180 };
+        projectionModeBox = new ComboBox
         {
-            Content = "Box-project UVs using real-world tile size",
-            IsChecked = true
+            ItemsSource = new[]
+            {
+                new ProjectionChoice(false, "Authored / current UVs"),
+                new ProjectionChoice(true, "Box projection (meters)")
+            },
+            SelectedIndex = 0,
+            MinWidth = 190
         };
+        uvSetBox = new ComboBox
+        {
+            ItemsSource = new[] { "Current stored UV channel" },
+            SelectedIndex = 0,
+            IsEnabled = false,
+            MinWidth = 190
+        };
+        tileMetersBox = new TextBox { TextAlignment = TextAlignment.Right, MinWidth = 90 };
+        offsetUBox = PropertyBox();
+        offsetVBox = PropertyBox();
+        scaleUBox = PropertyBox();
+        scaleVBox = PropertyBox();
+        rotationBox = PropertyBox();
+        wrapUBox = new ComboBox { ItemsSource = Enum.GetValues<TextureAddressMode>(), MinWidth = 130 };
+        wrapVBox = new ComboBox { ItemsSource = Enum.GetValues<TextureAddressMode>(), MinWidth = 130 };
         materialDetails = new TextBlock { TextWrapping = TextWrapping.Wrap, Opacity = 0.74, FontSize = 12 };
         statusText = new TextBlock
         {
@@ -137,6 +182,7 @@ internal sealed class MaterialEditorWindow : Window
         };
 
         presetBox.SelectionChanged += (_, _) => UpdatePresetSummary();
+        mappingSlotBox.SelectionChanged += (_, _) => LoadSelectedTextureMapping();
         redBox.TextChanged += (_, _) => SyncColorFromChannels();
         greenBox.TextChanged += (_, _) => SyncColorFromChannels();
         blueBox.TextChanged += (_, _) => SyncColorFromChannels();
@@ -239,22 +285,33 @@ internal sealed class MaterialEditorWindow : Window
         applyProperties.Click += async (_, _) => await ApplyPropertiesAsync();
         stack.Children.Add(applyProperties);
 
-        stack.Children.Add(Heading("Base-color texture"));
-        stack.Children.Add(texturePathBox);
-        Grid textureButtons = new() { ColumnDefinitions = new ColumnDefinitions("Auto,Auto,*"), ColumnSpacing = 8 };
-        Button browse = NewButton("Browse…");
-        browse.Click += async (_, _) => await BrowseTextureAsync();
-        Button clear = NewButton("Clear texture");
-        clear.Click += async (_, _) => await ClearTextureAsync();
-        textureButtons.Children.Add(browse);
-        textureButtons.Children.Add(clear);
-        Grid.SetColumn(clear, 1);
-        stack.Children.Add(textureButtons);
-        stack.Children.Add(boxProjectionBox);
-        stack.Children.Add(LabeledControl("Texture tile size (m)", tileMetersBox));
+        stack.Children.Add(Heading("Texture maps"));
         stack.Children.Add(new TextBlock
         {
-            Text = "Box projection tiles the image in scene meters and is useful for architectural/material-scale work. Turn it off to preserve the model's authored UV coordinates.",
+            Text = "Assign renderer-backed image maps independently. All slots use the mesh's current UV channel, while each image keeps its own offset, scale, rotation, and U/V address modes.",
+            TextWrapping = TextWrapping.Wrap,
+            Opacity = 0.68,
+            FontSize = 12
+        });
+        foreach (MaterialTextureSlot slot in Enum.GetValues<MaterialTextureSlot>())
+            stack.Children.Add(BuildTextureSlotRow(slot));
+
+        stack.Children.Add(Heading("Texture mapping"));
+        stack.Children.Add(LabeledControl("Mapping target", mappingSlotBox));
+        stack.Children.Add(LabeledControl("UV source", projectionModeBox));
+        stack.Children.Add(LabeledControl("UV set", uvSetBox));
+        stack.Children.Add(LabeledControl("Box tile size (m)", tileMetersBox));
+        stack.Children.Add(TwoPropertyRow("Offset U", offsetUBox, "Offset V", offsetVBox));
+        stack.Children.Add(TwoPropertyRow("Scale U", scaleUBox, "Scale V", scaleVBox));
+        stack.Children.Add(LabeledControl("Rotation (degrees)", rotationBox));
+        stack.Children.Add(TwoPropertyRow("Wrap U", wrapUBox, "Wrap V", wrapVBox));
+        Button applyMapping = NewButton("Apply mapping");
+        applyMapping.HorizontalAlignment = HorizontalAlignment.Right;
+        applyMapping.Click += async (_, _) => await ApplyTextureMappingAsync();
+        stack.Children.Add(applyMapping);
+        stack.Children.Add(new TextBlock
+        {
+            Text = "Authored/current UVs leave the UV coordinates currently stored on the mesh unchanged; parameterized primitives regenerate their authored UVs when switching back from box projection. Box projection regenerates the shared triangle UV channel using real-world meter tiling. Imported models currently retain one UV channel in Composer, so an earlier imported UV layout cannot be reconstructed after it has been box-projected without undo/reload. Per-face UV editing and multiple stored UV sets belong in the future UV Editor.",
             TextWrapping = TextWrapping.Wrap,
             Opacity = 0.68,
             FontSize = 12
@@ -312,7 +369,7 @@ internal sealed class MaterialEditorWindow : Window
             "Direct material properties applied. Base color and texture maps were preserved.");
     }
 
-    private async Task BrowseTextureAsync()
+    private async Task BrowseTextureAsync(MaterialTextureSlot slot)
     {
         if (!StorageProvider.CanOpen)
         {
@@ -325,7 +382,7 @@ internal sealed class MaterialEditorWindow : Window
         {
             files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
             {
-                Title = "Choose base-color texture",
+                Title = $"Choose {ComposerSceneSession.TextureSlotLabel(slot).ToLowerInvariant()} texture",
                 AllowMultiple = false,
                 FileTypeFilter = ComposerFileTypes.TexturePickerTypes
             });
@@ -345,17 +402,76 @@ internal sealed class MaterialEditorWindow : Window
             return;
         }
 
-        bool boxProjection = boxProjectionBox.IsChecked == true;
+        bool boxProjection = SelectedProjectionMode;
         await RunEditAsync(
-            () => session.SetObjectTexture(objectId, path, tileMeters, boxProjection),
+            () => session.SetObjectTexture(objectId, slot, path, tileMeters, boxProjection),
             boxProjection
-                ? $"Texture {Path.GetFileName(path)} applied with {tileMeters:0.######} m box tiling."
-                : $"Texture {Path.GetFileName(path)} applied using authored UVs.");
+                ? $"{ComposerSceneSession.TextureSlotLabel(slot)} texture {Path.GetFileName(path)} applied with {tileMeters:0.######} m box tiling."
+                : $"{ComposerSceneSession.TextureSlotLabel(slot)} texture {Path.GetFileName(path)} applied using current/authored UVs.");
     }
 
-    private async Task ClearTextureAsync()
+    private async Task ClearTextureAsync(MaterialTextureSlot slot)
     {
-        await RunEditAsync(() => session.ClearObjectTexture(objectId), "Base-color texture cleared.");
+        await RunEditAsync(
+            () => session.ClearObjectTexture(objectId, slot),
+            $"{ComposerSceneSession.TextureSlotLabel(slot)} texture cleared.");
+    }
+
+    private async Task ApplyTextureMappingAsync()
+    {
+        if (mappingSlotBox.SelectedItem is not TextureSlotChoice choice)
+        {
+            statusText.Text = "Choose a texture slot to map.";
+            return;
+        }
+        if (currentModel?.TextureSlot(choice.Slot).HasTexture != true)
+        {
+            statusText.Text = $"Assign a {choice.Label.ToLowerInvariant()} texture before editing its mapping.";
+            return;
+        }
+        if (!TryReadTileMeters(out double tileMeters))
+        {
+            statusText.Text = "Box tile size must be a number greater than zero meters.";
+            return;
+        }
+        if (!TryDouble(offsetUBox.Text, out double offsetU) || !TryDouble(offsetVBox.Text, out double offsetV))
+        {
+            statusText.Text = "Texture offsets must be valid numbers.";
+            return;
+        }
+        if (!TryDouble(scaleUBox.Text, out double scaleU) || Math.Abs(scaleU) <= 1e-9 ||
+            !TryDouble(scaleVBox.Text, out double scaleV) || Math.Abs(scaleV) <= 1e-9)
+        {
+            statusText.Text = "Texture U/V scale must be non-zero numbers.";
+            return;
+        }
+        if (!TryDouble(rotationBox.Text, out double rotationDegrees))
+        {
+            statusText.Text = "Texture rotation must be valid degrees.";
+            return;
+        }
+        if (wrapUBox.SelectedItem is not TextureAddressMode wrapU || wrapVBox.SelectedItem is not TextureAddressMode wrapV)
+        {
+            statusText.Text = "Choose U and V texture address modes.";
+            return;
+        }
+
+        bool boxProjection = SelectedProjectionMode;
+        await RunEditAsync(
+            () => session.SetObjectTextureMappingAndProjection(
+                objectId,
+                choice.Slot,
+                tileMeters,
+                boxProjection,
+                offsetU,
+                offsetV,
+                scaleU,
+                scaleV,
+                rotationDegrees,
+                wrapU,
+                wrapV),
+            $"{choice.Label} mapping applied: offset ({offsetU:0.###}, {offsetV:0.###}), scale ({scaleU:0.###}, {scaleV:0.###}), rotation {rotationDegrees:0.###}°."
+        );
     }
 
     private async Task RunEditAsync(Func<bool> edit, string successMessage)
@@ -405,14 +521,61 @@ internal sealed class MaterialEditorWindow : Window
         alphaCutoffBox.Text = Format(model.AlphaCutoff);
         doubleSidedBox.IsChecked = model.DoubleSided;
 
-        texturePathBox.Text = model.TexturePath ?? model.TextureName ?? string.Empty;
+        currentModel = model;
+        foreach (ComposerTextureSlotModel slot in model.TextureSlots)
+            texturePathBoxes[slot.Slot].Text = slot.Path ?? slot.Name ?? string.Empty;
         tileMetersBox.Text = model.TextureTileMeters.ToString("0.######", CultureInfo.InvariantCulture);
-        if (model.HasStoredTextureProjection)
-            boxProjectionBox.IsChecked = model.UsesBoxProjection;
+        projectionModeBox.SelectedIndex = model.HasStoredTextureProjection && model.UsesBoxProjection ? 1 : 0;
+        LoadSelectedTextureMapping();
+        int textureCount = model.TextureSlots.Count(slot => slot.HasTexture);
         materialDetails.Text =
             $"Color {ToHex(model.BaseColor)}   Metallic {model.Metallic:0.###}   Roughness {model.Roughness:0.###}\n" +
             $"Transmission {model.Transmission:0.###}   Opacity {model.Alpha:0.###}   IOR {model.Ior:0.###}   Emission {model.Emission:0.###}\n" +
-            $"Clearcoat {model.Clearcoat:0.###}   Thickness {model.Thickness:0.######} m   Texture {(model.TextureName ?? "none")}";
+            $"Clearcoat {model.Clearcoat:0.###}   Thickness {model.Thickness:0.######} m   Texture maps {textureCount}";
+    }
+
+    private bool SelectedProjectionMode =>
+        projectionModeBox.SelectedItem is ProjectionChoice choice && choice.BoxProjection;
+
+    private void LoadSelectedTextureMapping()
+    {
+        if (currentModel == null || mappingSlotBox.SelectedItem is not TextureSlotChoice choice)
+            return;
+
+        ComposerTextureSlotModel slot = currentModel.TextureSlot(choice.Slot);
+        offsetUBox.Text = Format(slot.OffsetU);
+        offsetVBox.Text = Format(slot.OffsetV);
+        scaleUBox.Text = Format(slot.ScaleU);
+        scaleVBox.Text = Format(slot.ScaleV);
+        rotationBox.Text = Format(slot.RotationDegrees);
+        wrapUBox.SelectedItem = slot.WrapU;
+        wrapVBox.SelectedItem = slot.WrapV;
+    }
+
+    private Control BuildTextureSlotRow(MaterialTextureSlot slot)
+    {
+        Grid row = new()
+        {
+            ColumnDefinitions = new ColumnDefinitions("150,*,Auto,Auto"),
+            ColumnSpacing = 8
+        };
+        row.Children.Add(new TextBlock
+        {
+            Text = ComposerSceneSession.TextureSlotLabel(slot),
+            VerticalAlignment = VerticalAlignment.Center
+        });
+        TextBox pathBox = texturePathBoxes[slot];
+        row.Children.Add(pathBox);
+        Grid.SetColumn(pathBox, 1);
+        Button browse = NewButton("Browse…");
+        browse.Click += async (_, _) => await BrowseTextureAsync(slot);
+        row.Children.Add(browse);
+        Grid.SetColumn(browse, 2);
+        Button clear = NewButton("Clear");
+        clear.Click += async (_, _) => await ClearTextureAsync(slot);
+        row.Children.Add(clear);
+        Grid.SetColumn(clear, 3);
+        return row;
     }
 
     private void UpdatePresetSummary()
