@@ -1,10 +1,29 @@
-# Material library, color, and texture editing
+# Material library, direct PBR properties, color, and texture editing
 
-Lighting Composer exposes material editing from **Inspector → Material…**. The editor is modeless and closable, and targets the currently selected object/subtree.
+Lighting Composer exposes material editing from **Inspector → Material…**. The editor is modeless and closable, and targets the currently selected object/subtree. Library presets are optional starting points: the underlying renderer-backed material values can also be entered directly.
 
 ## Material library
 
 The built-in PBR preset library is defined by `MaterialPresetLibrary.Common` and includes metals, paint, plastics, glass, stone, organic materials, liquids, and emissive surfaces. Applying a preset changes scalar/PBR appearance values while retaining image maps already assigned to the current material.
+
+## Direct material properties
+
+The floating editor exposes the material values already consumed by the renderers rather than storing UI-only metadata. Press **Apply properties** to create one undoable material edit while preserving base color and all assigned texture maps.
+
+Direct controls include:
+
+- metallic and roughness;
+- transmission and opacity;
+- index of refraction (IOR);
+- emission strength and emission color;
+- alpha mode and alpha cutoff;
+- double-sided rendering;
+- thickness in meters;
+- attenuation color and attenuation distance in meters;
+- clearcoat and clearcoat roughness;
+- normal-map scale and occlusion strength.
+
+Presets refresh these controls after application, so a preset can be selected and then numerically tuned. Direct material edits do not convert parameterized primitives to meshes.
 
 ## Exact base color
 
@@ -23,4 +42,4 @@ For procedural primitives, the box-projection flag and tile size are stored as h
 
 ## Undo and renderer behavior
 
-Preset, base-color, texture assignment, and clear-texture actions each create an undo command using immutable triangle references. Topology does not change. Material changes invalidate prepared material/texture renderer resources so the next frame rebuilds the relevant cached scene data.
+Preset, direct-property, base-color, texture assignment, and clear-texture actions each create an undo command using immutable triangle references. Topology does not change. Material changes invalidate prepared material/texture renderer resources so the next frame rebuilds the relevant cached scene data.

@@ -135,4 +135,60 @@ public sealed class MaterialEditingTests
             try { File.Delete(scenePath); } catch { }
         }
     }
+
+    [Fact]
+    public void DirectMaterialPropertiesAreEditableAndUndoableWithoutLosingPrimitiveParameters()
+    {
+        using ComposerSceneSession session = new();
+        int id = session.InsertPrimitive("Cylinder");
+        Vec3 baseColor = new(0.31, 0.42, 0.53);
+        Assert.True(session.SetObjectBaseColor(id, baseColor));
+
+        ComposerMaterialProperties properties = new(
+            Metallic: 0.65,
+            Roughness: 0.21,
+            Transmission: 0.35,
+            Alpha: 0.72,
+            Emission: 2.4,
+            EmissionColor: new Vec3(1.0, 0.45, 0.2),
+            AlphaMode: MaterialAlphaMode.Blend,
+            AlphaCutoff: 0.33,
+            DoubleSided: true,
+            Ior: 1.61,
+            Thickness: 0.012,
+            AttenuationColor: new Vec3(0.7, 0.85, 1.0),
+            AttenuationDistance: 1.75,
+            Clearcoat: 0.8,
+            ClearcoatRoughness: 0.11,
+            NormalScale: 1.4,
+            OcclusionStrength: 0.6);
+
+        Assert.True(session.SetObjectMaterialProperties(id, properties));
+        Assert.True(session.CanEditPrimitiveParameters(id));
+
+        ComposerMaterialModel? edited = session.GetMaterialModel(id);
+        Assert.NotNull(edited);
+        Assert.Equal(baseColor.X, edited!.BaseColor.X, 6);
+        Assert.Equal(0.65, edited.Metallic, 6);
+        Assert.Equal(0.21, edited.Roughness, 6);
+        Assert.Equal(0.35, edited.Transmission, 6);
+        Assert.Equal(0.72, edited.Alpha, 6);
+        Assert.Equal(2.4, edited.Emission, 6);
+        Assert.Equal(MaterialAlphaMode.Blend, edited.AlphaMode);
+        Assert.True(edited.DoubleSided);
+        Assert.Equal(1.61, edited.Ior, 6);
+        Assert.Equal(0.012, edited.Thickness, 6);
+        Assert.Equal(1.75, edited.AttenuationDistance, 6);
+        Assert.Equal(0.8, edited.Clearcoat, 6);
+        Assert.Equal(0.11, edited.ClearcoatRoughness, 6);
+        Assert.Equal(1.4, edited.NormalScale, 6);
+        Assert.Equal(0.6, edited.OcclusionStrength, 6);
+
+        Assert.Equal(id, session.Undo());
+        ComposerMaterialModel? restored = session.GetMaterialModel(id);
+        Assert.NotNull(restored);
+        Assert.NotEqual(0.65, restored!.Metallic);
+        Assert.True(session.CanEditPrimitiveParameters(id));
+    }
+
 }

@@ -11,8 +11,9 @@ using LightingShowcase.SceneGraph;
 namespace LightingShowcase.Composer;
 
 /// <summary>
-/// Modeless material editor for the selected object/subtree. Presets, base color,
-/// and base-color textures are authored independently from object/primitive geometry.
+/// Modeless material editor for the selected object/subtree. Library presets are
+/// convenient starting points, while every renderer-backed scalar PBR property can
+/// also be authored directly without changing object/primitive geometry.
 /// </summary>
 internal sealed class MaterialEditorWindow : Window
 {
@@ -27,6 +28,25 @@ internal sealed class MaterialEditorWindow : Window
     private readonly TextBox greenBox;
     private readonly TextBox blueBox;
     private readonly Border colorSwatch;
+
+    private readonly TextBox metallicBox;
+    private readonly TextBox roughnessBox;
+    private readonly TextBox transmissionBox;
+    private readonly TextBox opacityBox;
+    private readonly TextBox iorBox;
+    private readonly TextBox emissionBox;
+    private readonly TextBox emissionColorBox;
+    private readonly TextBox thicknessBox;
+    private readonly TextBox attenuationColorBox;
+    private readonly TextBox attenuationDistanceBox;
+    private readonly TextBox clearcoatBox;
+    private readonly TextBox clearcoatRoughnessBox;
+    private readonly TextBox normalScaleBox;
+    private readonly TextBox occlusionStrengthBox;
+    private readonly ComboBox alphaModeBox;
+    private readonly TextBox alphaCutoffBox;
+    private readonly CheckBox doubleSidedBox;
+
     private readonly TextBox texturePathBox;
     private readonly TextBox tileMetersBox;
     private readonly CheckBox boxProjectionBox;
@@ -48,10 +68,10 @@ internal sealed class MaterialEditorWindow : Window
         objectId = model.ObjectId;
 
         Title = $"Material — {model.ObjectName}";
-        Width = 480;
-        Height = 660;
-        MinWidth = 420;
-        MinHeight = 520;
+        Width = 540;
+        Height = 840;
+        MinWidth = 450;
+        MinHeight = 560;
         CanResize = true;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
 
@@ -76,6 +96,29 @@ internal sealed class MaterialEditorWindow : Window
             BorderBrush = new SolidColorBrush(Color.FromArgb(100, 128, 128, 128)),
             CornerRadius = new CornerRadius(4)
         };
+
+        metallicBox = PropertyBox();
+        roughnessBox = PropertyBox();
+        transmissionBox = PropertyBox();
+        opacityBox = PropertyBox();
+        iorBox = PropertyBox();
+        emissionBox = PropertyBox();
+        emissionColorBox = new TextBox { MinWidth = 100, TextAlignment = TextAlignment.Right, Watermark = "#FFFFFF" };
+        thicknessBox = PropertyBox();
+        attenuationColorBox = new TextBox { MinWidth = 100, TextAlignment = TextAlignment.Right, Watermark = "#FFFFFF" };
+        attenuationDistanceBox = PropertyBox();
+        clearcoatBox = PropertyBox();
+        clearcoatRoughnessBox = PropertyBox();
+        normalScaleBox = PropertyBox();
+        occlusionStrengthBox = PropertyBox();
+        alphaModeBox = new ComboBox
+        {
+            ItemsSource = Enum.GetValues<MaterialAlphaMode>(),
+            MinWidth = 116,
+            HorizontalAlignment = HorizontalAlignment.Right
+        };
+        alphaCutoffBox = PropertyBox();
+        doubleSidedBox = new CheckBox { Content = "Render both sides" };
 
         texturePathBox = new TextBox { IsReadOnly = true, Watermark = "No base-color texture" };
         tileMetersBox = new TextBox { TextAlignment = TextAlignment.Right, MinWidth = 90 };
@@ -134,17 +177,18 @@ internal sealed class MaterialEditorWindow : Window
         StackPanel stack = new() { Spacing = 12 };
         stack.Children.Add(new TextBlock
         {
-            Text = "Material Library",
+            Text = "Material",
             FontSize = 20,
             FontWeight = FontWeight.SemiBold
         });
         stack.Children.Add(new TextBlock
         {
-            Text = "Choose a PBR preset, set an exact base color, or assign an image texture. Existing image maps are retained when a library preset is applied.",
+            Text = "Choose a library preset as a starting point, then override its PBR properties directly. Base color and image texture remain independent controls.",
             TextWrapping = TextWrapping.Wrap,
             Opacity = 0.78
         });
 
+        stack.Children.Add(Heading("Library preset"));
         Grid presetRow = new() { ColumnDefinitions = new ColumnDefinitions("*,Auto"), ColumnSpacing = 8 };
         presetRow.Children.Add(presetBox);
         Button applyPreset = NewButton("Apply preset");
@@ -171,6 +215,29 @@ internal sealed class MaterialEditorWindow : Window
         AddRgb(rgb, "G", greenBox, 2);
         AddRgb(rgb, "B", blueBox, 4);
         stack.Children.Add(rgb);
+
+        stack.Children.Add(Heading("Direct material properties"));
+        stack.Children.Add(new TextBlock
+        {
+            Text = "Values are written directly to the material used by the raster and ray renderers. 0–1 values use normalized PBR units; thickness and attenuation distance are meters.",
+            TextWrapping = TextWrapping.Wrap,
+            Opacity = 0.68,
+            FontSize = 12
+        });
+        stack.Children.Add(TwoPropertyRow("Metallic (0–1)", metallicBox, "Roughness (0.02–1)", roughnessBox));
+        stack.Children.Add(TwoPropertyRow("Transmission (0–1)", transmissionBox, "Opacity (0–1)", opacityBox));
+        stack.Children.Add(TwoPropertyRow("IOR (1–2.333)", iorBox, "Emission strength", emissionBox));
+        stack.Children.Add(LabeledControl("Emission color", emissionColorBox));
+        stack.Children.Add(TwoPropertyRow("Thickness (m)", thicknessBox, "Attenuation distance (m)", attenuationDistanceBox));
+        stack.Children.Add(LabeledControl("Attenuation color", attenuationColorBox));
+        stack.Children.Add(TwoPropertyRow("Clearcoat (0–1)", clearcoatBox, "Clearcoat roughness (0–1)", clearcoatRoughnessBox));
+        stack.Children.Add(TwoPropertyRow("Normal scale (-8–8)", normalScaleBox, "Occlusion strength (0–1)", occlusionStrengthBox));
+        stack.Children.Add(TwoPropertyRow("Alpha mode", alphaModeBox, "Alpha cutoff (0–1)", alphaCutoffBox));
+        stack.Children.Add(doubleSidedBox);
+        Button applyProperties = NewButton("Apply properties");
+        applyProperties.HorizontalAlignment = HorizontalAlignment.Right;
+        applyProperties.Click += async (_, _) => await ApplyPropertiesAsync();
+        stack.Children.Add(applyProperties);
 
         stack.Children.Add(Heading("Base-color texture"));
         stack.Children.Add(texturePathBox);
@@ -219,7 +286,7 @@ internal sealed class MaterialEditorWindow : Window
             return;
         await RunEditAsync(
             () => session.ApplyMaterialPreset(objectId, preset),
-            $"Applied {preset.Category} — {preset.Name}. Assigned textures were preserved.");
+            $"Applied {preset.Category} — {preset.Name}. Direct-property fields were refreshed; assigned textures were preserved.");
     }
 
     private async Task ApplyColorAsync()
@@ -230,6 +297,19 @@ internal sealed class MaterialEditorWindow : Window
             return;
         }
         await RunEditAsync(() => session.SetObjectBaseColor(objectId, color), $"Base color set to {ToHex(color)}.");
+    }
+
+    private async Task ApplyPropertiesAsync()
+    {
+        if (!TryReadMaterialProperties(out ComposerMaterialProperties? properties, out string error))
+        {
+            statusText.Text = error;
+            return;
+        }
+
+        await RunEditAsync(
+            () => session.SetObjectMaterialProperties(objectId, properties!),
+            "Direct material properties applied. Base color and texture maps were preserved.");
     }
 
     private async Task BrowseTextureAsync()
@@ -307,13 +387,32 @@ internal sealed class MaterialEditorWindow : Window
     {
         Title = $"Material — {model.ObjectName}";
         SetColorEditors(model.BaseColor);
+        metallicBox.Text = Format(model.Metallic);
+        roughnessBox.Text = Format(model.Roughness);
+        transmissionBox.Text = Format(model.Transmission);
+        opacityBox.Text = Format(model.Alpha);
+        iorBox.Text = Format(model.Ior);
+        emissionBox.Text = Format(model.Emission);
+        emissionColorBox.Text = ToHex(model.EmissionColor);
+        thicknessBox.Text = Format(model.Thickness);
+        attenuationColorBox.Text = ToHex(model.AttenuationColor);
+        attenuationDistanceBox.Text = Format(model.AttenuationDistance);
+        clearcoatBox.Text = Format(model.Clearcoat);
+        clearcoatRoughnessBox.Text = Format(model.ClearcoatRoughness);
+        normalScaleBox.Text = Format(model.NormalScale);
+        occlusionStrengthBox.Text = Format(model.OcclusionStrength);
+        alphaModeBox.SelectedItem = model.AlphaMode;
+        alphaCutoffBox.Text = Format(model.AlphaCutoff);
+        doubleSidedBox.IsChecked = model.DoubleSided;
+
         texturePathBox.Text = model.TexturePath ?? model.TextureName ?? string.Empty;
         tileMetersBox.Text = model.TextureTileMeters.ToString("0.######", CultureInfo.InvariantCulture);
         if (model.HasStoredTextureProjection)
             boxProjectionBox.IsChecked = model.UsesBoxProjection;
         materialDetails.Text =
             $"Color {ToHex(model.BaseColor)}   Metallic {model.Metallic:0.###}   Roughness {model.Roughness:0.###}\n" +
-            $"Transmission {model.Transmission:0.###}   Opacity {model.Alpha:0.###}   Texture {(model.TextureName ?? "none")}";
+            $"Transmission {model.Transmission:0.###}   Opacity {model.Alpha:0.###}   IOR {model.Ior:0.###}   Emission {model.Emission:0.###}\n" +
+            $"Clearcoat {model.Clearcoat:0.###}   Thickness {model.Thickness:0.######} m   Texture {(model.TextureName ?? "none")}";
     }
 
     private void UpdatePresetSummary()
@@ -324,6 +423,65 @@ internal sealed class MaterialEditorWindow : Window
             return;
         }
         presetSummary.Text = $"{preset.Summary}  Metallic {preset.Material.Metallic:0.##}, roughness {preset.Material.Roughness:0.##}.";
+    }
+
+    private bool TryReadMaterialProperties(out ComposerMaterialProperties? properties, out string error)
+    {
+        properties = null;
+        error = string.Empty;
+
+        if (!TryRange(metallicBox.Text, 0.0, 1.0, out double metallic))
+            return Fail("Metallic must be between 0 and 1.", out error);
+        if (!TryRange(roughnessBox.Text, 0.02, 1.0, out double roughness))
+            return Fail("Roughness must be between 0.02 and 1.", out error);
+        if (!TryRange(transmissionBox.Text, 0.0, 1.0, out double transmission))
+            return Fail("Transmission must be between 0 and 1.", out error);
+        if (!TryRange(opacityBox.Text, 0.0, 1.0, out double alpha))
+            return Fail("Opacity must be between 0 and 1.", out error);
+        if (!TryRange(iorBox.Text, 1.0, 2.333, out double ior))
+            return Fail("IOR must be between 1.0 and 2.333.", out error);
+        if (!TryRange(emissionBox.Text, 0.0, 100000.0, out double emission))
+            return Fail("Emission strength must be between 0 and 100000.", out error);
+        if (!TryParseHex(emissionColorBox.Text, out Vec3 emissionColor))
+            return Fail("Emission color must be a hex color such as #FFFFFF.", out error);
+        if (!TryRange(thicknessBox.Text, 0.0, double.MaxValue, out double thickness))
+            return Fail("Thickness must be zero or greater meters.", out error);
+        if (!TryParseHex(attenuationColorBox.Text, out Vec3 attenuationColor))
+            return Fail("Attenuation color must be a hex color such as #FFFFFF.", out error);
+        if (!TryRange(attenuationDistanceBox.Text, 0.0, double.MaxValue, out double attenuationDistance))
+            return Fail("Attenuation distance must be zero or greater meters.", out error);
+        if (!TryRange(clearcoatBox.Text, 0.0, 1.0, out double clearcoat))
+            return Fail("Clearcoat must be between 0 and 1.", out error);
+        if (!TryRange(clearcoatRoughnessBox.Text, 0.0, 1.0, out double clearcoatRoughness))
+            return Fail("Clearcoat roughness must be between 0 and 1.", out error);
+        if (!TryRange(normalScaleBox.Text, -8.0, 8.0, out double normalScale))
+            return Fail("Normal scale must be between -8 and 8.", out error);
+        if (!TryRange(occlusionStrengthBox.Text, 0.0, 1.0, out double occlusionStrength))
+            return Fail("Occlusion strength must be between 0 and 1.", out error);
+        if (alphaModeBox.SelectedItem is not MaterialAlphaMode alphaMode)
+            return Fail("Choose an alpha mode.", out error);
+        if (!TryRange(alphaCutoffBox.Text, 0.0, 1.0, out double alphaCutoff))
+            return Fail("Alpha cutoff must be between 0 and 1.", out error);
+
+        properties = new ComposerMaterialProperties(
+            metallic,
+            roughness,
+            transmission,
+            alpha,
+            emission,
+            emissionColor,
+            alphaMode,
+            alphaCutoff,
+            doubleSidedBox.IsChecked == true,
+            ior,
+            thickness,
+            attenuationColor,
+            attenuationDistance,
+            clearcoat,
+            clearcoatRoughness,
+            normalScale,
+            occlusionStrength);
+        return true;
     }
 
     private void SyncColorFromChannels()
@@ -366,9 +524,8 @@ internal sealed class MaterialEditorWindow : Window
     private bool TryReadTileMeters(out double value)
     {
         string text = tileMetersBox.Text?.Trim() ?? string.Empty;
-        bool ok = double.TryParse(text, NumberStyles.Float, CultureInfo.CurrentCulture, out value) ||
-                  double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out value);
-        return ok && double.IsFinite(value) && value > 1e-6;
+        bool ok = TryDouble(text, out value);
+        return ok && value > 1e-6;
     }
 
     private static bool TryParseHex(string? text, out Vec3 color)
@@ -383,14 +540,33 @@ internal sealed class MaterialEditorWindow : Window
         return true;
     }
 
+    private static bool TryRange(string? text, double min, double max, out double value) =>
+        TryDouble(text, out value) && value >= min && value <= max;
+
+    private static bool TryDouble(string? text, out double value)
+    {
+        string trimmed = text?.Trim() ?? string.Empty;
+        bool ok = double.TryParse(trimmed, NumberStyles.Float, CultureInfo.CurrentCulture, out value) ||
+                  double.TryParse(trimmed, NumberStyles.Float, CultureInfo.InvariantCulture, out value);
+        return ok && double.IsFinite(value);
+    }
+
+    private static bool Fail(string message, out string error)
+    {
+        error = message;
+        return false;
+    }
+
     private static bool TryByte(string? text, out int value) =>
         int.TryParse(text?.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out value) && value is >= 0 and <= 255;
 
     private static byte ToByte(double channel) => (byte)Math.Clamp((int)Math.Round(channel * 255.0), 0, 255);
     private static string ToHex(Vec3 color) => $"#{ToByte(color.X):X2}{ToByte(color.Y):X2}{ToByte(color.Z):X2}";
     private static IBrush ToBrush(Vec3 color) => new SolidColorBrush(Color.FromRgb(ToByte(color.X), ToByte(color.Y), ToByte(color.Z)));
+    private static string Format(double value) => value.ToString("0.######", CultureInfo.InvariantCulture);
 
     private static TextBox ChannelBox() => new() { MinWidth = 58, TextAlignment = TextAlignment.Right };
+    private static TextBox PropertyBox() => new() { MinWidth = 88, TextAlignment = TextAlignment.Right };
 
     private static void AddRgb(Grid grid, string label, Control editor, int column)
     {
@@ -414,6 +590,24 @@ internal sealed class MaterialEditorWindow : Window
         row.Children.Add(new TextBlock { Text = label, VerticalAlignment = VerticalAlignment.Center });
         row.Children.Add(control);
         Grid.SetColumn(control, 1);
+        return row;
+    }
+
+    private static Control TwoPropertyRow(string leftLabel, Control left, string rightLabel, Control right)
+    {
+        Grid row = new()
+        {
+            ColumnDefinitions = new ColumnDefinitions("*,Auto,16,*,Auto"),
+            ColumnSpacing = 8
+        };
+        row.Children.Add(new TextBlock { Text = leftLabel, VerticalAlignment = VerticalAlignment.Center });
+        row.Children.Add(left);
+        Grid.SetColumn(left, 1);
+        TextBlock rightText = new() { Text = rightLabel, VerticalAlignment = VerticalAlignment.Center };
+        row.Children.Add(rightText);
+        Grid.SetColumn(rightText, 3);
+        row.Children.Add(right);
+        Grid.SetColumn(right, 4);
         return row;
     }
 

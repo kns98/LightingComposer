@@ -535,7 +535,7 @@ internal sealed class ComposerWindow : Window
         stack.Children.Add(resetTransformButton);
         stack.Children.Add(new TextBlock
         {
-            Text = "Hierarchy: ▸/▾ expands group nodes. Standard primitives: Plane, Cube, Circle, UV Sphere, Icosphere, Cylinder, Cone, Torus, and Grid. Use Parameters… to edit real dimensions in meters while the object remains procedural. Material… opens the material library, exact color setter, and image texture controls. Convert to Mesh, Join + weld, or component geometry edits make it an ordinary mesh. Object/Vertex/Edge/Face modes use 4/1/2/3. Gizmos: G move, R rotate, S scale; Shift is precision and Ctrl snaps. Viewport: right drag orbits, middle drag pans, and wheel zooms.",
+            Text = "Hierarchy: ▸/▾ expands group nodes. Standard primitives: Plane, Cube, Circle, UV Sphere, Icosphere, Cylinder, Cone, Torus, and Grid. Use Parameters… to edit real dimensions in meters while the object remains procedural. Material… opens the material library, direct PBR property controls, exact color setter, and image texture controls. Convert to Mesh, Join + weld, or component geometry edits make it an ordinary mesh. Object/Vertex/Edge/Face modes use 4/1/2/3. Gizmos: G move, R rotate, S scale; Shift is precision and Ctrl snaps. Viewport: right drag orbits, middle drag pans, and wheel zooms.",
             TextWrapping = TextWrapping.Wrap,
             Opacity = 0.68,
             FontSize = 12,
@@ -2200,7 +2200,7 @@ internal sealed class ComposerWindow : Window
             });
         materialEditorWindow = dialog;
         dialog.Show(this);
-        statusText.Text = "Material editor opened. Presets, exact RGB/hex color, and image textures apply to the selected object.";
+        statusText.Text = "Material editor opened. Presets, direct PBR properties, exact RGB/hex color, and image textures apply to the selected object.";
     }
 
     private void CloseMaterialEditorWindow()
