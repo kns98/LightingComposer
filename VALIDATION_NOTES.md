@@ -20,12 +20,12 @@ This update therefore uses the complete current-main source snapshot already obt
   - Grid
 - Procedural parameter descriptors shared through `IEditablePrimitiveDefinition`.
 - All dimensional/length descriptors are authored in meters (`m`).
-- Object inspector labels Position and stress-grid spacing in meters.
+- Object inspector labels Position in meters.
 - A closable, modeless floating `PrimitiveParametersWindow` opens automatically for a new standard primitive and can be reopened from the Inspector.
 - Parameter controls are generated from descriptors: precise numeric entry, integer counts, toggle fields, and choices.
 - Parameter edits debounce live geometry regeneration and are committed as undoable batches rather than one history entry per keystroke.
 - Explicit **Convert to Mesh** removes primitive metadata while keeping the generated triangles.
-- Existing committed Vertex/Edge/Face edits and **Join + weld** continue to make mesh geometry authoritative.
+- Existing committed Vertex/Edge/Face edits continue to make mesh geometry authoritative.
 - Native `.lscene` serialization already retains `PrimitiveKind`, `PrimitiveSourceName`, and `PrimitiveParameters`, so procedural objects survive save/reopen while still parameterized.
 - Added tests for the standard primitive set, meter descriptors, geometry regeneration, parameter undo/redo, conversion, and conversion undo.
 

@@ -171,10 +171,9 @@ internal sealed class ComposerWindow : Window
     private readonly Button undoButton;
     private readonly Button redoButton;
     private readonly Button duplicateButton;
+    private readonly Button groupButton;
     private readonly Button ungroupButton;
-    private readonly Button joinWeldButton;
     private readonly Button deleteButton;
-    private readonly Button gridButton;
     private readonly Button parametersButton;
     private readonly Button materialButton;
     private readonly Button applyButton;
@@ -191,15 +190,16 @@ internal sealed class ComposerWindow : Window
     private readonly TextBox scaleX;
     private readonly TextBox scaleY;
     private readonly TextBox scaleZ;
-    private readonly TextBox copyCountBox;
-    private readonly TextBox spacingBox;
 
     private WriteableBitmap? bitmap;
     private int? selectedObjectId;
+    private readonly HashSet<int> selectedObjectIds = new();
     private int? selectedTriangleGroupId;
     private int? selectedTriangleIndex;
     private ViewportDragMode viewportDragMode;
     private bool leftPressed;
+    private bool rightPressed;
+    private Point rightPressPoint;
     private GizmoDragState? gizmoDrag;
     private Point previousPointer;
     private Point leftPressPoint;
@@ -233,10 +233,9 @@ internal sealed class ComposerWindow : Window
         undoButton = NewButton("Undo");
         redoButton = NewButton("Redo");
         duplicateButton = NewButton("Duplicate");
+        groupButton = NewButton("Group");
         ungroupButton = NewButton("Ungroup");
-        joinWeldButton = NewButton("Join + weld");
         deleteButton = NewButton("Delete");
-        gridButton = NewButton("Generate grid");
         parametersButton = NewButton("Parameters…");
         materialButton = NewButton("Material…");
         applyButton = NewButton("Apply transform");
@@ -314,8 +313,6 @@ internal sealed class ComposerWindow : Window
         scaleX = NumberBox("1");
         scaleY = NumberBox("1");
         scaleZ = NumberBox("1");
-        copyCountBox = NumberBox("100");
-        spacingBox = NumberBox("2.5");
 
         image = new Image
         {
@@ -449,7 +446,7 @@ internal sealed class ComposerWindow : Window
     {
         Grid panel = new()
         {
-            RowDefinitions = new RowDefinitions("Auto,*,Auto,Auto"),
+            RowDefinitions = new RowDefinitions("Auto,*,Auto"),
             RowSpacing = 8
         };
 
@@ -460,45 +457,22 @@ internal sealed class ComposerWindow : Window
 
         Grid objectButtons = new()
         {
-            ColumnDefinitions = new ColumnDefinitions("*,*,*,*"),
-            ColumnSpacing = 8
+            ColumnDefinitions = new ColumnDefinitions("*,*,*"),
+            RowDefinitions = new RowDefinitions("Auto,Auto"),
+            ColumnSpacing = 8,
+            RowSpacing = 6
         };
         objectButtons.Children.Add(duplicateButton);
+        objectButtons.Children.Add(groupButton);
+        Grid.SetColumn(groupButton, 1);
         objectButtons.Children.Add(ungroupButton);
-        Grid.SetColumn(ungroupButton, 1);
+        Grid.SetColumn(ungroupButton, 2);
         objectButtons.Children.Add(deleteButton);
-        Grid.SetColumn(deleteButton, 2);
-        objectButtons.Children.Add(joinWeldButton);
-        Grid.SetColumn(joinWeldButton, 3);
+        Grid.SetRow(deleteButton, 1);
+        Grid.SetColumnSpan(deleteButton, 3);
         panel.Children.Add(objectButtons);
         Grid.SetRow(objectButtons, 2);
 
-        Border stressPanel = new()
-        {
-            Padding = new Thickness(10),
-            BorderThickness = new Thickness(1),
-            BorderBrush = new SolidColorBrush(Color.FromArgb(70, 128, 128, 128)),
-            Child = new StackPanel
-            {
-                Spacing = 7,
-                Children =
-                {
-                    Heading("Performance stress grid"),
-                    LabeledControl("Copies", copyCountBox),
-                    LabeledControl("Spacing (m)", spacingBox),
-                    gridButton,
-                    new TextBlock
-                    {
-                        Text = "Copies share material and triangle objects where the core allows, then render as independent transforms.",
-                        TextWrapping = TextWrapping.Wrap,
-                        Opacity = 0.68,
-                        FontSize = 12
-                    }
-                }
-            }
-        };
-        panel.Children.Add(stressPanel);
-        Grid.SetRow(stressPanel, 3);
         return panel;
     }
 
@@ -535,7 +509,7 @@ internal sealed class ComposerWindow : Window
         stack.Children.Add(resetTransformButton);
         stack.Children.Add(new TextBlock
         {
-            Text = "Hierarchy: ▸/▾ expands group nodes. Standard primitives: Plane, Cube, Circle, UV Sphere, Icosphere, Cylinder, Cone, Torus, and Grid. Use Parameters… to edit real dimensions in meters while the object remains procedural. Material… opens the material library, direct PBR property controls, exact color setter, and image texture controls. Convert to Mesh, Join + weld, or component geometry edits make it an ordinary mesh. Object/Vertex/Edge/Face modes use 4/1/2/3. Gizmos: G move, R rotate, S scale; Shift is precision and Ctrl snaps. Viewport: right drag orbits, middle drag pans, and wheel zooms.",
+            Text = "Hierarchy: ▸/▾ expands groups and … show faces reveals logical polygon faces (a Cube has six). Ctrl-click objects to multi-select; Group/Ctrl+G wraps sibling objects and Ctrl+Shift+G ungroups. Standard primitives: Plane, Cube, Circle, UV Sphere, Icosphere, Cylinder, Cone, Torus, and Grid. Use Parameters… for real dimensions in meters and Material… for PBR/color/textures. Face mode (3): right-click a polygon for Extrude or Inset; Extrude uses signed distance (+ outward, - inward), while inset depth uses + inward / - outward. Object/Vertex/Edge/Face modes use 4/1/2/3. Gizmos: G move, R rotate, S scale; Shift is precision and Ctrl snaps. Viewport: right drag orbits, middle drag pans, and wheel zooms.",
             TextWrapping = TextWrapping.Wrap,
             Opacity = 0.68,
             FontSize = 12,
@@ -560,10 +534,9 @@ internal sealed class ComposerWindow : Window
         undoButton.Click += async (_, _) => await UndoAsync();
         redoButton.Click += async (_, _) => await RedoAsync();
         duplicateButton.Click += async (_, _) => await DuplicateSelectedAsync();
+        groupButton.Click += async (_, _) => await GroupSelectedAsync();
         ungroupButton.Click += async (_, _) => await UngroupSelectedAsync();
-        joinWeldButton.Click += async (_, _) => await JoinAndWeldSelectedAsync();
         deleteButton.Click += async (_, _) => await DeleteSelectedAsync();
-        gridButton.Click += async (_, _) => await GenerateGridAsync();
         parametersButton.Click += (_, _) => OpenPrimitiveParameters();
         materialButton.Click += (_, _) => OpenMaterialEditor();
         applyButton.Click += async (_, _) => await ApplyInspectorAsync();
@@ -585,7 +558,18 @@ internal sealed class ComposerWindow : Window
             }
             session.SetSelectionMode(mode);
             if (mode != ComposerSelectionMode.Object)
+            {
+                // Component editing has one mesh owner. Collapse any Object-mode
+                // Ctrl multi-selection to the active object before editing faces.
+                if (selectedObjectId is int activeId &&
+                    (selectedObjectIds.Count != 1 || !selectedObjectIds.Contains(activeId)))
+                {
+                    selectedObjectIds.Clear();
+                    selectedObjectIds.Add(activeId);
+                    RefreshObjectTree(activeId, syncSessionSelection: false);
+                }
                 SelectGizmoMode(ComposerGizmoMode.Translate);
+            }
             else
                 SelectMoveAxisLock(ComposerGizmoAxis.None);
             gizmoModeBox.IsEnabled = mode == ComposerSelectionMode.Object;
@@ -621,6 +605,7 @@ internal sealed class ComposerWindow : Window
         {
             viewportDragMode = ViewportDragMode.None;
             leftPressed = false;
+            rightPressed = false;
             if (gizmoDrag is GizmoDragState pending)
             {
                 if (pending.MeshComponent)
@@ -825,41 +810,6 @@ internal sealed class ComposerWindow : Window
 
         if (insertedId.HasValue && selectedObjectId == insertedId)
             OpenPrimitiveParameters();
-    }
-
-    private async Task JoinAndWeldSelectedAsync()
-    {
-        if (selectedObjectId is not int id)
-            return;
-
-        ClosePrimitiveParametersWindow();
-        CloseMaterialEditorWindow();
-        try
-        {
-            await StopCurrentRenderAsync();
-            SetBusy(true, "Joining hierarchy and welding common vertices…");
-            bool joined = await Task.Run(
-                () => session.JoinAndWeldObject(id),
-                lifetimeCancellation.Token);
-            if (!joined)
-                throw new InvalidOperationException("The selected object has no editable mesh geometry.");
-
-            selectionModeBox.SelectedIndex = 0;
-            ClearVirtualTriangleSelection();
-            RefreshObjectTree(id);
-            UpdateHistoryButtons();
-            pathText.Text = "Untitled composition (modified)";
-            statusText.Text = $"Joined and welded the selected mesh; {session.LastImportDetails}.";
-            await RequestRenderAsync(interactive: false);
-        }
-        catch (Exception ex)
-        {
-            ReportOperationFailure("Join + weld failed", ex);
-        }
-        finally
-        {
-            SetBusy(false);
-        }
     }
 
     private string FormatImportDetails() =>
@@ -1144,6 +1094,9 @@ internal sealed class ComposerWindow : Window
         try
         {
             int? preferred = await Task.Run(session.Undo, lifetimeCancellation.Token);
+            selectedObjectIds.Clear();
+            if (preferred.HasValue)
+                selectedObjectIds.Add(preferred.Value);
             selectedObjectId = preferred;
             pathText.Text = "Untitled composition (modified)";
             ClearVirtualTriangleSelection();
@@ -1177,6 +1130,9 @@ internal sealed class ComposerWindow : Window
         try
         {
             int? preferred = await Task.Run(session.Redo, lifetimeCancellation.Token);
+            selectedObjectIds.Clear();
+            if (preferred.HasValue)
+                selectedObjectIds.Add(preferred.Value);
             selectedObjectId = preferred;
             pathText.Text = "Untitled composition (modified)";
             ClearVirtualTriangleSelection();
@@ -1198,28 +1154,75 @@ internal sealed class ComposerWindow : Window
         }
     }
 
+    private async Task GroupSelectedAsync()
+    {
+        ClosePrimitiveParametersWindow();
+        CloseMaterialEditorWindow();
+        if (selectedObjectIds.Count < 2 || !session.CanGroupObjects(selectedObjectIds))
+        {
+            statusText.Text = "Ctrl-click at least two sibling objects before grouping.";
+            return;
+        }
+
+        int[] ids = selectedObjectIds.ToArray();
+        await StopCurrentRenderAsync();
+        SetBusy(true, "Grouping selected objects…");
+        try
+        {
+            int? groupId = await Task.Run(() => session.GroupObjects(ids), lifetimeCancellation.Token);
+            if (!groupId.HasValue)
+            {
+                statusText.Text = "The selected objects could not be grouped. They must share the same parent.";
+                return;
+            }
+            selectedObjectIds.Clear();
+            selectedObjectIds.Add(groupId.Value);
+            selectedObjectId = groupId.Value;
+            pathText.Text = "Untitled composition (modified)";
+            ClearVirtualTriangleSelection();
+            selectionModeBox.SelectedIndex = 0;
+            RefreshObjectTree(groupId.Value);
+            UpdateHistoryButtons();
+            statusText.Text = $"Grouped {ids.Length} objects. Ctrl-click can build another multi-selection.";
+            await RequestRenderAsync(interactive: false);
+        }
+        catch (Exception ex)
+        {
+            statusText.Text = $"Group failed: {ex.Message}";
+        }
+        finally
+        {
+            SetBusy(false);
+        }
+    }
+
     private async Task UngroupSelectedAsync()
     {
         ClosePrimitiveParametersWindow();
         CloseMaterialEditorWindow();
-        if (selectedObjectId is not int id)
-            return;
-        if (!session.CanUngroupObject(id))
+        int[] ids = selectedObjectIds.Count > 0
+            ? selectedObjectIds.ToArray()
+            : selectedObjectId is int id ? new[] { id } : Array.Empty<int>();
+        if (ids.Length == 0 || !session.CanUngroupObjects(ids))
         {
-            statusText.Text = "The selected node is already a terminal triangle and cannot be ungrouped further.";
+            statusText.Text = "None of the selected objects can be ungrouped further.";
             return;
         }
 
         await StopCurrentRenderAsync();
-        SetBusy(true, "Ungrouping selected node…");
+        SetBusy(true, ids.Length > 1 ? "Ungrouping selected objects…" : "Ungrouping selected node…");
         try
         {
-            IReadOnlyList<int> promoted = await Task.Run(() => session.UngroupObject(id), lifetimeCancellation.Token);
-            trianglePageOffsets.Remove(id);
-            expandedObjectIds.Remove(id);
-            selectedObjectId = promoted.FirstOrDefault();
-            if (selectedObjectId == 0)
-                selectedObjectId = null;
+            IReadOnlyList<int> promoted = await Task.Run(() => session.UngroupObjects(ids), lifetimeCancellation.Token);
+            foreach (int oldId in ids)
+            {
+                trianglePageOffsets.Remove(oldId);
+                expandedObjectIds.Remove(oldId);
+            }
+            selectedObjectIds.Clear();
+            foreach (int promotedId in promoted)
+                selectedObjectIds.Add(promotedId);
+            selectedObjectId = promoted.Count > 0 ? promoted[0] : null;
             pathText.Text = "Untitled composition (modified)";
             ClearVirtualTriangleSelection();
             selectionModeBox.SelectedIndex = 0;
@@ -1277,6 +1280,7 @@ internal sealed class ComposerWindow : Window
         CancelCurrentRender();
         await Task.Run(() => session.DeleteObject(id));
         selectedObjectId = null;
+        selectedObjectIds.Clear();
         ClearVirtualTriangleSelection();
         pathText.Text = "Untitled composition (modified)";
         RefreshObjectTree();
@@ -1290,38 +1294,6 @@ internal sealed class ComposerWindow : Window
         }
     }
 
-    private async Task GenerateGridAsync()
-    {
-        if (selectedObjectId is not int id)
-        {
-            statusText.Text = "Select an object before generating copies.";
-            return;
-        }
-
-        try
-        {
-            int copyCount = ParsePositiveInt(copyCountBox.Text, "Copies");
-            double spacing = ParsePositiveDouble(spacingBox.Text, "Spacing");
-            CancelCurrentRender();
-            SetBusy(true, $"Generating {copyCount:N0} copies…");
-            await Task.Run(
-                () => session.GenerateGridCopies(id, copyCount, spacing, lifetimeCancellation.Token),
-                lifetimeCancellation.Token);
-            pathText.Text = "Untitled composition (modified)";
-            RefreshObjectTree(id);
-            statusText.Text = $"Generated {copyCount:N0} copies — {session.ObjectCount:N0} objects, {session.TriangleCount:N0} triangles.";
-            await RequestRenderAsync(interactive: false);
-        }
-        catch (Exception ex)
-        {
-            statusText.Text = $"Grid generation failed: {ex.Message}";
-        }
-        finally
-        {
-            SetBusy(false);
-        }
-    }
-
     private void FrameSelected()
     {
         if (selectedObjectId is not int id || !session.FrameObject(id))
@@ -1329,16 +1301,26 @@ internal sealed class ComposerWindow : Window
         _ = RequestRenderAsync(interactive: false);
     }
 
-    private void RefreshObjectTree(int? preferredSelection = null)
+    private void RefreshObjectTree(int? preferredSelection = null, bool syncSessionSelection = true)
     {
         IReadOnlyList<SceneObjectInfo> infos = session.GetObjectInfos();
         List<ObjectTreeNode> roots = ComposerObjectTree.Build(infos);
         HashSet<int> validIds = infos.Select(info => info.Id).ToHashSet();
+        selectedObjectIds.RemoveWhere(id => !validIds.Contains(id));
 
         int? target = preferredSelection ?? selectedObjectId;
         if (target.HasValue && ComposerObjectTree.Find(roots, target.Value) == null)
             target = null;
         selectedObjectId = target;
+        if (preferredSelection.HasValue && selectedObjectId.HasValue && selectedObjectIds.Count <= 1)
+        {
+            selectedObjectIds.Clear();
+            selectedObjectIds.Add(selectedObjectId.Value);
+        }
+        else if (selectedObjectId.HasValue && selectedObjectIds.Count == 0)
+        {
+            selectedObjectIds.Add(selectedObjectId.Value);
+        }
 
         if (!treeExpansionInitialized)
             treeExpansionInitialized = true;
@@ -1351,18 +1333,21 @@ internal sealed class ComposerWindow : Window
         foreach (ObjectTreeNode root in roots)
             objectTreePanel.Children.Add(BuildObjectTreeControl(root, depth: 0));
 
-        if (selectedTriangleGroupId is int triangleGroupId &&
-            selectedTriangleIndex is int triangleIndex &&
-            selectedObjectId == triangleGroupId &&
-            session.SetSelectedTriangle(triangleGroupId, triangleIndex))
+        if (syncSessionSelection)
         {
-            // Virtual triangle selection is restored after rebuilding the UI tree.
-        }
-        else if (session.SelectionMode == ComposerSelectionMode.Object || !session.HasMeshComponentSelection)
-        {
-            selectedTriangleGroupId = null;
-            selectedTriangleIndex = null;
-            session.SetSelectedObject(selectedObjectId);
+            if (selectedTriangleGroupId is int triangleGroupId &&
+                selectedTriangleIndex is int triangleIndex &&
+                selectedObjectId == triangleGroupId &&
+                session.SetSelectedTriangle(triangleGroupId, triangleIndex))
+            {
+                // Virtual triangle selection is restored after rebuilding the UI tree.
+            }
+            else if (session.SelectionMode == ComposerSelectionMode.Object || !session.HasMeshComponentSelection)
+            {
+                selectedTriangleGroupId = null;
+                selectedTriangleIndex = null;
+                session.SetSelectedObject(selectedObjectId);
+            }
         }
         LoadInspectorFromSelection();
         UpdateHistoryButtons();
@@ -1421,11 +1406,17 @@ internal sealed class ComposerWindow : Window
             MinHeight = 28,
             Padding = new Thickness(6, 3),
             BorderThickness = new Thickness(0),
-            Background = selectedObjectId == node.Id
+            Background = selectedObjectIds.Contains(node.Id)
                 ? new SolidColorBrush(Color.FromArgb(110, 255, 125, 40))
                 : Brushes.Transparent
         };
-        select.Click += (_, _) => SelectObject(node.Id);
+        select.PointerPressed += (_, args) =>
+        {
+            if (!args.GetCurrentPoint(select).Properties.IsLeftButtonPressed)
+                return;
+            SelectObject(node.Id, args.KeyModifiers.HasFlag(KeyModifiers.Control));
+            args.Handled = true;
+        };
         row.Children.Add(select);
         Grid.SetColumn(select, 1);
         branch.Children.Add(row);
@@ -1436,22 +1427,26 @@ internal sealed class ComposerWindow : Window
                 branch.Children.Add(BuildObjectTreeControl(child, depth + 1));
 
             if (hasTriangleDetails)
-                AddLazyTriangleRows(branch, node, depth + 1);
+                AddLazyFaceRows(branch, node, depth + 1);
         }
 
         return branch;
     }
 
-    private void AddLazyTriangleRows(StackPanel branch, ObjectTreeNode node, int depth)
+    private void AddLazyFaceRows(StackPanel branch, ObjectTreeNode node, int depth)
     {
+        int faceCount = session.GetFaceCount(node.Id);
+        if (faceCount <= 0)
+            return;
+
         bool open = trianglePageOffsets.TryGetValue(node.Id, out int pageOffset);
-        pageOffset = Math.Clamp(pageOffset, 0, Math.Max(0, node.LocalTriangleCount - 1));
+        pageOffset = Math.Clamp(pageOffset, 0, Math.Max(0, faceCount - 1));
 
         if (!open)
         {
             Button show = new()
             {
-                Content = $"… show triangles ({node.LocalTriangleCount:N0})",
+                Content = $"… show faces ({faceCount:N0})",
                 HorizontalAlignment = HorizontalAlignment.Stretch,
                 HorizontalContentAlignment = HorizontalAlignment.Left,
                 Margin = new Thickness(depth * 14 + 20, 2, 4, 2),
@@ -1467,19 +1462,19 @@ internal sealed class ComposerWindow : Window
             return;
         }
 
-        IReadOnlyList<ComposerTriangleInfo> page = session.GetTriangleInfos(
+        IReadOnlyList<ComposerFaceInfo> page = session.GetFaceInfos(
             node.Id,
             pageOffset,
             TrianglePageSize);
-        foreach (ComposerTriangleInfo triangle in page)
+        foreach (ComposerFaceInfo face in page)
         {
-            bool selectedTriangle = selectedTriangleGroupId == node.Id &&
-                                    selectedTriangleIndex == triangle.Index;
-            Button triangleRow = new()
+            bool selectedFace = selectedTriangleGroupId == node.Id &&
+                                selectedTriangleIndex == face.PrimaryTriangleIndex;
+            Button faceRow = new()
             {
                 Content = new TextBlock
                 {
-                    Text = $"△ {triangle.Label}",
+                    Text = $"▱ {face.Label}",
                     TextTrimming = TextTrimming.CharacterEllipsis,
                     FontSize = 12
                 },
@@ -1489,12 +1484,12 @@ internal sealed class ComposerWindow : Window
                 Padding = new Thickness(8, 2),
                 MinHeight = 24,
                 BorderThickness = new Thickness(0),
-                Background = selectedTriangle
+                Background = selectedFace
                     ? new SolidColorBrush(Color.FromArgb(95, 255, 125, 40))
                     : Brushes.Transparent
             };
-            triangleRow.Click += (_, _) => SelectTriangle(node.Id, triangle.Index);
-            branch.Children.Add(triangleRow);
+            faceRow.Click += (_, _) => SelectTriangle(node.Id, face.PrimaryTriangleIndex);
+            branch.Children.Add(faceRow);
         }
 
         int pageEnd = pageOffset + page.Count;
@@ -1520,14 +1515,14 @@ internal sealed class ComposerWindow : Window
 
         Button next = new()
         {
-            Content = $"… next ({pageEnd:N0}/{node.LocalTriangleCount:N0})",
-            IsEnabled = pageEnd < node.LocalTriangleCount,
+            Content = $"… next ({pageEnd:N0}/{faceCount:N0})",
+            IsEnabled = pageEnd < faceCount,
             Padding = new Thickness(8, 3)
         };
         next.Click += (_, _) =>
         {
             trianglePageOffsets[node.Id] = Math.Min(
-                Math.Max(0, node.LocalTriangleCount - 1),
+                Math.Max(0, faceCount - 1),
                 pageOffset + TrianglePageSize);
             RefreshObjectTree(selectedObjectId);
         };
@@ -1536,7 +1531,7 @@ internal sealed class ComposerWindow : Window
 
         Button hide = new()
         {
-            Content = "… hide triangles",
+            Content = "… hide faces",
             HorizontalAlignment = HorizontalAlignment.Right,
             Padding = new Thickness(8, 3)
         };
@@ -1586,11 +1581,13 @@ internal sealed class ComposerWindow : Window
         applyButton.IsEnabled = enabled;
         frameButton.IsEnabled = enabled;
         resetTransformButton.IsEnabled = enabled;
-        duplicateButton.IsEnabled = enabled;
-        ungroupButton.IsEnabled = enabled && selectedObjectId is int id && session.CanUngroupObject(id);
-        joinWeldButton.IsEnabled = enabled && selectedObjectId is int joinId && session.CanJoinAndWeldObject(joinId);
+        duplicateButton.IsEnabled = enabled && selectedObjectIds.Count <= 1;
+        groupButton.IsEnabled = enabled && !rendering && selectedObjectIds.Count >= 2 && session.CanGroupObjects(selectedObjectIds);
+        IEnumerable<int> ungroupTargets = selectedObjectIds.Count > 0
+            ? selectedObjectIds
+            : selectedObjectId is int id ? new[] { id } : Array.Empty<int>();
+        ungroupButton.IsEnabled = enabled && session.CanUngroupObjects(ungroupTargets);
         deleteButton.IsEnabled = enabled;
-        gridButton.IsEnabled = enabled;
     }
 
     private void OnViewportPointerPressed(object? sender, PointerPressedEventArgs e)
@@ -1615,8 +1612,11 @@ internal sealed class ComposerWindow : Window
 
         if (point.Properties.IsRightButtonPressed)
         {
+            // Delay orbit until the pointer actually moves. A stationary right
+            // click is reserved for the face context menu.
             ClearMeshHoverOverlay(requestRender: false);
-            viewportDragMode = ViewportDragMode.Orbit;
+            rightPressed = true;
+            rightPressPoint = position;
             previousPointer = position;
             e.Pointer.Capture(viewport);
             e.Handled = true;
@@ -1643,6 +1643,17 @@ internal sealed class ComposerWindow : Window
     private void OnViewportPointerMoved(object? sender, PointerEventArgs e)
     {
         Point current = e.GetPosition(viewport);
+        if (rightPressed && viewportDragMode == ViewportDragMode.None)
+        {
+            Vector rightMovement = current - rightPressPoint;
+            if (rightMovement.Length > 5.0)
+            {
+                viewportDragMode = ViewportDragMode.Orbit;
+                previousPointer = current;
+            }
+            e.Handled = true;
+            return;
+        }
         if (gizmoDrag != null)
         {
             UpdateGizmoDrag(current, e.KeyModifiers);
@@ -1676,6 +1687,7 @@ internal sealed class ComposerWindow : Window
     {
         if (SelectedSelectionMode == ComposerSelectionMode.Object ||
             leftPressed ||
+            rightPressed ||
             gizmoDrag != null ||
             viewportDragMode != ViewportDragMode.None)
         {
@@ -1733,6 +1745,23 @@ internal sealed class ComposerWindow : Window
     private async void OnViewportPointerReleased(object? sender, PointerReleasedEventArgs e)
     {
         Point releasePoint = e.GetPosition(viewport);
+        if (rightPressed)
+        {
+            rightPressed = false;
+            e.Pointer.Capture(null);
+            Vector movement = releasePoint - rightPressPoint;
+            if (viewportDragMode == ViewportDragMode.Orbit)
+            {
+                viewportDragMode = ViewportDragMode.None;
+                await RequestRenderAsync(interactive: false);
+            }
+            else if (movement.Length <= 5.0)
+            {
+                await ShowFaceContextMenuAsync(releasePoint);
+            }
+            e.Handled = true;
+            return;
+        }
         if (gizmoDrag != null)
         {
             UpdateGizmoDrag(releasePoint, e.KeyModifiers);
@@ -1815,7 +1844,7 @@ internal sealed class ComposerWindow : Window
                             lastRenderHeight));
                         if (hitId.HasValue)
                         {
-                            SelectObject(hitId.Value);
+                            SelectObject(hitId.Value, e.KeyModifiers.HasFlag(KeyModifiers.Control));
                         }
                         else
                         {
@@ -1838,27 +1867,129 @@ internal sealed class ComposerWindow : Window
                         if (picked != null)
                         {
                             selectedObjectId = picked.GroupId;
-                            if (picked.Mode == ComposerSelectionMode.Face)
-                            {
-                                selectedTriangleGroupId = picked.GroupId;
-                                selectedTriangleIndex = picked.ElementIndex;
-                            }
-                            else
-                            {
-                                selectedTriangleGroupId = null;
-                                selectedTriangleIndex = null;
-                            }
+                            selectedObjectIds.Clear();
+                            selectedObjectIds.Add(picked.GroupId);
+                            // Viewport face selection now targets a polygon face group, not a
+                            // raw render triangle. Keep the virtual triangle-tree selection clear.
+                            selectedTriangleGroupId = null;
+                            selectedTriangleIndex = null;
                             RefreshObjectTree(picked.GroupId);
                             string axisHint = SelectedMoveAxisLock == ComposerGizmoAxis.None
                                 ? "drag X, Y, or Z; press X/Y/Z to lock"
                                 : $"movement is locked to {SelectedMoveAxisLock}";
-                            statusText.Text = $"Selected {picked.Label}; {axisHint}. Shift is precise and Ctrl snaps.";
+                            statusText.Text = picked.Mode == ComposerSelectionMode.Face
+                                ? $"Selected {picked.Label}; right-click for Extrude/Inset, or {axisHint}."
+                                : $"Selected {picked.Label}; {axisHint}. Shift is precise and Ctrl snaps.";
                             await RequestRenderAsync(interactive: false);
                         }
                     }
                 }
             }
             e.Handled = true;
+        }
+    }
+
+    private async Task ShowFaceContextMenuAsync(Point viewportPoint)
+    {
+        if (SelectedSelectionMode != ComposerSelectionMode.Face ||
+            !TryViewportToImagePoint(viewportPoint, out Point imagePoint))
+        {
+            return;
+        }
+
+        double normalizedX = imagePoint.X / Math.Max(1, lastRenderWidth);
+        double normalizedY = imagePoint.Y / Math.Max(1, lastRenderHeight);
+        ComposerMeshPickResult? picked = await Task.Run(() => session.PickMeshElement(
+            session.Camera.Snapshot(),
+            normalizedX,
+            normalizedY,
+            lastRenderWidth,
+            lastRenderHeight,
+            ComposerSelectionMode.Face));
+        if (picked == null)
+            return;
+
+        selectedObjectId = picked.GroupId;
+        selectedObjectIds.Clear();
+        selectedObjectIds.Add(picked.GroupId);
+        ClearVirtualTriangleSelection();
+        RefreshObjectTree(picked.GroupId);
+        _ = RequestRenderAsync(interactive: true);
+
+        MenuItem extrude = new() { Header = "Extrude Face…" };
+        MenuItem inset = new() { Header = "Inset Face…" };
+        extrude.Click += async (_, _) => await RunFaceOperationAsync(insetOperation: false);
+        inset.Click += async (_, _) => await RunFaceOperationAsync(insetOperation: true);
+        ContextMenu menu = new()
+        {
+            ItemsSource = new object[] { extrude, inset }
+        };
+        bool enabled = session.CanEditSelectedFace(picked.GroupId);
+        extrude.IsEnabled = enabled;
+        inset.IsEnabled = enabled;
+        menu.Open(viewport);
+    }
+
+    private async Task RunFaceOperationAsync(bool insetOperation)
+    {
+        if (selectedObjectId is not int id || !session.CanEditSelectedFace(id))
+            return;
+
+        FaceOperationDialog dialog = insetOperation
+            ? new FaceOperationDialog(
+                "Inset Face",
+                "Inset distance (m)",
+                0.05,
+                allowNegative: false,
+                secondaryLabel: "Signed depth (m) — + inward, - outward, 0 planar",
+                secondaryDefaultMeters: 0.02,
+                allowSecondaryNegative: true,
+                allowSecondaryZero: true)
+            : new FaceOperationDialog("Extrude Face", "Signed extrusion distance (m) — + outward, - inward", 0.25, allowNegative: true);
+        FaceOperationValues? operation = await dialog.ShowForResultAsync(this);
+        if (!operation.HasValue)
+            return;
+
+        double amount = operation.Value.AmountMeters;
+        double recessDepth = operation.Value.SecondaryMeters;
+        await StopCurrentRenderAsync();
+        SetBusy(true, insetOperation ? "Insetting face…" : "Extruding face…");
+        try
+        {
+            bool changed = await Task.Run(() => insetOperation
+                ? session.InsetSelectedFace(id, amount, recessDepth)
+                : session.ExtrudeSelectedFace(id, amount), lifetimeCancellation.Token);
+            if (!changed)
+            {
+                statusText.Text = "The selected face could not be edited with that amount.";
+                return;
+            }
+
+            ClearVirtualTriangleSelection();
+            selectedObjectIds.Clear();
+            selectedObjectIds.Add(id);
+            selectedObjectId = id;
+            pathText.Text = "Untitled composition (modified)";
+            RefreshObjectTree(id);
+            UpdateHistoryButtons();
+            statusText.Text = insetOperation
+                ? recessDepth > 1e-9
+                    ? $"Inset face by {amount:0.###} m with {recessDepth:0.###} m inward depth. The object is now an editable mesh."
+                    : recessDepth < -1e-9
+                        ? $"Inset face by {amount:0.###} m with {Math.Abs(recessDepth):0.###} m outward depth. The object is now an editable mesh."
+                        : $"Inset face by {amount:0.###} m (planar). The object is now an editable mesh."
+                : amount > 1e-9
+                    ? $"Extruded face outward by {amount:0.###} m. The object is now an editable mesh."
+                    : $"Extruded face inward by {Math.Abs(amount):0.###} m. The object is now an editable mesh.";
+            await RequestRenderAsync(interactive: false);
+        }
+        catch (Exception ex)
+        {
+            statusText.Text = $"Face edit failed: {ex.Message}";
+        }
+        finally
+        {
+            SetBusy(false);
         }
     }
 
@@ -2217,25 +2348,60 @@ internal sealed class ComposerWindow : Window
         ClosePrimitiveParametersWindow();
         CloseMaterialEditorWindow();
         selectedObjectId = null;
+        selectedObjectIds.Clear();
         ClearVirtualTriangleSelection();
         session.SetSelectedObject(null);
         RefreshObjectTree();
         statusText.Text = "Selection cleared.";
     }
 
-    private void SelectObject(int id)
+    private void SelectObject(int id, bool toggle = false)
     {
         if (session.GetObjectState(id) == null)
             return;
 
-        if (primitiveParametersWindow != null && primitiveParametersWindow.ObjectId != id)
+        if (toggle)
+        {
+            if (!selectedObjectIds.Add(id))
+            {
+                selectedObjectIds.Remove(id);
+                if (selectedObjectId == id)
+                    selectedObjectId = selectedObjectIds.Count > 0 ? selectedObjectIds.Last() : null;
+            }
+            else
+            {
+                selectedObjectId = id;
+            }
+        }
+        else
+        {
+            selectedObjectIds.Clear();
+            selectedObjectIds.Add(id);
+            selectedObjectId = id;
+        }
+
+        if (selectedObjectId is not int activeId)
+        {
+            session.SetSelectedObject(null);
             ClosePrimitiveParametersWindow();
-        if (materialEditorWindow != null && materialEditorWindow.ObjectId != id)
+            CloseMaterialEditorWindow();
+            RefreshObjectTree();
+            statusText.Text = "Selection cleared.";
+            _ = RequestRenderAsync(interactive: false);
+            return;
+        }
+
+        if (primitiveParametersWindow != null && primitiveParametersWindow.ObjectId != activeId)
+            ClosePrimitiveParametersWindow();
+        if (materialEditorWindow != null && materialEditorWindow.ObjectId != activeId)
             CloseMaterialEditorWindow();
         selectionModeBox.SelectedIndex = 0;
-        selectedObjectId = id;
         ClearVirtualTriangleSelection();
-        RefreshObjectTree(id);
+        session.SetSelectedObject(activeId);
+        RefreshObjectTree(activeId);
+        statusText.Text = selectedObjectIds.Count > 1
+            ? $"{selectedObjectIds.Count} objects selected. Ctrl-click toggles selection; Group combines sibling objects."
+            : "Object selected.";
         _ = RequestRenderAsync(interactive: false);
     }
 
@@ -2249,7 +2415,7 @@ internal sealed class ComposerWindow : Window
         selectedTriangleGroupId = groupId;
         selectedTriangleIndex = triangleIndex;
         RefreshObjectTree(groupId);
-        statusText.Text = $"Selected Face {triangleIndex + 1:N0}. Drag the move gizmo to move its three welded vertices.";
+        statusText.Text = "Selected logical polygon face. Right-click it for Extrude/Inset, or drag the move gizmo to move the whole face.";
         _ = RequestRenderAsync(interactive: false);
     }
 
@@ -2276,6 +2442,15 @@ internal sealed class ComposerWindow : Window
         if (e.KeyModifiers.HasFlag(KeyModifiers.Control) && e.Key == Key.D)
         {
             _ = DuplicateSelectedAsync();
+            e.Handled = true;
+            return;
+        }
+        if (e.KeyModifiers.HasFlag(KeyModifiers.Control) && e.Key == Key.G)
+        {
+            if (e.KeyModifiers.HasFlag(KeyModifiers.Shift))
+                _ = UngroupSelectedAsync();
+            else
+                _ = GroupSelectedAsync();
             e.Handled = true;
             return;
         }
@@ -2784,20 +2959,6 @@ internal sealed class ComposerWindow : Window
         throw new FormatException($"{label} must be a finite number.");
     }
 
-    private static double ParsePositiveDouble(string? text, string label)
-    {
-        double value = ParseDouble(text, label);
-        if (value <= 0.0)
-            throw new ArgumentOutOfRangeException(label, $"{label} must be greater than zero.");
-        return value;
-    }
-
-    private static int ParsePositiveInt(string? text, string label)
-    {
-        if (!int.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out int value) || value < 1)
-            throw new FormatException($"{label} must be a positive integer.");
-        return value;
-    }
 
     private static int AlignToEight(int value) => Math.Max(8, (value + 7) & ~7);
 

@@ -26,6 +26,33 @@ internal sealed partial class ComposerSceneSession
     public bool HasMeshComponentSelection => selectedMeshSelection.HasValue;
     public ComposerGizmoAxis MeshMoveAxisLock => meshMoveAxisLock;
 
+    internal int GetMeshFaceGroupCountForTests(int groupId)
+    {
+        sceneGate.Wait();
+        try
+        {
+            return scene.GroupById(groupId) is SceneObjectGroup group ? GetMeshTopology(group).Faces.Count : 0;
+        }
+        finally
+        {
+            sceneGate.Release();
+        }
+    }
+
+    internal int GetMeshEdgeCountForTests(int groupId)
+    {
+        sceneGate.Wait();
+        try
+        {
+            return scene.GroupById(groupId) is SceneObjectGroup group ? GetMeshTopology(group).Edges.Count : 0;
+        }
+        finally
+        {
+            sceneGate.Release();
+        }
+    }
+
+
     public bool SetSelectionMode(ComposerSelectionMode mode)
     {
         sceneGate.Wait();
@@ -146,109 +173,6 @@ internal sealed partial class ComposerSceneSession
         }
     }
 
-    public bool CanJoinAndWeldObject(int id)
-    {
-        sceneGate.Wait();
-        try
-        {
-            SceneObjectGroup? group = scene.GroupById(id);
-            return group != null && group.CountLocalTrianglesRecursively() > 0;
-        }
-        finally
-        {
-            sceneGate.Release();
-        }
-    }
-
-    /// <summary>
-    /// Flattens the selected subtree into one editable mesh and welds coincident
-    /// positions. This is the explicit, potentially destructive equivalent of
-    /// Blender's Join plus Merge by Distance, with undo backed by scene snapshots.
-    /// </summary>
-    public bool JoinAndWeldObject(int id)
-    {
-        sceneGate.Wait();
-        try
-        {
-            SceneObjectGroup? target = scene.GroupById(id);
-            if (target == null || target.CountLocalTrianglesRecursively() == 0)
-                return false;
-
-            SceneSnapshot before = scene.CreateSnapshot();
-            target.BakeCurrentTransform();
-
-            List<Triangle> flattened = new(target.CountLocalTrianglesRecursively());
-            foreach (SceneObjectGroup node in target.SelfAndDescendants())
-            {
-                foreach (Triangle triangle in node.LocalTriangles)
-                {
-                    flattened.Add(new Triangle(
-                        triangle.A,
-                        triangle.B,
-                        triangle.C,
-                        triangle.UvA,
-                        triangle.UvB,
-                        triangle.UvC,
-                        triangle.NormalA,
-                        triangle.NormalB,
-                        triangle.NormalC,
-                        triangle.Material,
-                        target.Id));
-                }
-            }
-
-            while (target.Children.Count > 0)
-                target.RemoveChild(target.Children[^1]);
-
-            ComposerMeshTopology topology = ComposerMeshTopology.Build(flattened);
-            List<Triangle> welded = topology.CreateWeldedTriangles(flattened);
-            target.LocalTriangles.Clear();
-            target.LocalTriangles.AddRange(welded.Select(triangle => new Triangle(
-                triangle.A,
-                triangle.B,
-                triangle.C,
-                triangle.UvA,
-                triangle.UvB,
-                triangle.UvC,
-                triangle.NormalA,
-                triangle.NormalB,
-                triangle.NormalC,
-                triangle.Material,
-                target.Id)));
-            ClearPrimitiveMetadata(target);
-            target.RecalculatePivot();
-            Scene.RecalculatePivotsToRoot(target.Parent);
-            scene.RebuildWorldGeometry();
-
-            SceneSnapshot after = scene.CreateSnapshot();
-            editHistory.PushApplied(new SceneSnapshotEditCommand(
-                "Join and weld mesh",
-                before,
-                after,
-                id,
-                id));
-
-            selectedObjectId = id;
-            selectedMeshSelection = null;
-            hoveredMeshSelection = null;
-            meshHoverVisible = true;
-            meshMovePreviewLocal = Vec3.Zero;
-            meshMovePreviewWorld = Vec3.Zero;
-            meshMoveAxisLock = ComposerGizmoAxis.None;
-            selectionMode = ComposerSelectionMode.Object;
-            meshTopologyByGroup.Clear();
-            RebuildSelectionOverlayCache();
-            ScenePath = null;
-            RefreshRendererCachesAfterGeometryBake(CancellationToken.None);
-            LastImportDetails = $"joined and welded to {topology.Vertices.Count:N0} vertices and {topology.Edges.Count:N0} edges";
-            return true;
-        }
-        finally
-        {
-            sceneGate.Release();
-        }
-    }
-
     public ComposerMeshPickResult? UpdateMeshHover(
         CameraDefinition camera,
         double normalizedX,
@@ -322,7 +246,9 @@ internal sealed partial class ComposerSceneSession
             meshMovePreviewLocal = Vec3.Zero;
             meshMovePreviewWorld = Vec3.Zero;
             selectedTriangleGroupId = mode == ComposerSelectionMode.Face ? selection.GroupId : null;
-            selectedTriangleIndex = mode == ComposerSelectionMode.Face ? selection.ElementIndex : null;
+            selectedTriangleIndex = mode == ComposerSelectionMode.Face
+                ? GetMeshTopology(scene.GroupById(selection.GroupId)!).PrimaryTriangleIndex(selection.ElementIndex)
+                : null;
             RebuildSelectionOverlayCache();
             return new ComposerMeshPickResult(
                 selection.GroupId,
@@ -352,15 +278,17 @@ internal sealed partial class ComposerSceneSession
             return false;
 
         ComposerMeshTopology topology = GetMeshTopology(group);
-        if ((uint)triangleIndex >= (uint)topology.Faces.Count)
+        if ((uint)triangleIndex >= (uint)topology.TriangleCount)
             return false;
-        ComposerMeshFace face = topology.Faces[triangleIndex];
+        int triangleA = topology.TriangleVertexId(triangleIndex, 0);
+        int triangleB = topology.TriangleVertexId(triangleIndex, 1);
+        int triangleC = topology.TriangleVertexId(triangleIndex, 2);
         int elementIndex;
         switch (mode)
         {
             case ComposerSelectionMode.Vertex:
             {
-                int[] candidates = [face.A, face.B, face.C];
+                int[] candidates = [triangleA, triangleB, triangleC];
                 (int Index, double Distance) nearest = candidates
                     .Select(index =>
                     {
@@ -378,7 +306,7 @@ internal sealed partial class ComposerSceneSession
             }
             case ComposerSelectionMode.Edge:
             {
-                (int A, int B)[] candidates = [(face.A, face.B), (face.B, face.C), (face.C, face.A)];
+                (int A, int B)[] candidates = [(triangleA, triangleB), (triangleB, triangleC), (triangleC, triangleA)];
                 ((int A, int B) Edge, double Distance) nearest = candidates
                     .Select(edge =>
                     {
@@ -401,7 +329,9 @@ internal sealed partial class ComposerSceneSession
                 break;
             }
             default:
-                elementIndex = triangleIndex;
+                elementIndex = topology.FaceIndexForTriangle(triangleIndex);
+                if (elementIndex < 0)
+                    return false;
                 break;
         }
 
@@ -603,6 +533,102 @@ internal sealed partial class ComposerSceneSession
         }
     }
 
+    public bool CanEditSelectedFace(int selectedId)
+    {
+        sceneGate.Wait();
+        try
+        {
+            return selectedMeshSelection is ComposerMeshSelection selection &&
+                   selection.Mode == ComposerSelectionMode.Face &&
+                   selection.GroupId == selectedId &&
+                   scene.GroupById(selectedId) is SceneObjectGroup group &&
+                   selection.ElementIndex >= 0 &&
+                   selection.ElementIndex < GetMeshTopology(group).Faces.Count;
+        }
+        finally
+        {
+            sceneGate.Release();
+        }
+    }
+
+    public bool ExtrudeSelectedFace(int selectedId, double distanceMeters) =>
+        ApplySelectedFaceTopologyEdit(selectedId, distanceMeters, inset: false);
+
+    public bool InsetSelectedFace(int selectedId, double insetMeters) =>
+        InsetSelectedFace(selectedId, insetMeters, recessDepthMeters: 0.0);
+
+    public bool InsetSelectedFace(int selectedId, double insetMeters, double recessDepthMeters) =>
+        ApplySelectedFaceTopologyEdit(selectedId, insetMeters, inset: true, recessDepthMeters: recessDepthMeters);
+
+    private bool ApplySelectedFaceTopologyEdit(int selectedId, double amountMeters, bool inset, double recessDepthMeters = 0.0)
+    {
+        if (!double.IsFinite(amountMeters) || (inset ? amountMeters <= 1e-9 : Math.Abs(amountMeters) <= 1e-9))
+            return false;
+        if (inset && !double.IsFinite(recessDepthMeters))
+            return false;
+
+        sceneGate.Wait();
+        try
+        {
+            if (selectedMeshSelection is not ComposerMeshSelection selection ||
+                selection.Mode != ComposerSelectionMode.Face ||
+                selection.GroupId != selectedId ||
+                scene.GroupById(selectedId) is not SceneObjectGroup group)
+            {
+                return false;
+            }
+
+            group.BakeCurrentTransform();
+            meshTopologyByGroup.Remove(group.Id);
+            ComposerMeshTopology topology = GetMeshTopology(group);
+            if (selection.ElementIndex < 0 || selection.ElementIndex >= topology.Faces.Count)
+                return false;
+
+            BakedGeometryState before = BakedGeometryState.Capture(group);
+            ComposerMeshTopologyEditResult edit = inset
+                ? topology.CreateInsetFaceEdit(group.LocalTriangles, selection.ElementIndex, amountMeters, recessDepthMeters)
+                : topology.CreateExtrudedFaceEdit(group.LocalTriangles, selection.ElementIndex, amountMeters);
+            if (edit.Triangles.Count == group.LocalTriangles.Count &&
+                edit.Triangles.Zip(group.LocalTriangles).All(pair => ReferenceEquals(pair.First, pair.Second)))
+            {
+                return false;
+            }
+
+            group.LocalTriangles.Clear();
+            group.LocalTriangles.AddRange(edit.Triangles);
+            ClearPrimitiveMetadata(group);
+            // Extrude/Inset know exactly which newly emitted render triangles
+            // belong to each polygon, so preserve that authored topology instead
+            // of asking a geometric heuristic to rediscover it afterward.
+            group.SetLogicalFaceTriangleGroups(edit.LogicalFaceTriangleGroups);
+            group.RecalculatePivot();
+            Scene.RecalculatePivotsToRoot(group.Parent);
+            scene.RebuildWorldGeometry();
+            BakedGeometryState after = BakedGeometryState.Capture(group);
+            editHistory.PushApplied(new GeometryStateEditCommand(
+                inset ? "Inset face" : "Extrude face",
+                group.Id,
+                before,
+                after));
+
+            selectedMeshSelection = null;
+            hoveredMeshSelection = null;
+            meshMovePreviewLocal = Vec3.Zero;
+            meshMovePreviewWorld = Vec3.Zero;
+            selectedTriangleGroupId = null;
+            selectedTriangleIndex = null;
+            meshTopologyByGroup.Remove(group.Id);
+            RebuildSelectionOverlayCache();
+            ScenePath = null;
+            RefreshRendererCachesAfterGeometryBake(CancellationToken.None);
+            return true;
+        }
+        finally
+        {
+            sceneGate.Release();
+        }
+    }
+
     private VulkanRasterMeshEditPreview? CreateVulkanMeshEditPreview()
     {
         if (selectedMeshSelection is not ComposerMeshSelection selection ||
@@ -680,14 +706,28 @@ internal sealed partial class ComposerSceneSession
             case ComposerSelectionMode.Face:
             {
                 ComposerMeshFace face = topology.Faces[selection.ElementIndex];
-                Vec3 a = worldByVertex[face.A];
-                Vec3 b = worldByVertex[face.B];
-                Vec3 c = worldByVertex[face.C];
-                edges.Add(new ComposerWorldEdge(a, b));
-                edges.Add(new ComposerWorldEdge(b, c));
-                edges.Add(new ComposerWorldEdge(c, a));
-                Triangle source = group.LocalTriangles[face.TriangleIndex];
-                faces.Add(new Triangle(a, b, c, source.Material, group.Id));
+                int[] loop = face.BoundaryLoop;
+                for (int i = 0; i < loop.Length; i++)
+                {
+                    int next = (i + 1) % loop.Length;
+                    if (worldByVertex.TryGetValue(loop[i], out Vec3 a) &&
+                        worldByVertex.TryGetValue(loop[next], out Vec3 b))
+                    {
+                        edges.Add(new ComposerWorldEdge(a, b));
+                    }
+                }
+                foreach (int triangleIndex in face.TriangleIndices)
+                {
+                    Triangle source = group.LocalTriangles[triangleIndex];
+                    int va = topology.TriangleVertexId(triangleIndex, 0);
+                    int vb = topology.TriangleVertexId(triangleIndex, 1);
+                    int vc = topology.TriangleVertexId(triangleIndex, 2);
+                    if (!worldByVertex.TryGetValue(va, out Vec3 a) ||
+                        !worldByVertex.TryGetValue(vb, out Vec3 b) ||
+                        !worldByVertex.TryGetValue(vc, out Vec3 c))
+                        continue;
+                    faces.Add(new Triangle(a, b, c, source.Material, group.Id));
+                }
                 break;
             }
         }
@@ -706,7 +746,7 @@ internal sealed partial class ComposerSceneSession
             return cached.Topology;
         }
 
-        ComposerMeshTopology topology = ComposerMeshTopology.Build(group.LocalTriangles);
+        ComposerMeshTopology topology = ComposerMeshTopology.Build(group);
         meshTopologyByGroup[group.Id] = new CachedMeshTopology(scene.Revision, group.LocalTriangles.Count, topology);
         return topology;
     }

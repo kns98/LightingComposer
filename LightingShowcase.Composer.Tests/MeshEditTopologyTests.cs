@@ -19,8 +19,8 @@ public sealed class MeshEditTopologyTests
         ComposerMeshTopology topology = ComposerMeshTopology.Build(triangles);
 
         Assert.Equal(4, topology.Vertices.Count);
-        Assert.Equal(5, topology.Edges.Count);
-        Assert.Equal(2, topology.Faces.Count);
+        Assert.Equal(4, topology.Edges.Count);
+        Assert.Equal(1, topology.Faces.Count);
     }
 
     [Fact]
@@ -92,42 +92,6 @@ public sealed class MeshEditTopologyTests
         Assert.Equal(11, topology.Vertices.Count);
     }
 
-
-    [Fact]
-    public void JoinAndWeldFlattensAnImportedHierarchyIntoOneEditableObject()
-    {
-        string directory = Path.Combine(Path.GetTempPath(), $"lighting-composer-mesh-{Guid.NewGuid():N}");
-        Directory.CreateDirectory(directory);
-        string path = Path.Combine(directory, "joined.obj");
-        File.WriteAllText(path, """
-            o First
-            v 0 0 0
-            v 1 0 0
-            v 1 1 0
-            v 0 1 0
-            f 1 2 3
-            o Second
-            f 1 3 4
-            """);
-
-        try
-        {
-            using ComposerSceneSession session = new();
-            int wrapperId = session.Insert(path, CancellationToken.None);
-            Assert.True(session.ObjectCount >= 2);
-
-            Assert.True(session.JoinAndWeldObject(wrapperId));
-
-            Assert.Equal(1, session.ObjectCount);
-            Assert.Equal(2, session.TriangleCount);
-            Assert.Contains("4 vertices", session.LastImportDetails ?? string.Empty, StringComparison.Ordinal);
-            Assert.Contains("5 edges", session.LastImportDetails ?? string.Empty, StringComparison.Ordinal);
-        }
-        finally
-        {
-            Directory.Delete(directory, recursive: true);
-        }
-    }
 
     [Fact]
     public void ComponentModesDoNotExposeTheObjectBoundingBoxBeforeAComponentIsPicked()

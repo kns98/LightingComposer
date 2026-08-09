@@ -316,41 +316,6 @@ public sealed class Scene
         return duplicate;
     }
 
-    /// <summary>Creates many copies of one object in a grid and rebuilds world geometry only once.</summary>
-    public int DuplicateGroupGrid(int id, int copyCount, double spacing, CancellationToken cancellationToken = default)
-    {
-        if (copyCount < 1)
-            throw new ArgumentOutOfRangeException(nameof(copyCount), "Copy count must be at least one.");
-        if (!double.IsFinite(spacing) || spacing <= 0.0)
-            throw new ArgumentOutOfRangeException(nameof(spacing), "Spacing must be a positive finite value.");
-
-        SceneObjectGroup source = GroupById(id) ?? throw new ArgumentException("Group not found.", nameof(id));
-        int columns = Math.Max(1, (int)Math.Ceiling(Math.Sqrt(copyCount + 1.0)));
-
-        for (int i = 0; i < copyCount; i++)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            int gridIndex = i + 1;
-            int column = gridIndex % columns;
-            int row = gridIndex / columns;
-
-            SceneObjectGroup duplicate = SceneCloner.CloneGroupWithFreshIds(
-                source,
-                () => nextGroupId++,
-                $"{source.Name} copy {i + 1}");
-            duplicate.Position = source.Position + new Vec3(column * spacing, 0.0, row * spacing);
-            if (source.Parent != null)
-                source.Parent.AddChild(duplicate);
-            else
-                ObjectGroups.Add(duplicate);
-        }
-
-        RecalculatePivotsToRoot(source.Parent);
-        Description = $"Scene with {copyCount} grid copies of {source.Name}";
-        RebuildWorldGeometry();
-        return copyCount;
-    }
-
     /// <summary>Implements the delete group operation for this file's subsystem.</summary>
     public void DeleteGroup(int id)
     {
@@ -367,7 +332,22 @@ public sealed class Scene
         RebuildWorldGeometry();
     }
 
-    /// <summary>Creates a new parent group from the selected root-level objects.</summary>
+    /// <summary>Returns true when at least two selected objects are siblings and can be grouped without changing transforms.</summary>
+    public bool CanGroupSelectedObjects(IEnumerable<int> ids)
+    {
+        List<SceneObjectGroup> selected = ids
+            .Distinct()
+            .Select(GroupById)
+            .Where(g => g != null)
+            .Cast<SceneObjectGroup>()
+            .ToList();
+        if (selected.Count < 2)
+            return false;
+        SceneObjectGroup? commonParent = selected[0].Parent;
+        return selected.All(group => ReferenceEquals(group.Parent, commonParent));
+    }
+
+    /// <summary>Creates a new parent group from selected sibling objects, at any hierarchy depth.</summary>
     public SceneObjectGroup GroupSelectedObjects(IEnumerable<int> ids, string name = "Group")
     {
         List<SceneObjectGroup> selected = ids
@@ -375,21 +355,40 @@ public sealed class Scene
             .Select(GroupById)
             .Where(g => g != null)
             .Cast<SceneObjectGroup>()
-            .Where(g => g.Parent == null)
             .ToList();
 
         if (selected.Count < 2)
-            throw new InvalidOperationException("Select at least two top-level objects to group.");
+            throw new InvalidOperationException("Select at least two objects to group.");
+        SceneObjectGroup? commonParent = selected[0].Parent;
+        if (selected.Any(group => !ReferenceEquals(group.Parent, commonParent)))
+            throw new InvalidOperationException("Objects must have the same parent before they can be grouped.");
 
         SceneObjectGroup parent = new(nextGroupId++, name, selectable: true);
-        foreach (SceneObjectGroup child in selected)
+        if (commonParent == null)
         {
-            ObjectGroups.Remove(child);
-            parent.AddChild(child);
+            int insertAt = selected.Select(group => ObjectGroups.IndexOf(group)).Where(i => i >= 0).DefaultIfEmpty(ObjectGroups.Count).Min();
+            foreach (SceneObjectGroup child in selected)
+                ObjectGroups.Remove(child);
+            foreach (SceneObjectGroup child in selected)
+                parent.AddChild(child, recalculatePivot: false);
+            parent.RecalculatePivot();
+            ObjectGroups.Insert(Math.Clamp(insertAt, 0, ObjectGroups.Count), parent);
+        }
+        else
+        {
+            int insertAt = selected.Select(group => commonParent.Children.IndexOf(group)).Where(i => i >= 0).DefaultIfEmpty(commonParent.Children.Count).Min();
+            foreach (SceneObjectGroup child in selected)
+                commonParent.Children.Remove(child);
+            // Attach the new identity parent first so pivot/bounds calculations use
+            // exactly the same ancestor transform chain the children had before grouping.
+            parent.Parent = commonParent;
+            foreach (SceneObjectGroup child in selected)
+                parent.AddChild(child, recalculatePivot: false);
+            parent.RecalculatePivot();
+            commonParent.Children.Insert(Math.Clamp(insertAt, 0, commonParent.Children.Count), parent);
+            RecalculatePivotsToRoot(commonParent);
         }
 
-        parent.RecalculatePivot();
-        ObjectGroups.Add(parent);
         Description = $"Grouped {selected.Count} objects";
         RebuildWorldGeometry();
         return parent;

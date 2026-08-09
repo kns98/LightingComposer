@@ -48,6 +48,37 @@ public sealed class SceneObjectGroup
     /// <summary>Authored primitive parameters. For editor-created objects this is the real model; LocalTriangles are only the render/pick shadow mesh.</summary>
     public Dictionary<string, double> PrimitiveParameters { get; } = new(StringComparer.OrdinalIgnoreCase);
 
+    // Renderer geometry is always triangulated, but the editor can retain the
+    // polygon topology that those triangles came from. Each entry contains the
+    // local-triangle indices that together form one logical face. This metadata
+    // is deliberately separate from Triangle so renderers remain triangle-only.
+    private readonly List<int[]> logicalFaceTriangleGroups = new();
+
+    /// <summary>Persistent logical polygon faces for editor topology. Empty means they should be reconstructed conservatively.</summary>
+    public IReadOnlyList<int[]> LogicalFaceTriangleGroups => logicalFaceTriangleGroups;
+
+    /// <summary>True when this node carries explicit logical-face topology for its current local triangle list.</summary>
+    public bool HasLogicalFaceTopology => logicalFaceTriangleGroups.Count > 0;
+
+    /// <summary>Replaces the logical-face topology with validated triangle-index groups.</summary>
+    public void SetLogicalFaceTriangleGroups(IEnumerable<IEnumerable<int>> groups)
+    {
+        ArgumentNullException.ThrowIfNull(groups);
+        logicalFaceTriangleGroups.Clear();
+        foreach (IEnumerable<int> source in groups)
+        {
+            int[] indices = source
+                .Where(index => index >= 0 && index < LocalTriangles.Count)
+                .Distinct()
+                .ToArray();
+            if (indices.Length > 0)
+                logicalFaceTriangleGroups.Add(indices);
+        }
+    }
+
+    /// <summary>Clears logical-face metadata after an operation whose topology is no longer known.</summary>
+    public void ClearLogicalFaceTriangleGroups() => logicalFaceTriangleGroups.Clear();
+
     /// <summary>True when this object can be regenerated from PrimitiveKind + PrimitiveParameters.</summary>
     public bool HasParametricPrimitive => !string.IsNullOrWhiteSpace(PrimitiveKind) && PrimitiveParameters.Count > 0;
 
@@ -189,6 +220,7 @@ public sealed class SceneObjectGroup
 
     public void AddTriangle(Vec3 a, Vec3 b, Vec3 c, Vec2 uvA, Vec2 uvB, Vec2 uvC, Material material)
     {
+        logicalFaceTriangleGroups.Clear();
         LocalTriangles.Add(new Triangle(a, b, c, uvA, uvB, uvC, material, Id));
     }
 
@@ -198,6 +230,7 @@ public sealed class SceneObjectGroup
         Vec3 normalA, Vec3 normalB, Vec3 normalC,
         Material material)
     {
+        logicalFaceTriangleGroups.Clear();
         LocalTriangles.Add(new Triangle(a, b, c, uvA, uvB, uvC, normalA, normalB, normalC, material, Id));
     }
 
@@ -205,6 +238,7 @@ public sealed class SceneObjectGroup
     public void AddTriangles(IEnumerable<Triangle> triangles)
     {
         if (triangles == null) throw new ArgumentNullException(nameof(triangles));
+        logicalFaceTriangleGroups.Clear();
         LocalTriangles.AddRange(triangles);
     }
 
@@ -580,6 +614,7 @@ public sealed class SceneObjectGroup
             List<Triangle> simplified = MeshSimplifier.Simplify(LocalTriangles, keepFraction);
             LocalTriangles.Clear();
             LocalTriangles.AddRange(simplified);
+            logicalFaceTriangleGroups.Clear();
         }
 
         foreach (SceneObjectGroup child in Children)

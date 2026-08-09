@@ -198,6 +198,11 @@ internal sealed partial class ComposerSceneSession
             if (group == null || !group.HasParametricPrimitive)
                 return false;
 
+            // Materialize the primitive's authored polygon partition before
+            // discarding the procedural definition. The resulting mesh keeps
+            // real logical faces (Cube = six quads) rather than falling back to
+            // raw render triangles.
+            _ = GetMeshTopology(group);
             BakedGeometryState before = BakedGeometryState.Capture(group);
             group.PrimitiveKind = null;
             group.PrimitiveSourceName = null;

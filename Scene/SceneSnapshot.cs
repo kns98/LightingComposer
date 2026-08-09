@@ -52,6 +52,7 @@ internal static class SceneCloner
         foreach (KeyValuePair<string, double> parameter in source.PrimitiveParameters)
             clone.PrimitiveParameters[parameter.Key] = parameter.Value;
         clone.LocalTriangles.AddRange(source.LocalTriangles);
+        clone.SetLogicalFaceTriangleGroups(source.LogicalFaceTriangleGroups);
 
         foreach (SceneObjectGroup sourceChild in source.Children)
         {
@@ -78,6 +79,7 @@ internal static class SceneCloner
         foreach (KeyValuePair<string, double> parameter in source.PrimitiveParameters)
             clone.PrimitiveParameters[parameter.Key] = parameter.Value;
         clone.LocalTriangles.AddRange(source.LocalTriangles);
+        clone.SetLogicalFaceTriangleGroups(source.LogicalFaceTriangleGroups);
 
         foreach (SceneObjectGroup sourceChild in source.Children)
             clone.AddChild(CloneGroupWithFreshIdsCore(sourceChild, nextId, sourceChild.Name));

@@ -24,7 +24,8 @@ internal sealed class BakedGeometryState
         Triangle[] Triangles,
         string? PrimitiveKind,
         string? PrimitiveSourceName,
-        KeyValuePair<string, double>[] PrimitiveParameters);
+        KeyValuePair<string, double>[] PrimitiveParameters,
+        int[][] LogicalFaceTriangleGroups);
     private readonly NodeGeometry[] nodes;
 
     private BakedGeometryState(NodeGeometry[] nodes)
@@ -40,7 +41,8 @@ internal sealed class BakedGeometryState
                 group.LocalTriangles.ToArray(),
                 group.PrimitiveKind,
                 group.PrimitiveSourceName,
-                group.PrimitiveParameters.ToArray()))
+                group.PrimitiveParameters.ToArray(),
+                group.LogicalFaceTriangleGroups.Select(face => face.ToArray()).ToArray()))
             .ToArray());
     }
 
@@ -57,6 +59,7 @@ internal sealed class BakedGeometryState
             group.PrimitiveParameters.Clear();
             foreach (KeyValuePair<string, double> parameter in node.PrimitiveParameters)
                 group.PrimitiveParameters[parameter.Key] = parameter.Value;
+            group.SetLogicalFaceTriangleGroups(node.LogicalFaceTriangleGroups);
             group.Position = Vec3.Zero;
             group.Rotation = Vec3.Zero;
             group.Scale = new Vec3(1, 1, 1);

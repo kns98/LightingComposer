@@ -112,3 +112,21 @@ For an interactive timing check, choose Vulkan raster, enter Edge or Face mode, 
 - undoing material edits back to the previous immutable triangle/material state.
 
 For interactive validation, select an object, open **Material…**, apply a library preset, set an RGB/hex color, then assign Base Color and Normal (or another) texture slots. Pick a mapping target, change offset/scale/rotation and U/V wrap, and confirm the active renderer updates. With box projection enabled, enter a tile size such as `0.25` m. On a parameterized primitive, change a geometry parameter afterward and confirm that material, texture slots, and projection metadata remain assigned.
+
+## Polygon-face and object-grouping regression coverage
+
+`FaceGroupingAndObjectGroupingTests` verifies that:
+
+- a newly inserted Cube exposes six logical polygon faces even though raster geometry contains twelve triangles, and the lazy hierarchy face browser reports those grouped faces;
+- selecting either triangle of a cube side targets the same grouped quad face;
+- extruding that quad replaces the complete face, creates the cap and four side quads, and converts the procedural primitive to mesh;
+- undo after extrusion restores the procedural Cube and its six-face grouping;
+- planar insetting a cube quad operates on the whole polygon and adds the expected ring/cap topology;
+- recessed insetting adds four reveal-wall logical faces plus a displaced inner cap so the inset is physically visible to lighting; and
+- high-sided Cylinder caps remain single logical faces even though the disk shadow-mesh generator clamps cap tessellation; and
+- logical faces hide renderer-only diagonals from Edge mode (a two-triangle quad has four logical edges);
+- conservative inference refuses folds, textured UV seams, and ambiguous coplanar shared sides;
+- explicit logical topology survives Convert to Mesh and native `.lscene` save/load; and
+- two sibling objects can be grouped into one hierarchy parent and ungrouped back to the same child IDs.
+
+Interactive check: add a Cube, press `3`, click one side and confirm the whole quad highlights with no diagonal selection boundary. Right-click the face and test **Extrude Face…** with both `+0.25 m` (outward) and `-0.25 m` (inward), then test **Inset Face…** using meter values. For Inset, leave the default `0.02 m` recess and confirm the reveal walls/shadow make the inset obvious in the rendered view; then set recess to `0` to confirm the classic planar behavior still works. Return to Object mode (`4`), Ctrl-click two objects, then test **Group** / **Ungroup** and `Ctrl+G` / `Ctrl+Shift+G`.

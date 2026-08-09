@@ -28,7 +28,7 @@ public sealed class BinarySceneSaveOptions
 public static class BinarySceneFile
 {
     private const string Magic = "LSCN";
-    private const int Version = 11;
+    private const int Version = 12;
 
     private enum GeometryKind : byte
     {
@@ -206,6 +206,8 @@ public static class BinarySceneFile
         foreach (GeometryRecord record in records)
             WriteGeometryRecord(writer, record, textureTable, materialTable);
 
+        WriteLogicalFaceGroups(writer, group);
+
         writer.Write(group.Children.Count);
         foreach (SceneObjectGroup child in group.Children)
             WriteObject(writer, child, textureTable, materialTable);
@@ -233,6 +235,61 @@ public static class BinarySceneFile
                 parameters[key] = value;
         }
         return parameters;
+    }
+
+    private static void WriteLogicalFaceGroups(BinaryWriter writer, SceneObjectGroup group)
+    {
+        // Procedural primitives can reconstruct their authored polygon topology
+        // deterministically, so only persist explicit mesh topology.
+        IReadOnlyList<int[]> groups = !group.HasParametricPrimitive && HasValidLogicalFacePartition(group)
+            ? group.LogicalFaceTriangleGroups
+            : Array.Empty<int[]>();
+        writer.Write(groups.Count);
+        foreach (int[] face in groups)
+        {
+            writer.Write(face.Length);
+            foreach (int triangleIndex in face)
+                writer.Write(triangleIndex);
+        }
+    }
+
+    private static void ReadLogicalFaceGroups(BinaryReader reader, SceneObjectGroup group)
+    {
+        int faceCount = reader.ReadInt32();
+        if (faceCount < 0 || faceCount > 10_000_000)
+            throw new InvalidDataException("Invalid logical face count.");
+
+        List<int[]> groups = new(faceCount);
+        for (int faceIndex = 0; faceIndex < faceCount; faceIndex++)
+        {
+            int triangleCount = reader.ReadInt32();
+            if (triangleCount <= 0 || triangleCount > Math.Max(1, group.LocalTriangles.Count))
+                throw new InvalidDataException("Invalid logical face triangle count.");
+            int[] indices = new int[triangleCount];
+            for (int i = 0; i < triangleCount; i++)
+                indices[i] = reader.ReadInt32();
+            groups.Add(indices);
+        }
+        group.SetLogicalFaceTriangleGroups(groups);
+    }
+
+    private static bool HasValidLogicalFacePartition(SceneObjectGroup group)
+    {
+        if (!group.HasLogicalFaceTopology || group.LocalTriangles.Count == 0)
+            return false;
+        bool[] covered = new bool[group.LocalTriangles.Count];
+        foreach (int[] face in group.LogicalFaceTriangleGroups)
+        {
+            if (face.Length == 0)
+                return false;
+            foreach (int triangleIndex in face)
+            {
+                if (triangleIndex < 0 || triangleIndex >= covered.Length || covered[triangleIndex])
+                    return false;
+                covered[triangleIndex] = true;
+            }
+        }
+        return covered.All(value => value);
     }
 
     private static SceneObjectGroup ReadObject(BinaryReader reader, Scene scene, SceneObjectGroup? parent, string sceneFilePath, int version, TextureReadTable? textureTable, MaterialReadTable? materialTable)
@@ -266,6 +323,9 @@ public static class BinarySceneFile
         for (int i = 0; i < geometryCount; i++)
             ReadGeometryRecord(reader, scene, group, sceneFilePath, version, textureTable, materialTable);
 
+        if (version >= 12)
+            ReadLogicalFaceGroups(reader, group);
+
         int childCount = reader.ReadInt32();
         for (int i = 0; i < childCount; i++)
             ReadObject(reader, scene, group, sceneFilePath, version, textureTable, materialTable);
@@ -284,6 +344,15 @@ public static class BinarySceneFile
     {
         if (group.LocalTriangles.Count == 0)
             yield break;
+
+        // Logical-face metadata refers to the exact local triangle ordering. Do
+        // not canonicalize an edited mesh back into cuboid/rectangle components
+        // while saving, because that would invalidate those face indices.
+        if (!group.HasParametricPrimitive && HasValidLogicalFacePartition(group))
+        {
+            yield return GeometryRecord.Mesh(group.LocalTriangles);
+            yield break;
+        }
 
         if (!string.IsNullOrWhiteSpace(group.PrimitiveKind) &&
             !string.Equals(group.PrimitiveKind, "rectangle", StringComparison.OrdinalIgnoreCase) &&

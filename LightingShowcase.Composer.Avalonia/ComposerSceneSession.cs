@@ -32,6 +32,7 @@ internal sealed record ComposerModelEvidence(
     int TriangleCount);
 
 internal sealed record ComposerTriangleInfo(int Index, string Label);
+internal sealed record ComposerFaceInfo(int FaceIndex, int PrimaryTriangleIndex, int TriangleCount, string Label);
 
 internal sealed partial class ComposerSceneSession : IDisposable
 {
@@ -90,6 +91,55 @@ internal sealed partial class ComposerSceneSession : IDisposable
                     $"Triangle {i + 1:N0}  [centroid {triangle.Centroid.X:F3}, {triangle.Centroid.Y:F3}, {triangle.Centroid.Z:F3}]"));
             }
             return result;
+        }
+        finally
+        {
+            sceneGate.Release();
+        }
+    }
+
+    /// <summary>Returns logical polygon faces for the lazy hierarchy detail view.</summary>
+    public IReadOnlyList<ComposerFaceInfo> GetFaceInfos(int groupId, int offset, int count)
+    {
+        sceneGate.Wait();
+        try
+        {
+            SceneObjectGroup? group = scene.GroupById(groupId);
+            if (group == null || count <= 0 || group.LocalTriangles.Count == 0)
+                return Array.Empty<ComposerFaceInfo>();
+
+            ComposerMeshTopology topology = GetMeshTopology(group);
+            int start = Math.Clamp(offset, 0, topology.Faces.Count);
+            int end = Math.Min(topology.Faces.Count, start + count);
+            List<ComposerFaceInfo> result = new(end - start);
+            for (int i = start; i < end; i++)
+            {
+                ComposerMeshFace face = topology.Faces[i];
+                int triangleCount = face.TriangleIndices.Length;
+                string triangleLabel = triangleCount == 1 ? "1 triangle" : $"{triangleCount:N0} triangles";
+                result.Add(new ComposerFaceInfo(
+                    i,
+                    topology.PrimaryTriangleIndex(i),
+                    triangleCount,
+                    $"Face {i + 1:N0}  [{triangleLabel}]"));
+            }
+            return result;
+        }
+        finally
+        {
+            sceneGate.Release();
+        }
+    }
+
+    public int GetFaceCount(int groupId)
+    {
+        sceneGate.Wait();
+        try
+        {
+            SceneObjectGroup? group = scene.GroupById(groupId);
+            return group == null || group.LocalTriangles.Count == 0
+                ? 0
+                : GetMeshTopology(group).Faces.Count;
         }
         finally
         {
@@ -233,9 +283,9 @@ internal sealed partial class ComposerSceneSession : IDisposable
     }
 
     /// <summary>
-    /// Selects one triangle as a virtual hierarchy leaf without creating a scene
-    /// object. Editing commands continue to target its owning group, while the
-    /// overlay highlights only the chosen triangle.
+    /// Selects a virtual triangle-row hit without creating a scene object. The
+    /// raw triangle is mapped to its logical polygon face, so a cube side selects
+    /// both render triangles and the overlay shows the complete quad boundary.
     /// </summary>
     public bool SetSelectedTriangle(int groupId, int localTriangleIndex)
     {
@@ -246,19 +296,22 @@ internal sealed partial class ComposerSceneSession : IDisposable
             if (group == null || localTriangleIndex < 0 || localTriangleIndex >= group.LocalTriangles.Count)
                 return false;
 
+            ComposerMeshTopology topology = GetMeshTopology(group);
+            int faceIndex = topology.FaceIndexForTriangle(localTriangleIndex);
+            if (faceIndex < 0)
+                return false;
+
             selectedObjectId = groupId;
             selectedTriangleGroupId = groupId;
             selectedTriangleIndex = localTriangleIndex;
             selectionMode = ComposerSelectionMode.Face;
-            selectedMeshSelection = new ComposerMeshSelection(groupId, ComposerSelectionMode.Face, localTriangleIndex);
+            selectedMeshSelection = new ComposerMeshSelection(groupId, ComposerSelectionMode.Face, faceIndex);
             hoveredMeshSelection = null;
             meshHoverVisible = true;
             meshSelectionSerial = unchecked(meshSelectionSerial + 1);
             meshMovePreviewLocal = Vec3.Zero;
             meshMovePreviewWorld = Vec3.Zero;
-            Triangle worldTriangle = TransformTriangleToWorld(group, group.LocalTriangles[localTriangleIndex]);
-            selectedOverlayTriangles = new[] { worldTriangle };
-            selectedOverlayBounds = BoundsOf(worldTriangle);
+            RebuildSelectionOverlayCache();
             return true;
         }
         finally
@@ -685,6 +738,107 @@ internal sealed partial class ComposerSceneSession : IDisposable
         }
     }
 
+    public bool CanGroupObjects(IEnumerable<int> ids)
+    {
+        sceneGate.Wait();
+        try
+        {
+            return scene.CanGroupSelectedObjects(ids);
+        }
+        finally
+        {
+            sceneGate.Release();
+        }
+    }
+
+    public int? GroupObjects(IEnumerable<int> ids, string name = "Group")
+    {
+        int[] selectedIds = ids.Distinct().ToArray();
+        sceneGate.Wait();
+        try
+        {
+            if (!scene.CanGroupSelectedObjects(selectedIds))
+                return null;
+            SceneSnapshot before = scene.CreateSnapshot();
+            SceneObjectGroup parent = scene.GroupSelectedObjects(selectedIds, name);
+            SceneSnapshot after = scene.CreateSnapshot();
+            editHistory.PushApplied(new SceneSnapshotEditCommand("Group objects", before, after, selectedIds.FirstOrDefault(), parent.Id));
+            selectedObjectId = parent.Id;
+            selectedTriangleGroupId = null;
+            selectedTriangleIndex = null;
+            selectedMeshSelection = null;
+            hoveredMeshSelection = null;
+            meshTopologyByGroup.Clear();
+            RebuildSelectionOverlayCache();
+            ScenePath = null;
+            InvalidateRendererCaches();
+            return parent.Id;
+        }
+        finally
+        {
+            sceneGate.Release();
+        }
+    }
+
+    public bool CanUngroupObjects(IEnumerable<int> ids)
+    {
+        int[] selectedIds = ids.Distinct().ToArray();
+        sceneGate.Wait();
+        try
+        {
+            // For a Ctrl multi-selection, "Ungroup" means dissolve hierarchy
+            // groups, not explode every selected leaf mesh into triangle objects.
+            // Keep the historical single-selection geometry ungroup behavior.
+            return selectedIds.Length > 1
+                ? selectedIds.Any(id => scene.GroupById(id)?.Children.Count > 0)
+                : selectedIds.Any(scene.CanUngroup);
+        }
+        finally
+        {
+            sceneGate.Release();
+        }
+    }
+
+    public IReadOnlyList<int> UngroupObjects(IEnumerable<int> ids)
+    {
+        int[] selectedIds = ids.Distinct().ToArray();
+        sceneGate.Wait();
+        try
+        {
+            int[] targets = selectedIds.Length > 1
+                ? selectedIds.Where(id => scene.GroupById(id)?.Children.Count > 0).ToArray()
+                : selectedIds.Where(scene.CanUngroup).ToArray();
+            if (targets.Length == 0)
+                return Array.Empty<int>();
+
+            SceneSnapshot before = scene.CreateSnapshot();
+            List<int> promotedIds = new();
+            foreach (int id in targets)
+            {
+                if (!scene.CanUngroup(id))
+                    continue;
+                promotedIds.AddRange(scene.Ungroup(id).Select(group => group.Id));
+            }
+            SceneSnapshot after = scene.CreateSnapshot();
+            int? preferred = promotedIds.Count > 0 ? promotedIds[0] : null;
+            editHistory.PushApplied(new SceneSnapshotEditCommand("Ungroup objects", before, after, targets[0], preferred));
+            selectedObjectId = preferred;
+            selectedTriangleGroupId = null;
+            selectedTriangleIndex = null;
+            selectedMeshSelection = null;
+            hoveredMeshSelection = null;
+            meshTopologyByGroup.Clear();
+            RebuildSelectionOverlayCache();
+            ScenePath = null;
+            InvalidateRendererCaches();
+            return promotedIds;
+        }
+        finally
+        {
+            sceneGate.Release();
+        }
+    }
+
     public bool CanUngroupObject(int id)
     {
         sceneGate.Wait();
@@ -821,23 +975,6 @@ internal sealed partial class ComposerSceneSession : IDisposable
             ScenePath = null;
             InvalidateRendererCaches();
             return true;
-        }
-        finally
-        {
-            sceneGate.Release();
-        }
-    }
-
-    public int GenerateGridCopies(int id, int copyCount, double spacing, CancellationToken cancellationToken)
-    {
-        sceneGate.Wait(cancellationToken);
-        try
-        {
-            int created = scene.DuplicateGroupGrid(id, copyCount, spacing, cancellationToken);
-            editHistory.Clear();
-            ScenePath = null;
-            InvalidateRendererCaches();
-            return created;
         }
         finally
         {

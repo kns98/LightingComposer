@@ -20,7 +20,7 @@ The Add Primitive menu mirrors Blender's standard mesh primitives except Monkey/
 
 ## Units
 
-The scene length unit is the **meter (m)**. Primitive dimensions, object Position values, and performance-grid spacing are entered directly in meters. Rotation fields remain degrees and object Scale remains dimensionless.
+The scene length unit is the **meter (m)**. Primitive dimensions and object Position values are entered directly in meters. Rotation fields remain degrees and object Scale remains dimensionless.
 
 Examples:
 
@@ -43,7 +43,6 @@ The object remains procedural while `PrimitiveKind` and `PrimitiveParameters` ar
 The object becomes an ordinary mesh when:
 
 - **Convert to Mesh** is chosen in the Parameters window;
-- **Join + weld** is applied; or
 - a Vertex, Edge, or Face geometry move is committed.
 
 Object **Move, Rotate, and Scale do not convert a procedural primitive to mesh**. Composer accumulates those object transforms in a hidden authored affine layer, regenerates the shadow mesh, and keeps the shape controls available. This preserves exact repeated transforms, including rotated non-uniform scaling, without exposing implementation-only transform values in the Parameters window.

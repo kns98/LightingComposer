@@ -8,17 +8,15 @@ A standalone, platform-neutral scene composer and renderer built with Avalonia a
 - Insert multiple glTF/GLB, FBX, OBJ, 3DS, PLY, STL, and PropXML assets.
 - Add Blender-style Plane, Cube, Circle, UV Sphere, Icosphere, Cylinder, Cone, Torus, and Grid primitives directly from the composer toolbar (Monkey/Suzanne intentionally omitted).
 - Open a closable floating **Material** editor with a categorized PBR preset library, direct numeric PBR/material-property controls, exact RGB/hex color setters, six PBR texture-map slots, and UV transform/addressing controls.
-- Browse objects in a recursive scene tree and select them from the tree or rendered viewport.
+- Browse objects in a recursive scene tree and select them from the tree or rendered viewport; Ctrl-click builds an object multi-selection for grouping.
 - Orbit, pan, and zoom the preview on every rendering backend.
 - Highlight the selected object and draw overlaid move, rotation-ring, and scale gizmos for X/Y/Z transforms, including uniform scaling.
-- Switch among Object, Vertex, Edge, and Face selection. Mesh-component editing initially supports move only.
-- Reconstruct welded indexed topology from imported triangle meshes, and use **Join + weld** to flatten an imported subtree into one editable mesh.
+- Switch among Object, Vertex, Edge, and Face selection. Renderer triangles are grouped into persistent logical polygon faces only when the topology proves they belong together (for example a Cube exposes six quad faces and twelve logical edges, with no selectable triangulation diagonals), with Move plus right-click Extrude/Inset face operations.
 - Edit position, rotation, and scale numerically; Enter or **Apply transform** bakes the change into vertex positions and normals, clears the fields, and redraws the active renderer.
 - Inserted assets are wrapped in one top-level group while retaining their imported child hierarchy.
-- Rename, show/hide, duplicate, delete, reset, frame, or ungroup any non-terminal group or mesh node.
-- Undo and redo baked transforms and ungroup operations with toolbar buttons or `Ctrl+Z` / `Ctrl+Y`.
-- Expand a mesh through a lazy `… show triangles` row. Triangle leaves are virtual and paged 200 at a time until explicitly ungrouped, so browsing them does not enlarge the scene or GPU buffers.
-- Generate object grids for performance stress testing.
+- Rename, show/hide, duplicate, delete, reset, frame, group, or ungroup scene nodes. Ctrl-clicked sibling objects can be wrapped in one hierarchy group without changing their geometry.
+- Undo and redo transforms, procedural/material edits, polygon face edits, and hierarchy Group/Ungroup operations with toolbar buttons or `Ctrl+Z` / `Ctrl+Y`.
+- Expand a mesh through a lazy `… show faces` row. Logical face rows are virtual and paged 200 at a time, so a Cube shows six editable faces rather than twelve renderer triangles and browsing them does not enlarge the scene or GPU buffers.
 - Save and reopen `.lscene` compositions.
 - Preview with software raster, Vulkan raster, Vulkan compute, or CPU ray rendering.
 - Show frame time, approximate FPS, object count, triangle count, and process memory.
@@ -70,11 +68,13 @@ A path may also be passed without the `compose` verb:
 
 ## Viewport controls
 
-- Left click in Object mode: select the highest imported object group under the pointer. Click empty viewport space to deselect the current object.
-- `1`, `2`, `3`, and `4`: switch to Vertex, Edge, Face, and Object selection. Edge and vertex picks must be close to the projected component; Face mode selects the directly clicked front face. Component modes hide the object bounding box until a component is selected, then show only the component highlight and move gizmo.
+- Left click in Object mode: select the highest imported object group under the pointer. **Ctrl+left click** toggles objects into/out of a multi-selection. Click empty viewport space to deselect everything.
+- `1`, `2`, `3`, and `4`: switch to Vertex, Edge, Face, and Object selection. Edge and vertex picks must be close to the projected component; Face mode selects the complete logical polygon under the pointer, not merely one renderer triangle. Component modes hide the object bounding box until a component is selected, then show only the component highlight and move gizmo.
+- In Face mode, **right-click a face** for **Extrude Face…** or **Inset Face…**. Extrude uses a signed real-world distance: positive moves toward the object exterior and negative moves inward, even if imported source triangles are wound backwards. Inset has independent **Inset distance** and **Signed depth** controls in meters; `+0.02 m` moves the inset inward, `-0.02 m` protrudes it outward, and `0` keeps it planar. Non-zero depth creates side/reveal walls so the result is clear under normal rendered lighting. A topology operation explicitly converts a procedural primitive to an editable mesh; Undo restores the prior procedural definition.
+- Logical faces are editor topology layered over the triangle renderer. Authored primitive faces are retained explicitly; triangle-only imports are merged conservatively only for structurally valid, connected, consistently wound faces with one boundary loop. Inferred groups must also be planar, material-compatible, and preserve textured UV seams. Ambiguous coplanar edges remain separate. Native `.lscene` saves persist explicit logical-face groups.
+- Ctrl-click two or more sibling objects, then press **Group** (or `Ctrl+G`). Select one or more hierarchy groups and press **Ungroup** (`Ctrl+Shift+G`) to dissolve them. The active object remains the gizmo/Inspector target while the whole multi-selection stays highlighted in the tree.
 - Choose Plane, Cube, Circle, UV Sphere, Icosphere, Cylinder, Cone, Torus, or Grid and press **Add primitive**. A closable floating **Parameters** window opens for procedural editing.
 - Use **Material…** in the Inspector to apply a library preset, directly edit PBR/material values, set an exact RGB/hex color, assign Base Color / Metallic-Roughness / Normal / Emissive / Transmission / Occlusion maps, and edit texture mapping for the selected object/subtree.
-- **Join + weld** bakes the selected hierarchy, flattens its descendants, and merges coincident positions into common vertex/edge topology. This operation is undoable.
 - `G`, `R`, and `S`: choose Move, Rotate, or Scale, matching Blender's primary transform shortcuts. The toolbar selector provides the same modes.
 - Drag a red, green, or blue move axis, rotation ring, or scale handle. The white center scale handle scales uniformly. Hold Shift for precision and Ctrl for snapping. In Object mode, Composer uses the transform gizmo as the selection cue and does not draw an additional object bounding box or triangle wireframe before, during, or after a transform.
 - Vulkan raster previews object transforms live through a transform uniform. Component movement patches only affected triangle vertices in the existing GPU buffers, so the rendered mesh deforms during the drag; shared welded vertices are committed once on release.
@@ -85,15 +85,16 @@ A path may also be passed without the `compose` verb:
 - Arrow keys: orbit; Shift+arrow keys: pan.
 - `F`: frame the selected tree node.
 - `Ctrl+D`: duplicate the selected node.
+- `Ctrl+G`: group the current object multi-selection; `Ctrl+Shift+G`: ungroup selected hierarchy groups.
 - `Delete`: delete the selected node.
 - `Ctrl+Z` / `Ctrl+Y`: undo or redo.
-- Use a disclosure arrow to open group nodes. Use the lazy `…` row to page triangle leaves without creating thousands of scene nodes.
+- Use a disclosure arrow to open group nodes. Use the lazy `… show faces` row to page logical polygon faces without creating thousands of scene nodes.
 
 Object-mode viewport selection resolves to the highest top-level asset group, so clicking a model moves the complete inserted asset by default. The hierarchy panel has separate disclosure arrows for expanding and collapsing nodes. Selecting a child explicitly in the hierarchy makes position, rotation, scale, visibility, name, framing, and gizmo operations target that child node.
 
 ## Parameterized primitives and real-world units
 
-Composer uses **meters (m)** as its scene length unit. Object Position fields, stress-grid spacing, and every primitive dimension labeled as a length are authored directly in meters; scale remains dimensionless and rotation remains degrees in the inspector. This makes values such as `2.4 m × 0.9 m × 0.75 m` directly usable for real specifications.
+Composer uses **meters (m)** as its scene length unit. Object Position fields and every primitive dimension labeled as a length are authored directly in meters; scale remains dimensionless and rotation remains degrees in the inspector. This makes values such as `2.4 m × 0.9 m × 0.75 m` directly usable for real specifications.
 
 The standard primitive set mirrors Blender's Add → Mesh primitives except Monkey/Suzanne:
 
@@ -107,7 +108,7 @@ The standard primitive set mirrors Blender's Add → Mesh primitives except Monk
 - Torus — major/minor segments and major/minor radius
 - Grid — X/Y subdivisions, width, depth
 
-The parameter window is modeless and can be closed and reopened while the object remains procedural. Parameter changes regenerate only that object's shadow mesh and are grouped into undoable edit batches. **Convert to Mesh**, **Join + weld**, or a committed Vertex/Edge/Face geometry edit removes the procedural metadata and leaves the generated triangles as an ordinary editable mesh. Saved `.lscene` files retain the primitive kind and parameter values while the object is still procedural. See [`PARAMETERIZED_PRIMITIVES.md`](PARAMETERIZED_PRIMITIVES.md).
+The parameter window is modeless and can be closed and reopened while the object remains procedural. Parameter changes regenerate only that object's shadow mesh and are grouped into undoable edit batches. **Convert to Mesh** or a committed Vertex/Edge/Face geometry edit removes the procedural metadata and leaves the generated triangles as an ordinary editable mesh. Saved `.lscene` files retain the primitive kind and parameter values while the object is still procedural. See [`PARAMETERIZED_PRIMITIVES.md`](PARAMETERIZED_PRIMITIVES.md).
 
 ## Materials, exact color, and textures
 
@@ -175,7 +176,7 @@ LightingShowcase.ObjectLibrary.*/     Built-in scene objects
 
 ## Transform and Vulkan behavior
 
-Transforms are authored as temporary editor values while dragging. For ordinary meshes, commit rewrites triangle positions/normals as before. Parameterized primitives instead accumulate Move/Rotate/Scale into a hidden authored affine layer, regenerate their shadow mesh, and keep all procedural shape parameters editable. The node transform fields still return to identity, so later render frames keep the same baked-geometry performance model. Vertex/edge/face editing, Join + weld, or explicit Convert to Mesh are the operations that intentionally discard the procedural definition. Vulkan raster refreshes the existing vertex buffers in place; textures, descriptor sets, pipelines, and render-target allocations remain cached.
+Transforms are authored as temporary editor values while dragging. For ordinary meshes, commit rewrites triangle positions/normals as before. Parameterized primitives instead accumulate Move/Rotate/Scale into a hidden authored affine layer, regenerate their shadow mesh, and keep all procedural shape parameters editable. The node transform fields still return to identity, so later render frames keep the same baked-geometry performance model. Vertex/edge/face editing or explicit Convert to Mesh are the operations that intentionally discard the procedural definition. Vulkan raster refreshes the existing vertex buffers in place; textures, descriptor sets, pipelines, and render-target allocations remain cached.
 
 Selection is a cached post-process overlay and does not change scene materials or invalidate Vulkan geometry. Object mode displays only the active transform gizmo; it does not add a bounding box or sampled triangle wireframe. Component modes show only their component highlight/gizmo. For Vulkan raster component movement, a small cached list of affected triangle-buffer offsets is patched during dragging and restored or replaced on cancellation, reselection, or commit.
 
@@ -203,7 +204,7 @@ See `TESTING.md` for the optional Vulkan tests, including the live pending-trans
 
 ## Self-contained scenes and portable exports
 
-`.lscene` version 11 embeds decoded RGBA texture pixels during normal **Save
+`.lscene` version 12 embeds decoded RGBA texture pixels during normal **Save
 scene…**, together with geometry, materials, lights, hierarchy, and baked
 transforms. Reopening a normally saved scene does not require the original image
 files.
