@@ -509,7 +509,7 @@ internal sealed class ComposerWindow : Window
         stack.Children.Add(resetTransformButton);
         stack.Children.Add(new TextBlock
         {
-            Text = "Hierarchy: ▸/▾ expands groups and … show faces reveals logical polygon faces (a Cube has six). Ctrl-click objects to multi-select; Group/Ctrl+G wraps sibling objects and Ctrl+Shift+G ungroups. Standard primitives: Plane, Cube, Circle, UV Sphere, Icosphere, Cylinder, Cone, Torus, and Grid. Use Parameters… for real dimensions in meters and Material… for PBR/color/textures. Face mode (3): right-click a polygon for Extrude or Inset; Extrude uses signed distance (+ outward, - inward), while inset depth uses + inward / - outward. Object/Vertex/Edge/Face modes use 4/1/2/3. Gizmos: G move, R rotate, S scale; Shift is precision and Ctrl snaps. Viewport: right drag orbits, middle drag pans, and wheel zooms.",
+            Text = "Hierarchy: ▸/▾ expands groups and … show faces reveals logical polygon faces (a Cube has six). Ctrl-click objects to multi-select; Group/Ctrl+G wraps sibling objects and Ctrl+Shift+G ungroups. Standard primitives: Plane, Cube, Circle, UV Sphere, Icosphere, Cylinder, Cone, Torus, and Grid. Use Parameters… for real dimensions in meters and Material… for PBR/color/textures. Face mode (3): right-click a polygon for Extrude or Inset; Extrude uses signed distance (+ outward, - inward), while inset depth uses + inward / - outward and offers Square or Sloped (Blender-style) depth profiles. Object/Vertex/Edge/Face modes use 4/1/2/3. Gizmos: G move, R rotate, S scale; Shift is precision and Ctrl snaps. Viewport: right drag orbits, middle drag pans, and wheel zooms.",
             TextWrapping = TextWrapping.Wrap,
             Opacity = 0.68,
             FontSize = 12,
@@ -1944,7 +1944,8 @@ internal sealed class ComposerWindow : Window
                 secondaryLabel: "Signed depth (m) — + inward, - outward, 0 planar",
                 secondaryDefaultMeters: 0.02,
                 allowSecondaryNegative: true,
-                allowSecondaryZero: true)
+                allowSecondaryZero: true,
+                showInsetProfile: true)
             : new FaceOperationDialog("Extrude Face", "Signed extrusion distance (m) — + outward, - inward", 0.25, allowNegative: true);
         FaceOperationValues? operation = await dialog.ShowForResultAsync(this);
         if (!operation.HasValue)
@@ -1952,12 +1953,13 @@ internal sealed class ComposerWindow : Window
 
         double amount = operation.Value.AmountMeters;
         double recessDepth = operation.Value.SecondaryMeters;
+        ComposerInsetProfile insetProfile = operation.Value.InsetProfile;
         await StopCurrentRenderAsync();
         SetBusy(true, insetOperation ? "Insetting face…" : "Extruding face…");
         try
         {
             bool changed = await Task.Run(() => insetOperation
-                ? session.InsetSelectedFace(id, amount, recessDepth)
+                ? session.InsetSelectedFace(id, amount, recessDepth, insetProfile)
                 : session.ExtrudeSelectedFace(id, amount), lifetimeCancellation.Token);
             if (!changed)
             {
@@ -1972,12 +1974,15 @@ internal sealed class ComposerWindow : Window
             pathText.Text = "Untitled composition (modified)";
             RefreshObjectTree(id);
             UpdateHistoryButtons();
+            string profileLabel = insetProfile == ComposerInsetProfile.Sloped
+                ? "sloped Blender-style profile"
+                : "square 90° reveal";
             statusText.Text = insetOperation
                 ? recessDepth > 1e-9
-                    ? $"Inset face by {amount:0.###} m with {recessDepth:0.###} m inward depth. The object is now an editable mesh."
+                    ? $"Inset face by {amount:0.###} m with {recessDepth:0.###} m inward depth ({profileLabel}). The object is now an editable mesh."
                     : recessDepth < -1e-9
-                        ? $"Inset face by {amount:0.###} m with {Math.Abs(recessDepth):0.###} m outward depth. The object is now an editable mesh."
-                        : $"Inset face by {amount:0.###} m (planar). The object is now an editable mesh."
+                        ? $"Inset face by {amount:0.###} m with {Math.Abs(recessDepth):0.###} m outward depth ({profileLabel}). The object is now an editable mesh."
+                        : $"Inset face by {amount:0.###} m (planar; profile has no effect at zero depth). The object is now an editable mesh."
                 : amount > 1e-9
                     ? $"Extruded face outward by {amount:0.###} m. The object is now an editable mesh."
                     : $"Extruded face inward by {Math.Abs(amount):0.###} m. The object is now an editable mesh.";

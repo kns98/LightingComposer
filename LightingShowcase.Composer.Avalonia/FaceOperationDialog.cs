@@ -4,13 +4,17 @@ using Avalonia.Layout;
 
 namespace LightingShowcase.Composer;
 
-internal readonly record struct FaceOperationValues(double AmountMeters, double SecondaryMeters = 0.0);
+internal readonly record struct FaceOperationValues(
+    double AmountMeters,
+    double SecondaryMeters = 0.0,
+    ComposerInsetProfile InsetProfile = ComposerInsetProfile.Square);
 
 /// <summary>Small numeric dialog used by right-click polygon face operations.</summary>
 internal sealed class FaceOperationDialog : Window
 {
     private readonly TextBox amountBox;
     private readonly TextBox? secondaryBox;
+    private readonly ComboBox? insetProfileBox;
     private readonly bool allowNegative;
     private readonly bool allowSecondaryNegative;
     private readonly bool allowSecondaryZero;
@@ -24,11 +28,12 @@ internal sealed class FaceOperationDialog : Window
         string? secondaryLabel = null,
         double secondaryDefaultMeters = 0.0,
         bool allowSecondaryNegative = false,
-        bool allowSecondaryZero = true)
+        bool allowSecondaryZero = true,
+        bool showInsetProfile = false)
     {
         Title = operationName;
         Width = 350;
-        Height = secondaryLabel == null ? 170 : 230;
+        Height = showInsetProfile ? 300 : secondaryLabel == null ? 170 : 230;
         CanResize = false;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
         this.allowNegative = allowNegative;
@@ -54,6 +59,22 @@ internal sealed class FaceOperationDialog : Window
             };
             fields.Children.Add(new TextBlock { Text = secondaryLabel });
             fields.Children.Add(secondaryBox);
+        }
+
+        if (showInsetProfile)
+        {
+            insetProfileBox = new ComboBox
+            {
+                MinWidth = 220,
+                SelectedIndex = 0,
+                ItemsSource = new[]
+                {
+                    "Square (90° reveal)",
+                    "Sloped (Blender-style)"
+                }
+            };
+            fields.Children.Add(new TextBlock { Text = "Depth profile" });
+            fields.Children.Add(insetProfileBox);
         }
 
         Button apply = new() { Content = operationName, MinWidth = 95 };
@@ -108,7 +129,10 @@ internal sealed class FaceOperationDialog : Window
             return;
         }
 
-        completion.TrySetResult(new FaceOperationValues(amount, secondary));
+        ComposerInsetProfile profile = insetProfileBox?.SelectedIndex == 1
+            ? ComposerInsetProfile.Sloped
+            : ComposerInsetProfile.Square;
+        completion.TrySetResult(new FaceOperationValues(amount, secondary, profile));
         Close();
     }
 

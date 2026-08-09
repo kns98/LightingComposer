@@ -162,4 +162,60 @@ public sealed class MeshEditTopologyTests
         Assert.True(session.TriangleCount >= 12);
         Assert.Equal(ComposerSelectionMode.Object, session.SelectionMode);
     }
+
+    [Fact]
+    public void SquareInsetDepthKeepsPlanarRingAndAddsPerpendicularReveal()
+    {
+        Material material = new(new Vec3(0.8, 0.8, 0.8));
+        Triangle[] triangles =
+        [
+            new Triangle(new Vec3(-1, -1, 0), new Vec3(1, -1, 0), new Vec3(1, 1, 0), material),
+            new Triangle(new Vec3(-1, -1, 0), new Vec3(1, 1, 0), new Vec3(-1, 1, 0), material)
+        ];
+        ComposerMeshTopology topology = ComposerMeshTopology.Build(triangles);
+
+        ComposerMeshTopologyEditResult edit = topology.CreateInsetFaceEdit(
+            triangles,
+            faceIndex: 0,
+            insetMeters: 0.25,
+            recessDepthMeters: 0.2,
+            profile: ComposerInsetProfile.Square);
+
+        Assert.Equal(20, edit.Triangles.Count);
+        Assert.Equal(9, edit.LogicalFaceTriangleGroups.Count);
+        Assert.All(edit.Triangles.Take(8), triangle =>
+        {
+            Assert.InRange(Math.Abs(triangle.A.Z), 0.0, 1e-9);
+            Assert.InRange(Math.Abs(triangle.B.Z), 0.0, 1e-9);
+            Assert.InRange(Math.Abs(triangle.C.Z), 0.0, 1e-9);
+        });
+    }
+
+    [Fact]
+    public void SlopedInsetDepthConnectsOuterBoundaryDirectlyToDisplacedInset()
+    {
+        Material material = new(new Vec3(0.8, 0.8, 0.8));
+        Triangle[] triangles =
+        [
+            new Triangle(new Vec3(-1, -1, 0), new Vec3(1, -1, 0), new Vec3(1, 1, 0), material),
+            new Triangle(new Vec3(-1, -1, 0), new Vec3(1, 1, 0), new Vec3(-1, 1, 0), material)
+        ];
+        ComposerMeshTopology topology = ComposerMeshTopology.Build(triangles);
+
+        ComposerMeshTopologyEditResult edit = topology.CreateInsetFaceEdit(
+            triangles,
+            faceIndex: 0,
+            insetMeters: 0.25,
+            recessDepthMeters: 0.2,
+            profile: ComposerInsetProfile.Sloped);
+
+        Assert.Equal(12, edit.Triangles.Count);
+        Assert.Equal(5, edit.LogicalFaceTriangleGroups.Count);
+        Assert.All(edit.Triangles.Take(8), triangle =>
+        {
+            double[] depths = [Math.Abs(triangle.A.Z), Math.Abs(triangle.B.Z), Math.Abs(triangle.C.Z)];
+            Assert.Contains(depths, depth => depth <= 1e-9);
+            Assert.Contains(depths, depth => depth > 1e-9);
+        });
+    }
 }

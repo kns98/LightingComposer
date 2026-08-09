@@ -16,6 +16,16 @@ internal enum ComposerSelectionMode
     Face
 }
 
+/// <summary>Cross-section profile used when an inset also has signed depth.</summary>
+internal enum ComposerInsetProfile
+{
+    /// <summary>Keep the inset border coplanar, then add a perpendicular reveal wall.</summary>
+    Square,
+
+    /// <summary>Connect the original face boundary directly to the displaced inset boundary.</summary>
+    Sloped
+}
+
 internal readonly record struct ComposerMeshSelection(
     int GroupId,
     ComposerSelectionMode Mode,
@@ -446,22 +456,32 @@ internal sealed class ComposerMeshTopology
     }
 
     public List<Triangle> CreateInsetFaceTriangles(IReadOnlyList<Triangle> source, int faceIndex, double insetMeters) =>
-        CreateInsetFaceEdit(source, faceIndex, insetMeters, recessDepthMeters: 0.0).Triangles.ToList();
+        CreateInsetFaceEdit(source, faceIndex, insetMeters, recessDepthMeters: 0.0, profile: ComposerInsetProfile.Square).Triangles.ToList();
 
     public ComposerMeshTopologyEditResult CreateInsetFaceEdit(IReadOnlyList<Triangle> source, int faceIndex, double insetMeters) =>
-        CreateInsetFaceEdit(source, faceIndex, insetMeters, recessDepthMeters: 0.0);
+        CreateInsetFaceEdit(source, faceIndex, insetMeters, recessDepthMeters: 0.0, profile: ComposerInsetProfile.Square);
 
     public ComposerMeshTopologyEditResult CreateInsetFaceEdit(
         IReadOnlyList<Triangle> source,
         int faceIndex,
         double insetMeters,
-        double recessDepthMeters)
+        double recessDepthMeters) =>
+        CreateInsetFaceEdit(source, faceIndex, insetMeters, recessDepthMeters, ComposerInsetProfile.Square);
+
+    public ComposerMeshTopologyEditResult CreateInsetFaceEdit(
+        IReadOnlyList<Triangle> source,
+        int faceIndex,
+        double insetMeters,
+        double recessDepthMeters,
+        ComposerInsetProfile profile)
     {
         if (faceIndex < 0 || faceIndex >= Faces.Count)
             return UnchangedEdit(source);
         if (!double.IsFinite(insetMeters) || insetMeters <= 1e-9)
             return UnchangedEdit(source);
         if (!double.IsFinite(recessDepthMeters))
+            return UnchangedEdit(source);
+        if (!Enum.IsDefined(profile))
             return UnchangedEdit(source);
 
         ComposerMeshFace face = Faces[faceIndex];
@@ -582,7 +602,8 @@ internal sealed class ComposerMeshTopology
         Vec2 uvCenter = mapUv(0.0, 0.0);
 
         HashSet<int> removed = face.TriangleIndices.ToHashSet();
-        int trianglesPerEdge = hasDepth ? 5 : 3;
+        bool squareReveal = hasDepth && profile == ComposerInsetProfile.Square;
+        int trianglesPerEdge = squareReveal ? 5 : 3;
         List<Triangle> result = new(source.Count - removed.Count + loop.Length * trianglesPerEdge);
         Dictionary<int, int> oldToNew = new();
         for (int i = 0; i < source.Count; i++)
@@ -596,11 +617,18 @@ internal sealed class ComposerMeshTopology
         Material material = source[face.TriangleIndices[0]].Material;
         int groupId = source[face.TriangleIndices[0]].GroupId;
 
-        // Ring: one quad per polygon edge.
+        // Border: one quad per polygon edge. Square mode keeps this ring in the
+        // original face plane and adds a perpendicular reveal below. Sloped mode
+        // connects the outer boundary directly to the displaced inset boundary,
+        // matching Blender's tapered inset/depth cross-section. With zero depth,
+        // both profiles reduce to the same classic planar inset.
+        Vec3[] borderInner = hasDepth && profile == ComposerInsetProfile.Sloped
+            ? recessedInner
+            : inner;
         for (int i = 0; i < loop.Length; i++)
         {
             int next = (i + 1) % loop.Length;
-            Vec3 a = Vertices[loop[i]], b = Vertices[loop[next]], c = inner[next], d = inner[i];
+            Vec3 a = Vertices[loop[i]], b = Vertices[loop[next]], c = borderInner[next], d = borderInner[i];
             Vec2 ua = UvForVertex(source, face, loop[i]), ub = UvForVertex(source, face, loop[next]);
             int ringStart = result.Count;
             result.Add(new Triangle(a, b, c, ua, ub, innerUv[next], material, groupId));
@@ -608,10 +636,10 @@ internal sealed class ComposerMeshTopology
             logicalFaces.Add([ringStart, ringStart + 1]);
         }
 
-        // Optional depth walls make either a recess or a protrusion physically visible.
-        // Their winding follows the original logical face; shading remains distinct
-        // from the coplanar outer ring and the displaced cap.
-        if (hasDepth)
+        // Square profile only: add the perpendicular reveal wall between the planar
+        // inset ring and the displaced cap. Sloped profile already spans that depth
+        // in the border quads, so a second wall would create duplicate geometry.
+        if (squareReveal)
         {
             for (int i = 0; i < loop.Length; i++)
             {

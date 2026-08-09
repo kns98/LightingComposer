@@ -555,16 +555,35 @@ internal sealed partial class ComposerSceneSession
         ApplySelectedFaceTopologyEdit(selectedId, distanceMeters, inset: false);
 
     public bool InsetSelectedFace(int selectedId, double insetMeters) =>
-        InsetSelectedFace(selectedId, insetMeters, recessDepthMeters: 0.0);
+        InsetSelectedFace(selectedId, insetMeters, recessDepthMeters: 0.0, profile: ComposerInsetProfile.Square);
 
     public bool InsetSelectedFace(int selectedId, double insetMeters, double recessDepthMeters) =>
-        ApplySelectedFaceTopologyEdit(selectedId, insetMeters, inset: true, recessDepthMeters: recessDepthMeters);
+        InsetSelectedFace(selectedId, insetMeters, recessDepthMeters, ComposerInsetProfile.Square);
 
-    private bool ApplySelectedFaceTopologyEdit(int selectedId, double amountMeters, bool inset, double recessDepthMeters = 0.0)
+    public bool InsetSelectedFace(
+        int selectedId,
+        double insetMeters,
+        double recessDepthMeters,
+        ComposerInsetProfile profile) =>
+        ApplySelectedFaceTopologyEdit(
+            selectedId,
+            insetMeters,
+            inset: true,
+            recessDepthMeters: recessDepthMeters,
+            insetProfile: profile);
+
+    private bool ApplySelectedFaceTopologyEdit(
+        int selectedId,
+        double amountMeters,
+        bool inset,
+        double recessDepthMeters = 0.0,
+        ComposerInsetProfile insetProfile = ComposerInsetProfile.Square)
     {
         if (!double.IsFinite(amountMeters) || (inset ? amountMeters <= 1e-9 : Math.Abs(amountMeters) <= 1e-9))
             return false;
         if (inset && !double.IsFinite(recessDepthMeters))
+            return false;
+        if (inset && !Enum.IsDefined(insetProfile))
             return false;
 
         sceneGate.Wait();
@@ -586,7 +605,12 @@ internal sealed partial class ComposerSceneSession
 
             BakedGeometryState before = BakedGeometryState.Capture(group);
             ComposerMeshTopologyEditResult edit = inset
-                ? topology.CreateInsetFaceEdit(group.LocalTriangles, selection.ElementIndex, amountMeters, recessDepthMeters)
+                ? topology.CreateInsetFaceEdit(
+                    group.LocalTriangles,
+                    selection.ElementIndex,
+                    amountMeters,
+                    recessDepthMeters,
+                    insetProfile)
                 : topology.CreateExtrudedFaceEdit(group.LocalTriangles, selection.ElementIndex, amountMeters);
             if (edit.Triangles.Count == group.LocalTriangles.Count &&
                 edit.Triangles.Zip(group.LocalTriangles).All(pair => ReferenceEquals(pair.First, pair.Second)))
