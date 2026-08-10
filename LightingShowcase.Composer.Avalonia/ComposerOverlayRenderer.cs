@@ -7,7 +7,7 @@ namespace LightingShowcase.Composer;
 
 /// <summary>
 /// Transform tool displayed in the editor viewport. The keyboard shortcuts match
-/// Blender's primary transform commands: G=move, R=rotate, S=scale.
+/// 3D viewport's primary transform commands: G=move, R=rotate, S=scale.
 /// </summary>
 internal enum ComposerGizmoMode
 {
@@ -421,7 +421,7 @@ internal static class ComposerOverlayRenderer
 
     /// <summary>
     /// Maps a pointer to a unit direction in the selected world-space rotation
-    /// plane. This is the primary Blender-like drag path because its angular
+    /// plane. This is the primary 3D viewport-like drag path because its angular
     /// response remains stable when a projected ring is elliptical.
     /// </summary>
     public static bool TryGetRotationPlaneVector(

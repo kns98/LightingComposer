@@ -6,7 +6,7 @@ The Face-mode **Inset Face…** dialog uses two independent dimensions in meters
 - **Signed depth**: displacement of the inner cap normal to the source face.
 - **Depth profile**:
   - **Square (90° reveal)** keeps the inset ring coplanar with the source face and connects it to the displaced cap with perpendicular reveal walls. This is the existing/default behavior.
-  - **Sloped (Blender-style)** connects the original face boundary directly to the displaced inset boundary, producing a tapered border instead of a vertical reveal.
+  - **Sloped (two-finger)** connects the original face boundary directly to the displaced inset boundary, producing a tapered border instead of a vertical reveal.
 
 Signed depth semantics:
 

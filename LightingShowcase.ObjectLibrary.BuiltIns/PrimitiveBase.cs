@@ -298,7 +298,7 @@ public abstract class PrimitiveBase : IScenePrimitive, IEditablePrimitiveDefinit
         vertices = Math.Clamp(vertices, 3, 512);
         // The renderer is triangle based. Both N-gon and triangle-fan authoring
         // modes therefore become a fan in the render shadow mesh; fillMode 0
-        // intentionally produces no faces, matching Blender's "Nothing" option.
+        // intentionally produces no faces, matching 3D viewport's "Nothing" option.
         if (fillMode <= 0)
             return;
         AddDisk(addTriangle, center, radius, vertices, normalUp: true, material);
@@ -381,7 +381,7 @@ public abstract class PrimitiveBase : IScenePrimitive, IEditablePrimitiveDefinit
             (4,9,5),(2,4,11),(6,2,10),(8,6,7),(9,8,1)
         ];
 
-        // Blender's Subdivisions=1 is the base icosahedron. Each higher level
+        // 3D viewport's Subdivisions=1 is the base icosahedron. Each higher level
         // splits every triangle into four while sharing midpoint vertices.
         for (int level = 1; level < subdivisions; level++)
         {

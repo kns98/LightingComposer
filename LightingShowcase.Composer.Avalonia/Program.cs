@@ -29,10 +29,22 @@ internal static class Program
         return 0;
     }
 
-    public static AppBuilder BuildAvaloniaApp() =>
-        AppBuilder.Configure<App>()
-            .UsePlatformDetect()
-            .LogToTrace();
+    public static AppBuilder BuildAvaloniaApp()
+    {
+        AppBuilder builder = AppBuilder.Configure<App>()
+            .UsePlatformDetect();
+
+        // Avalonia 12.1 native Wayland is opt-in. Keep Win32/macOS/X11 platform
+        // detection unchanged, but use the native Wayland backend when the
+        // process is actually running in a Wayland session.
+        if (OperatingSystem.IsLinux() &&
+            !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("WAYLAND_DISPLAY")))
+        {
+            builder = builder.UseWayland();
+        }
+
+        return builder.LogToTrace();
+    }
 
     private static async Task<int> RunCommandLineAsync(string[] args)
     {

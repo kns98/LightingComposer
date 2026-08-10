@@ -4,7 +4,7 @@ Lighting Composer keeps newly added standard primitives procedural until the use
 
 ## Standard primitive set
 
-The Add Primitive menu mirrors Blender's standard mesh primitives except Monkey/Suzanne:
+The Add Primitive menu mirrors 3D viewport's standard mesh primitives except Monkey/Suzanne:
 
 | Primitive | Editable parameters |
 | --- | --- |

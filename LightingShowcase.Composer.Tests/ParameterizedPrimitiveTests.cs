@@ -19,7 +19,7 @@ public sealed class ParameterizedPrimitiveTests
     ];
 
     [Fact]
-    public void StandardBlenderStylePrimitivesExposeEditableParametersInMeters()
+    public void Standard3D viewportStylePrimitivesExposeEditableParametersInMeters()
     {
         using ComposerSceneSession session = new(); // Also loads the built-in object library.
 

@@ -1,6 +1,6 @@
 # LightingShowcase Avalonia Composer
 
-A standalone, platform-neutral scene composer and renderer built with Avalonia and .NET 8.
+A standalone, platform-neutral scene composer and renderer built with Avalonia 12.1 and .NET 10.
 
 ## Initial feature set
 
@@ -24,7 +24,7 @@ A standalone, platform-neutral scene composer and renderer built with Avalonia a
 
 ## Requirements
 
-- .NET 8 SDK for building and running from source.
+- .NET 10 SDK for building and running from source.
 - A Vulkan-capable driver for Vulkan rendering modes.
 - Linux desktop libraries required by Avalonia.
 
@@ -82,6 +82,8 @@ A path may also be passed without the `compose` verb:
 - Right drag: orbit.
 - Middle drag or Shift+right drag: pan.
 - Mouse wheel: zoom.
+- Precision touchpad: two-finger movement orbits; pinch magnifies/zooms. Translation and pinch can be applied concurrently during the same gesture.
+- Touchscreen: two-finger centroid movement orbits while finger separation zooms, simultaneously.
 - Arrow keys: orbit; Shift+arrow keys: pan.
 - `F`: frame the selected tree node.
 - `Ctrl+D`: duplicate the selected node.
@@ -96,7 +98,7 @@ Object-mode viewport selection resolves to the highest top-level asset group, so
 
 Composer uses **meters (m)** as its scene length unit. Object Position fields and every primitive dimension labeled as a length are authored directly in meters; scale remains dimensionless and rotation remains degrees in the inspector. This makes values such as `2.4 m × 0.9 m × 0.75 m` directly usable for real specifications.
 
-The standard primitive set mirrors Blender's Add → Mesh primitives except Monkey/Suzanne:
+The standard primitive set mirrors 3D viewport's Add → Mesh primitives except Monkey/Suzanne:
 
 - Plane — width, depth
 - Cube — width, height, depth

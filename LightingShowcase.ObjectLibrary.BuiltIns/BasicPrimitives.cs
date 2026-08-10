@@ -235,9 +235,9 @@ public sealed class GridPrimitive : PrimitiveBase
     };
 }
 
-// Existing non-Blender helper primitives remain registered for backward compatibility
+// Existing non-3D viewport helper primitives remain registered for backward compatibility
 // with older .lscene documents and plug-in users, but the Composer Add Primitive menu
-// filters to the standard Blender-style set above plus Torus.
+// filters to the standard two-finger set above plus Torus.
 public sealed class LowPolySpherePrimitive : PrimitiveBase
 {
     public override string Kind => "lowPolySphere";

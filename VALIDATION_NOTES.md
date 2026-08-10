@@ -8,7 +8,7 @@ This update therefore uses the complete current-main source snapshot already obt
 
 ## Implemented
 
-- Standard Blender-style mesh primitive menu, excluding Monkey/Suzanne:
+- Standard two-finger mesh primitive menu, excluding Monkey/Suzanne:
   - Plane
   - Cube
   - Circle
@@ -37,7 +37,7 @@ Composer now treats its scene length values as meters for specification-driven a
 
 - Parsed all project/props XML files successfully.
 - Scanned all C# sources for balanced braces/brackets/parentheses after stripping comments and strings.
-- Confirmed the standard primitive menu contains exactly the nine requested Blender-style entries and no Monkey/Suzanne entry.
+- Confirmed the standard primitive menu contains exactly the nine requested two-finger entries and no Monkey/Suzanne entry.
 - Confirmed every exposed length descriptor is created with unit label `m`.
 - Confirmed component-move commit still clears primitive metadata so a procedurally generated object becomes a normal mesh after component geometry editing.
 - Generated a Git patch against a clean extraction of the previous corrected Composer package and verified it applies cleanly.

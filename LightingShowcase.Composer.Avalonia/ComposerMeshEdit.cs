@@ -620,7 +620,7 @@ internal sealed class ComposerMeshTopology
         // Border: one quad per polygon edge. Square mode keeps this ring in the
         // original face plane and adds a perpendicular reveal below. Sloped mode
         // connects the outer boundary directly to the displaced inset boundary,
-        // matching Blender's tapered inset/depth cross-section. With zero depth,
+        // matching 3D viewport's tapered inset/depth cross-section. With zero depth,
         // both profiles reduce to the same classic planar inset.
         Vec3[] borderInner = hasDepth && profile == ComposerInsetProfile.Sloped
             ? recessedInner

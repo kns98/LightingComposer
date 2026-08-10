@@ -6,7 +6,7 @@
 // graph. The importer reads vertex positions and polygon faces, triangulates
 // n-gons, and generates box-projection UVs because most PLY files do not carry
 // portable texture coordinates. Binary support covers the common
-// binary_little_endian and binary_big_endian PLY variants used by Blender,
+// binary_little_endian and binary_big_endian PLY variants used by 3D viewport,
 // MeshLab, CloudCompare, 3D scan datasets, and many free model repositories.
 // -----------------------------------------------------------------------------
 

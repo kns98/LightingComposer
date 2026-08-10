@@ -1,0 +1,27 @@
+Projects: 12
+OK target: LightingShowcase.Composer.Avalonia/LightingShowcase.Composer.Avalonia.csproj -> ['net10.0']
+OK target: LightingShowcase.Composer.Tests/LightingShowcase.Composer.Tests.csproj -> ['net10.0']
+OK target: LightingShowcase.Core/LightingShowcase.Core.csproj -> ['net10.0']
+OK target: LightingShowcase.ImportExport.Fbx/LightingShowcase.ImportExport.Fbx.csproj -> ['net10.0']
+OK target: LightingShowcase.ImportExport.Gltf/LightingShowcase.ImportExport.Gltf.csproj -> ['net10.0']
+OK target: LightingShowcase.ImportExport.Obj/LightingShowcase.ImportExport.Obj.csproj -> ['net10.0']
+OK target: LightingShowcase.ImportExport.Ply/LightingShowcase.ImportExport.Ply.csproj -> ['net10.0']
+OK target: LightingShowcase.ImportExport.PropXml/LightingShowcase.ImportExport.PropXml.csproj -> ['net10.0']
+OK target: LightingShowcase.ImportExport.Stl/LightingShowcase.ImportExport.Stl.csproj -> ['net10.0']
+OK target: LightingShowcase.ImportExport.ThreeDs/LightingShowcase.ImportExport.ThreeDs.csproj -> ['net10.0']
+OK target: LightingShowcase.ObjectLibrary.BuiltIns/LightingShowcase.ObjectLibrary.BuiltIns.csproj -> ['net10.0']
+OK target: LightingShowcase.ObjectLibrary.ReadyMade/LightingShowcase.ObjectLibrary.ReadyMade.csproj -> ['net10.0']
+Avalonia refs: [('Avalonia.Desktop', '12.1.1'), ('Avalonia.Themes.Fluent', '12.1.1'), ('Avalonia.Wayland', '12.1.1')]
+global.json sdk: {'version': '10.0.100', 'rollForward': 'latestFeature', 'allowPrerelease': False}
+OK workflow: .NET 10.0.x
+OK Program.cs: conditional UseWayland() present
+OK migration scan: no Avalonia.Data.IBinding
+OK migration scan: no IDataObject/DataObject clipboard API
+OK migration scan: no TopLevel decorations/old platform handle patterns
+OK migration scan: no old gesture routed-event prefix
+OK stale framework scan: none in config/source
+
+Manual-review migration scan hits:
+none
+
+RESULT: PASS (static validation)

@@ -70,7 +70,7 @@ internal sealed class FaceOperationDialog : Window
                 ItemsSource = new[]
                 {
                     "Square (90° reveal)",
-                    "Sloped (Blender-style)"
+                    "Sloped (two-finger)"
                 }
             };
             fields.Children.Add(new TextBlock { Text = "Depth profile" });
