@@ -8,9 +8,9 @@ Changes in this branch:
 - `global.json` requests the .NET 10 SDK and rolls forward to the latest installed feature band.
 - Composer uses Avalonia `12.1.1` packages.
 - `Avalonia.Wayland` `12.1.1` is included.
-- On Linux, when `WAYLAND_DISPLAY` is present, startup opts into Avalonia's native Wayland backend with `UseWayland()`.
-- Windows, macOS, and Linux X11 continue through `UsePlatformDetect()`.
-- No custom pinch recognizer, raw libinput bridge, custom navigation interface, or Blender-derived gesture code is included.
+- Windows, macOS, and Linux use `UsePlatformDetect()` by default.
+- Avalonia native Wayland remains an explicit Linux test opt-in through `LIGHTINGSHOWCASE_NATIVE_WAYLAND=1`.
+- The current cross-platform navigation adapter maps two-finger translation to orbit and adds public Avalonia pinch/magnify paths for zoom. No raw libinput/native OS bridge is included.
 
 Build:
 
@@ -37,3 +37,9 @@ The Avalonia 12.1 Wayland backend is experimental and intentionally opt-in.
 - Confirmed GitHub Actions installs .NET `10.0.x`.
 - Scanned Composer C# for the common Avalonia 12 removed/renamed APIs called out by the migration guide.
 - A full `dotnet build` was **not** run in the packaging environment because the .NET SDK is not installed there; run the commands above on a .NET 10 machine for compile/runtime verification.
+
+## Cross-platform trackpad navigation variant
+
+`TrackpadViewportNavigationInput` is platform-neutral. Ordinary `PointerWheelChanged` X/Y deltas are used as the transport for two-finger trackpad orbit, while `InputElement.PinchEvent`, `PointerTouchPadGestureMagnify`, and Control-modified wheel input are accepted as zoom paths. Composer coalesces orbit and zoom at approximately 16 ms before camera/render updates.
+
+See `TRACKPAD_NAVIGATION_MULTIPLATFORM.md` and `TRACKPAD_ORBIT_INPUT.md` for the test architecture and current device-separation limitation.

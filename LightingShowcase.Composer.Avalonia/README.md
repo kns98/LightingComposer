@@ -22,3 +22,9 @@ rehashed once for every triangle that uses it. The status bar displays elapsed
 save time for large scenes.
 
 Parameterized primitives retain their procedural parameters after object Move/Rotate/Scale. Only topology edits or explicit Convert to Mesh make them ordinary meshes.
+
+## Multi-platform trackpad navigation test variant
+
+This source variant uses `TrackpadViewportNavigationInput` on Windows, macOS, and Linux. Two-finger translation is treated as orbit. Pinch zoom is accepted through Avalonia 12 `PinchEvent`, `PointerTouchPadGestureMagnify`, or a Control-modified wheel fallback. Orbit and zoom updates are coalesced at approximately 16 ms before updating the camera. Trackpad navigation does not require a pressed pointer button or pointer capture.
+
+Linux uses normal Avalonia platform detection by default; set `LIGHTINGSHOWCASE_NATIVE_WAYLAND=1` only when explicitly testing Avalonia native Wayland. Set `LIGHTINGSHOWCASE_NAV_DIAGNOSTICS=1` to print which navigation input path is firing.

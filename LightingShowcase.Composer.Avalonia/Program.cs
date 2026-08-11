@@ -34,10 +34,15 @@ internal static class Program
         AppBuilder builder = AppBuilder.Configure<App>()
             .UsePlatformDetect();
 
-        // Avalonia 12.1 native Wayland is opt-in. Keep Win32/macOS/X11 platform
-        // detection unchanged, but use the native Wayland backend when the
-        // process is actually running in a Wayland session.
+        // Keep startup cross-platform and use Avalonia's normal desktop backend
+        // selection by default. Native Wayland remains available as an explicit
+        // Linux opt-in for testing instead of being forced for every Wayland
+        // session.
+        bool nativeWaylandRequested =
+            Environment.GetEnvironmentVariable("LIGHTINGSHOWCASE_NATIVE_WAYLAND") == "1";
+
         if (OperatingSystem.IsLinux() &&
+            nativeWaylandRequested &&
             !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("WAYLAND_DISPLAY")))
         {
             builder = builder.UseWayland();

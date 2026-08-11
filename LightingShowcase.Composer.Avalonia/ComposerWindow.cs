@@ -1,3 +1,4 @@
+using LightingShowcase.Composer.Navigation;
 using System.Diagnostics;
 using Avalonia;
 using Avalonia.Controls;
@@ -212,9 +213,15 @@ internal sealed class ComposerWindow : Window
     private CancellationTokenSource? activeRenderCancellation;
     private CancellationTokenSource? resizeDebounceCancellation;
     private readonly DispatcherTimer hoverPulseTimer;
+    private readonly DispatcherTimer navigationIdleRenderTimer;
+    private readonly DispatcherTimer navigationFrameTimer;
+    private double pendingTrackpadOrbitX;
+    private double pendingTrackpadOrbitY;
+    private double pendingTrackpadZoom;
     private PrimitiveParametersWindow? primitiveParametersWindow;
     private MaterialEditorWindow? materialEditorWindow;
     private long lastHoverProbeTimestamp;
+    private readonly IViewportNavigationInput navigationInput;
 
     public ComposerWindow(string[] startupArguments)
     {
@@ -326,6 +333,31 @@ internal sealed class ComposerWindow : Window
             Child = image,
             Focusable = true,
             ClipToBounds = true
+        };
+
+        // Cross-platform trackpad navigation. Two-finger translation is orbit;
+        // pinch/magnify is zoom when the desktop backend exposes a distinct pinch
+        // signal. The adapter requires no pressed pointer button or capture state.
+        navigationInput = ViewportNavigationInputFactory.Create();
+        navigationInput.Orbit += OnPlatformOrbit;
+        navigationInput.Zoom += OnPlatformZoom;
+        navigationInput.Attach(viewport);
+
+        navigationFrameTimer = new DispatcherTimer
+        {
+            Interval = TimeSpan.FromMilliseconds(16)
+        };
+        navigationFrameTimer.Tick += (_, _) => ApplyPendingPlatformNavigation();
+
+        navigationIdleRenderTimer = new DispatcherTimer
+        {
+            Interval = TimeSpan.FromMilliseconds(140)
+        };
+        navigationIdleRenderTimer.Tick += (_, _) =>
+        {
+            navigationIdleRenderTimer.Stop();
+            if (session.HasRenderableScene && !lifetimeCancellation.IsCancellationRequested)
+                _ = RequestRenderAsync(interactive: false);
         };
 
         hoverPulseTimer = new DispatcherTimer
@@ -619,14 +651,7 @@ internal sealed class ComposerWindow : Window
             gizmoDrag = null;
             _ = RequestRenderAsync(interactive: false);
         };
-        viewport.PointerWheelChanged += (_, e) =>
-        {
-            if (!session.HasRenderableScene) return;
-            ClearMeshHoverOverlay(requestRender: false);
-            session.Camera.Zoom(e.Delta.Y);
-            _ = RequestRenderAsync(interactive: false);
-            e.Handled = true;
-        };
+        // Platform navigation input owns wheel/touchpad/pinch interpretation.
         viewport.SizeChanged += (_, _) => ScheduleResizeRender();
         foreach (TextBox box in TransformTextBoxes())
             box.KeyDown += OnTransformBoxKeyDown;
@@ -1681,6 +1706,75 @@ internal sealed class ComposerWindow : Window
             statusText.Text = $"{SelectedRenderer.Label}: release the mouse to render the new view.";
 
         e.Handled = true;
+    }
+
+    private void OnPlatformOrbit(object? sender, OrbitInput e)
+    {
+        if (!session.HasRenderableScene)
+            return;
+
+        // Trackpads can deliver navigation packets much faster than the renderer
+        // should redraw. Accumulate orbit and zoom independently and consume them
+        // once per ~16 ms UI frame.
+        pendingTrackpadOrbitX += e.X;
+        pendingTrackpadOrbitY += e.Y;
+
+        if (!navigationFrameTimer.IsEnabled)
+            navigationFrameTimer.Start();
+    }
+
+    private void OnPlatformZoom(object? sender, ZoomInput e)
+    {
+        if (!session.HasRenderableScene)
+            return;
+
+        pendingTrackpadZoom += e.Amount;
+
+        if (!navigationFrameTimer.IsEnabled)
+            navigationFrameTimer.Start();
+    }
+
+    private void ApplyPendingPlatformNavigation()
+    {
+        double orbitX = pendingTrackpadOrbitX;
+        double orbitY = pendingTrackpadOrbitY;
+        double zoom = pendingTrackpadZoom;
+        pendingTrackpadOrbitX = 0.0;
+        pendingTrackpadOrbitY = 0.0;
+        pendingTrackpadZoom = 0.0;
+
+        bool hasOrbit = Math.Abs(orbitX) >= 1e-9 || Math.Abs(orbitY) >= 1e-9;
+        bool hasZoom = Math.Abs(zoom) >= 1e-9;
+        if (!hasOrbit && !hasZoom)
+        {
+            navigationFrameTimer.Stop();
+            return;
+        }
+
+        if (!session.HasRenderableScene || lifetimeCancellation.IsCancellationRequested)
+        {
+            navigationFrameTimer.Stop();
+            return;
+        }
+
+        ClearMeshHoverOverlay(requestRender: false);
+        if (hasOrbit)
+            session.Camera.Orbit(orbitX, orbitY);
+        if (hasZoom)
+            session.Camera.Zoom(Math.Clamp(zoom, -8.0, 8.0));
+
+        RequestNavigationRender();
+    }
+
+    private void RequestNavigationRender()
+    {
+        // Use the fast interactive path while the gesture is active, then issue
+        // one full-quality render after a short idle period.
+        if (CanRenderContinuously(SelectedRenderer.Kind))
+            _ = RequestRenderAsync(interactive: true);
+
+        navigationIdleRenderTimer.Stop();
+        navigationIdleRenderTimer.Start();
     }
 
     private void UpdateMeshHover(Point viewportPoint)
@@ -2884,6 +2978,12 @@ internal sealed class ComposerWindow : Window
         ClosePrimitiveParametersWindow();
         CloseMaterialEditorWindow();
         hoverPulseTimer.Stop();
+        navigationIdleRenderTimer.Stop();
+        navigationFrameTimer.Stop();
+        pendingTrackpadOrbitX = 0.0;
+        pendingTrackpadOrbitY = 0.0;
+        pendingTrackpadZoom = 0.0;
+        navigationInput.Dispose();
         lifetimeCancellation.Cancel();
         activeRenderCancellation?.Cancel();
         resizeDebounceCancellation?.Cancel();
