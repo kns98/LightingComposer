@@ -1,14 +1,7 @@
-/*
- * This is desktop-editor glue around the scene and rendering layers. The code should be read in terms of how it
- * translates user interaction into domain operations while keeping platform UI state, mutable scene state, and
- * renderer state from becoming entangled.
- */
 using LightingShowcase.SceneGraph;
 
 namespace LightingShowcase.Composer;
 
-// ObjectTreeNode is one node in a hierarchy/acceleration structure; its fields connect local data to parent/child
-// traversal rather than representing an independent scene object.
 internal sealed class ObjectTreeNode
 {
     public ObjectTreeNode(int id, string label, int localTriangleCount)
@@ -22,8 +15,6 @@ internal sealed class ObjectTreeNode
     public string Label { get; }
     public int LocalTriangleCount { get; }
     public List<ObjectTreeNode> Children { get; } = new();
-    // ToString returns the human-facing label/name for this value so Avalonia controls display meaningful text
-    // instead of the generated record/type representation.
     public override string ToString() => Label;
 }
 
@@ -77,8 +68,6 @@ internal static class ComposerObjectTree
         return null;
     }
 
-    // ToggleExpanded flips expanded between its two states and returns/propagates the new state so UI and model
-    // remain synchronized.
     public static bool ToggleExpanded(ISet<int> expandedIds, int objectId)
     {
         ArgumentNullException.ThrowIfNull(expandedIds);

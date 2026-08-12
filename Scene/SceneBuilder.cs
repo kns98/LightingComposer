@@ -1,15 +1,18 @@
-/*
- * This file belongs to the renderer-neutral scene layer, which is the shared source of truth for geometry,
- * transforms, grouping, materials, resources, and serialization-facing state. Higher layers manipulate these
- * abstractions rather than maintaining parallel copies of scene data.
- */
+// -----------------------------------------------------------------------------
+// File: Scene/SceneBuilder.cs
+// Purpose: Default advanced material showcase scene.
+//
+// The startup scene is intentionally authored as a compact material/lighting lab
+// for the CPU and Vulkan-compute ray tracers: emissive panels, point lights,
+// metallic/roughness variation, glass/transmission, alpha-blended diffusers,
+// shadows, indirect bounce targets, and mixed primitive geometry.
+// -----------------------------------------------------------------------------
+
 using LightingShowcase.Lighting;
 using LightingShowcase.Math3D;
 
 namespace LightingShowcase.SceneGraph;
 
-// SceneBuilder accumulates/normalizes lower-level inputs and emits a valid higher-level object only when enough
-// information has been supplied.
 /// <summary>Builds the default startup material showcase.</summary>
 public sealed class SceneBuilder
 {

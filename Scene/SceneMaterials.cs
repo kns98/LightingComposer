@@ -1,8 +1,12 @@
-/*
- * Surface appearance is normalized here so importers, editor controls, and every renderer use the same meaning for
- * colors, PBR values, alpha behavior, texture slots, UV transforms, and resource identity. That shared model is
- * what makes a material edited in the UI render consistently across backends.
- */
+// -----------------------------------------------------------------------------
+// File: Scene/SceneMaterials.cs
+// Purpose: Shared material presets.
+//
+// Centralizes reusable material definitions for default geometry and ready-made objects.
+// This comment is intentionally kept in source code so future maintainers can
+// understand the role of this file without opening external documentation.
+// -----------------------------------------------------------------------------
+
 using LightingShowcase.Math3D;
 
 namespace LightingShowcase.SceneGraph;

@@ -1,8 +1,3 @@
-/*
- * This controller translates Avalonia events and commands into editor operations while keeping the live scene
- * behind `ComposerSceneSession`. Its job is coordination: validate/route input, invoke the appropriate session or
- * renderer operation, and update presentation state without becoming a competing owner of scene data.
- */
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;
@@ -166,16 +161,12 @@ internal sealed class ComposerSelectionController
 
     public void AddExpanded(int id) => expandedObjectIds.Add(id);
 
-    // RemoveCachedObject removes cached object from the owning structure and updates the relationships/derived
-    // state that would otherwise still reference it.
     public void RemoveCachedObject(int id)
     {
         expandedObjectIds.Remove(id);
         trianglePageOffsets.Remove(id);
     }
 
-    // FrameSelected moves/adjusts the camera so selected fits usefully in the viewport. It derives a target from
-    // bounds rather than changing the object itself.
     public void FrameSelected()
     {
         if (selectedObjectId is not int id || !session.FrameObject(id))
@@ -183,8 +174,6 @@ internal sealed class ComposerSelectionController
         _ = renderer.RequestRenderAsync(interactive: false);
     }
 
-    // RefreshObjectTree re-reads authoritative state and updates object tree so cached/presented data matches the
-    // current scene after an edit or external change.
     public void RefreshObjectTree(int? preferredSelection = null, bool syncSessionSelection = true)
     {
         IReadOnlyList<SceneObjectInfo> infos = session.GetObjectInfos();
@@ -475,8 +464,6 @@ internal sealed class ComposerSelectionController
         statusText.Text = "Selection cleared.";
     }
 
-    // SelectObject changes the editor’s current object choice and synchronizes the controls/overlay behavior that
-    // depend on that mode.
     public void SelectObject(int id, bool toggle = false)
     {
         if (session.GetObjectState(id) == null)
@@ -506,6 +493,7 @@ internal sealed class ComposerSelectionController
         {
             session.SetSelectedObject(null);
             dialogs.CloseEditors();
+            dialogs.RefreshLightEditor();
             RefreshObjectTree();
             statusText.Text = "Selection cleared.";
             _ = renderer.RequestRenderAsync(interactive: false);
@@ -519,6 +507,7 @@ internal sealed class ComposerSelectionController
         selectMode(ComposerSelectionMode.Object);
         ClearVirtualTriangleSelection();
         session.SetSelectedObject(activeId);
+        dialogs.RefreshLightEditor();
         RefreshObjectTree(activeId);
         statusText.Text = selectedObjectIds.Count > 1
             ? $"{selectedObjectIds.Count} objects selected. Ctrl-click toggles selection; Group combines sibling objects."
@@ -526,8 +515,6 @@ internal sealed class ComposerSelectionController
         _ = renderer.RequestRenderAsync(interactive: false);
     }
 
-    // SelectTriangle changes the editor’s current triangle choice and synchronizes the controls/overlay behavior
-    // that depend on that mode.
     public void SelectTriangle(int groupId, int triangleIndex)
     {
         if (!session.SetSelectedTriangle(groupId, triangleIndex))
@@ -544,16 +531,12 @@ internal sealed class ComposerSelectionController
         _ = renderer.RequestRenderAsync(interactive: false);
     }
 
-    // ClearVirtualTriangleSelection removes/resets virtual triangle selection to its empty/default state. This is
-    // an explicit state transition rather than leaving old values around for later code to accidentally reuse.
     public void ClearVirtualTriangleSelection()
     {
         selectedTriangleGroupId = null;
         selectedTriangleIndex = null;
     }
 
-    // WriteVector writes vector to the external stream/document in the format’s required order, using stable
-    // indices/references so another reader can reconstruct the same relationships.
     private static void WriteVector(Vec3 value, TextBox x, TextBox y, TextBox z)
     {
         x.Text = value.X.ToString("0.######", System.Globalization.CultureInfo.InvariantCulture);

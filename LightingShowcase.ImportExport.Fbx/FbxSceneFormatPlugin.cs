@@ -1,15 +1,8 @@
-/*
- * This adapter registers FBX with the format registry. The registry sees a uniform `SceneFormat` capability, while
- * this assembly remains responsible for constructing the actual FBX loader/saver; that keeps the core scene layer
- * free of hard-coded format dependencies.
- */
 using System.IO;
 using LightingShowcase.SceneGraph;
 
 namespace LightingShowcase.ImportExport.Fbx;
 
-// FbxSceneFormatPlugin is the adapter that registers this assembly’s capability with a shared registry, keeping
-// discovery separate from the concrete implementation.
 public sealed class FbxSceneFormatPlugin : ISceneFormatPlugin
 {
     public string FormatId => "fbx";

@@ -1,6 +1,3 @@
-/*
- * The detailed documentation in this file is kept next to the declarations and algorithms it explains.
- */
 using LightingShowcase.CameraSystem;
 using LightingShowcase.Math3D;
 using LightingShowcase.Rendering;
@@ -8,11 +5,6 @@ using LightingShowcase.SceneGraph;
 
 namespace LightingShowcase.Composer;
 
-// ComposerSceneSession is one slice of a partial type whose shared state/invariants continue in sibling files.
-// ComposerSceneSession is the synchronization and transaction boundary around the live scene. Code in these partial
-// files takes the session gate before touching shared mutable scene data, records logical edits for undo/redo,
-// preserves procedural metadata when possible, and invalidates renderer caches when geometry/material state
-// changes. UI code should ask the session to perform edits instead of modifying scene objects directly.
 internal sealed partial class ComposerSceneSession
 {
     private sealed record CachedMeshTopology(long SceneRevision, int TriangleCount, ComposerMeshTopology Topology);
@@ -34,8 +26,6 @@ internal sealed partial class ComposerSceneSession
     public bool HasMeshComponentSelection => selectedMeshSelection.HasValue;
     public ComposerGizmoAxis MeshMoveAxisLock => meshMoveAxisLock;
 
-    // GetMeshFaceGroupCountForTests reads mesh face group count for tests. It takes sceneGate before touching the
-    // live scene and releases it in finally, so readers/renderers cannot observe a half-completed mutation.
     internal int GetMeshFaceGroupCountForTests(int groupId)
     {
         sceneGate.Wait();
@@ -49,8 +39,6 @@ internal sealed partial class ComposerSceneSession
         }
     }
 
-    // GetMeshEdgeCountForTests reads mesh edge count for tests. It takes sceneGate before touching the live scene
-    // and releases it in finally, so readers/renderers cannot observe a half-completed mutation.
     internal int GetMeshEdgeCountForTests(int groupId)
     {
         sceneGate.Wait();
@@ -114,10 +102,6 @@ internal sealed partial class ComposerSceneSession
         }
     }
 
-    // ClearMeshHover removes/resets mesh hover to its empty/default state. This is an explicit state transition
-    // rather than leaving old values around for later code to accidentally reuse. It takes sceneGate before
-    // touching the live scene and releases it in finally, so readers/renderers cannot observe a half-completed
-    // mutation.
     public bool ClearMeshHover()
     {
         sceneGate.Wait();
@@ -135,9 +119,6 @@ internal sealed partial class ComposerSceneSession
         }
     }
 
-    // ToggleMeshHoverPulse flips mesh hover pulse between its two states and returns/propagates the new state so UI
-    // and model remain synchronized. It takes sceneGate before touching the live scene and releases it in finally,
-    // so readers/renderers cannot observe a half-completed mutation.
     public bool ToggleMeshHoverPulse()
     {
         sceneGate.Wait();
@@ -154,10 +135,6 @@ internal sealed partial class ComposerSceneSession
         }
     }
 
-    // InsertPrimitive inserts primitive into the live scene/model and returns the resulting identity/value needed
-    // by selection or subsequent editing. It takes sceneGate before touching the live scene and releases it in
-    // finally, so readers/renderers cannot observe a half-completed mutation. History bookkeeping surrounds the
-    // mutation so internal steps collapse into the intended user-level undo transaction.
     public int InsertPrimitive(string primitiveName)
     {
         sceneGate.Wait();
@@ -167,9 +144,6 @@ internal sealed partial class ComposerSceneSession
             SceneSnapshot before = scene.CreateSnapshot();
             SceneObjectGroup group = scene.InsertReadyMadeObject(primitiveName);
             SceneSnapshot after = scene.CreateSnapshot();
-            // Mesh editing can touch vertices, faces, selection, pivots, and procedural metadata. Capturing the
-            // completed mutation as one applied command prevents those low-level changes from becoming separate
-            // undo steps.
             editHistory.PushApplied(new SceneSnapshotEditCommand(
                 $"Add {group.Name}",
                 before,
@@ -445,8 +419,6 @@ internal sealed partial class ComposerSceneSession
         _ => "Object"
     };
 
-    // GetActiveSelectionBounds reads active selection bounds. It takes sceneGate before touching the live scene and
-    // releases it in finally, so readers/renderers cannot observe a half-completed mutation.
     public Aabb? GetActiveSelectionBounds()
     {
         sceneGate.Wait();
@@ -511,11 +483,6 @@ internal sealed partial class ComposerSceneSession
         }
     }
 
-    // CommitMeshElementMove finalizes mesh element move: the current preview becomes authoritative and the
-    // before/after state is recorded as one logical undoable edit. It takes sceneGate before touching the live
-    // scene and releases it in finally, so readers/renderers cannot observe a half-completed mutation. Cancellation
-    // is propagated so shutdown or a newer request can make obsolete work stop early. History bookkeeping surrounds
-    // the mutation so internal steps collapse into the intended user-level undo transaction.
     public bool CommitMeshElementMove(int selectedId)
     {
         sceneGate.Wait();
@@ -546,9 +513,6 @@ internal sealed partial class ComposerSceneSession
             Scene.RecalculatePivotsToRoot(group.Parent);
             scene.RebuildWorldGeometry();
 
-            // Mesh editing can touch vertices, faces, selection, pivots, and procedural metadata. Capturing the
-            // completed mutation as one applied command prevents those low-level changes from becoming separate
-            // undo steps.
             editHistory.PushApplied(new MeshComponentMoveEditCommand(
                 group.Id,
                 before,
@@ -665,9 +629,6 @@ internal sealed partial class ComposerSceneSession
             Scene.RecalculatePivotsToRoot(group.Parent);
             scene.RebuildWorldGeometry();
             BakedGeometryState after = BakedGeometryState.Capture(group);
-            // Mesh editing can touch vertices, faces, selection, pivots, and procedural metadata. Capturing the
-            // completed mutation as one applied command prevents those low-level changes from becoming separate
-            // undo steps.
             editHistory.PushApplied(new GeometryStateEditCommand(
                 inset ? "Inset face" : "Extrude face",
                 group.Id,
@@ -692,8 +653,6 @@ internal sealed partial class ComposerSceneSession
         }
     }
 
-    // CreateVulkanMeshEditPreview constructs vulkan mesh edit preview in the normalized form expected downstream,
-    // so allocation plus initialization of its invariants happen together.
     private VulkanRasterMeshEditPreview? CreateVulkanMeshEditPreview()
     {
         if (selectedMeshSelection is not ComposerMeshSelection selection ||
@@ -816,8 +775,6 @@ internal sealed partial class ComposerSceneSession
         return topology;
     }
 
-    // FindHitTriangle searches for hit triangle and returns the matching object/value rather than assuming it
-    // exists. Callers can therefore distinguish a missing match from the found instance.
     private int FindHitTriangle(SceneObjectGroup group, Ray ray)
     {
         int bestIndex = -1;
@@ -850,14 +807,9 @@ internal sealed partial class ComposerSceneSession
         return sum / vertices.Count;
     }
 
-    // TransformPointToWorld applies the relevant coordinate transform to point to world, making explicit whether
-    // data is being moved between local, world, view, or preview space.
     private static Vec3 TransformPointToWorld(SceneObjectGroup group, Vec3 point)
     {
         Vec3 result = point;
-        // Walking from the edited node through its parents applies the same hierarchy used for rendering. The
-        // reverse conversion below unwinds those transforms in opposite order so local/world editing remains
-        // consistent.
         for (SceneObjectGroup? current = group; current != null; current = current.Parent)
             result = current.TransformPoint(result);
         return result;
@@ -884,9 +836,6 @@ internal sealed partial class ComposerSceneSession
     }
 
     private static Vec3 WorldDeltaToLocal(SceneObjectGroup group, Vec3 worldOrigin, Vec3 worldDelta) =>
-        // A gizmo delta is measured in world space, but editable vertices are stored in object-local space.
-        // Transforming both the origin and origin+delta and subtracting them converts a direction correctly even
-        // when parent scale/rotation is present.
         WorldToLocalPoint(group, worldOrigin + worldDelta) - WorldToLocalPoint(group, worldOrigin);
 
     private static bool TryProjectToImage(

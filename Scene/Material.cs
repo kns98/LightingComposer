@@ -1,15 +1,16 @@
-/*
- * Surface appearance is normalized here so importers, editor controls, and every renderer use the same meaning for
- * colors, PBR values, alpha behavior, texture slots, UV transforms, and resource identity. That shared model is
- * what makes a material edited in the UI render consistently across backends.
- */
+// -----------------------------------------------------------------------------
+// File: Scene/Material.cs
+// Purpose: Surface material.
+//
+// Stores color, emission, optional texture, and material values consumed by the ray tracer.
+// This comment is intentionally kept in source code so future maintainers can
+// understand the role of this file without opening external documentation.
+// -----------------------------------------------------------------------------
+
 using LightingShowcase.Math3D;
 
 namespace LightingShowcase.SceneGraph;
 
-// MaterialAlphaMode makes a closed set of choices compiler-visible instead of passing loosely related integers or
-// strings. Code that switches over Opaque, Mask, Blend is where the behavioral meaning of each choice is
-// implemented.
 public enum MaterialAlphaMode
 {
     Opaque = 0,
@@ -17,9 +18,6 @@ public enum MaterialAlphaMode
     Blend = 2
 }
 
-// MaterialTextureSlot makes a closed set of choices compiler-visible instead of passing loosely related integers or
-// strings. Code that switches over BaseColor, MetallicRoughness, Normal, Emissive, Transmission, Occlusion is where
-// the behavioral meaning of each choice is implemented.
 /// <summary>Texture inputs supported by the shared PBR material model.</summary>
 public enum MaterialTextureSlot
 {
@@ -61,6 +59,8 @@ public sealed class Material
     public double Clearcoat { get; }
     public double ClearcoatRoughness { get; }
     public bool ClearcoatUsesTransmissionTexture { get; }
+
+    /// <summary>Constructs and initializes this component.</summary>
     public Material(
         Vec3 color,
         double emission = 0.0,
@@ -134,21 +134,15 @@ public sealed class Material
         return Texture == null ? Color : Texture.Sample(u, v).Multiply(Color);
     }
 
-    // SampleLinear samples linear at the requested coordinate/direction, applying the interpolation/addressing
-    // rules owned by this subsystem.
     /// <summary>Samples glTF base color in linear-light space for physically based shading.</summary>
     public Vec3 SampleLinear(double u, double v)
     {
         if (Texture == null)
             return Color;
 
-        // glTF base-color textures are stored in sRGB but lighting math must happen in linear light. Decode the
-        // sampled texel before multiplying by the already-linear material factor.
         return SrgbToLinear(Texture.Sample(u, v)).Multiply(Color);
     }
 
-    // SampleAlpha samples alpha at the requested coordinate/direction, applying the interpolation/addressing rules
-    // owned by this subsystem.
     /// <summary>Samples opacity from baseColorFactor alpha and texture alpha.</summary>
     public double SampleAlpha(double u, double v)
     {
@@ -164,16 +158,12 @@ public sealed class Material
         if (MetallicRoughnessTexture != null)
         {
             Vec3 mr = MetallicRoughnessTexture.Sample(u, v);
-            // glTF packs roughness into the green channel and metallic into blue. Multiplying by the scalar factors
-            // preserves both the texture-authored variation and the material-level controls.
             roughness *= mr.Y;
             metallic *= mr.Z;
         }
         return (Math.Clamp(metallic, 0.0, 1.0), Math.Clamp(roughness, 0.02, 1.0));
     }
 
-    // SampleNormalMap samples normal map at the requested coordinate/direction, applying the
-    // interpolation/addressing rules owned by this subsystem.
     /// <summary>Samples a small normal-map perturbation strength for the current simple ray tracer.</summary>
     public Vec3 SampleNormalMap(double u, double v)
     {
@@ -182,8 +172,6 @@ public sealed class Material
         return NormalTexture.Sample(u, v);
     }
 
-    // SampleEmission samples emission at the requested coordinate/direction, applying the interpolation/addressing
-    // rules owned by this subsystem.
     /// <summary>Samples the self-illumination term using the historical stored-color-space behavior.</summary>
     public Vec3 SampleEmission(double u, double v)
     {
@@ -194,8 +182,6 @@ public sealed class Material
         return emissionSource.Multiply(EmissionColor) * Emission;
     }
 
-    // SampleEmissionLinear samples emission linear at the requested coordinate/direction, applying the
-    // interpolation/addressing rules owned by this subsystem.
     /// <summary>Samples glTF emissive data in linear-light space.</summary>
     public Vec3 SampleEmissionLinear(double u, double v)
     {
@@ -208,8 +194,6 @@ public sealed class Material
         return emissionSource.Multiply(EmissionColor) * Emission;
     }
 
-    // SampleOcclusion samples occlusion at the requested coordinate/direction, applying the
-    // interpolation/addressing rules owned by this subsystem.
     /// <summary>Samples glTF occlusion, where the red channel attenuates indirect lighting.</summary>
     public double SampleOcclusion(double u, double v)
     {
@@ -217,8 +201,6 @@ public sealed class Material
             return 1.0;
 
         double sampled = Math.Clamp(OcclusionTexture.Sample(u, v).X, 0.0, 1.0);
-        // Occlusion strength blends between no occlusion (1.0) and the texture’s red-channel value instead of
-        // scaling the texture directly; that matches the glTF definition.
         return 1.0 + (sampled - 1.0) * OcclusionStrength;
     }
 
@@ -230,8 +212,6 @@ public sealed class Material
     private static double SrgbChannelToLinear(double value)
     {
         value = Math.Clamp(value, 0.0, 1.0);
-        // sRGB decoding is piecewise: very dark values use the linear segment while the rest use the 2.4-power
-        // curve. Applying the standard transfer function avoids overly dark PBR shading.
         return value <= 0.04045
             ? value / 12.92
             : Math.Pow((value + 0.055) / 1.055, 2.4);

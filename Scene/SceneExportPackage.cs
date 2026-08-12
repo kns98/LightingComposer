@@ -1,8 +1,3 @@
-/*
- * This file belongs to the renderer-neutral scene layer, which is the shared source of truth for geometry,
- * transforms, grouping, materials, resources, and serialization-facing state. Higher layers manipulate these
- * abstractions rather than maintaining parallel copies of scene data.
- */
 namespace LightingShowcase.SceneGraph;
 
 /// <summary>One format/variant offered by the portable export workflow.</summary>
@@ -14,8 +9,6 @@ public sealed record SceneExportFormat(
     bool IsNativeScene = false,
     bool OptimizeGeometry = false)
 {
-    // ToString returns the human-facing label/name for this value so Avalonia controls display meaningful text
-    // instead of the generated record/type representation.
     public override string ToString() => DisplayName;
 }
 
@@ -141,8 +134,6 @@ public sealed class SceneExportPackageService
         return ".png";
     }
 
-    // CreateUniqueDirectory constructs unique directory in the normalized form expected downstream, so allocation
-    // plus initialization of its invariants happen together.
     private static string CreateUniqueDirectory(string parent, string preferredName)
     {
         string candidate = Path.Combine(parent, preferredName);

@@ -8,6 +8,7 @@ A standalone, platform-neutral scene composer and renderer built with Avalonia 1
 - Insert multiple glTF/GLB, FBX, OBJ, 3DS, PLY, STL, and PropXML assets.
 - Add Blender-style Plane, Cube, Circle, UV Sphere, Icosphere, Cylinder, Cone, Torus, and Grid primitives directly from the composer toolbar (Monkey/Suzanne intentionally omitted).
 - Open a closable floating **Material** editor with a categorized PBR preset library, direct numeric PBR/material-property controls, exact RGB/hex color setters, six PBR texture-map slots, and UV transform/addressing controls.
+- Open **Render → Lighting…** for a modeless light list/editor covering point, spot, and directional light properties; viewport light markers are selectable/right-clickable, the selected light has an X/Y/Z move gizmo, and the marker overlay can be hidden independently of illumination.
 - Browse objects in a recursive scene tree and select them from the tree or rendered viewport; Ctrl-click builds an object multi-selection for grouping.
 - Orbit, pan, and zoom the preview on every rendering backend.
 - Highlight the selected object and draw overlaid move, rotation-ring, and scale gizmos for X/Y/Z transforms, including uniform scaling.
@@ -15,7 +16,7 @@ A standalone, platform-neutral scene composer and renderer built with Avalonia 1
 - Edit position, rotation, and scale numerically; Enter or **Apply transform** bakes the change into vertex positions and normals, clears the fields, and redraws the active renderer.
 - Inserted assets are wrapped in one top-level group while retaining their imported child hierarchy.
 - Rename, show/hide, duplicate, delete, reset, frame, group, or ungroup scene nodes. Ctrl-clicked sibling objects can be wrapped in one hierarchy group without changing their geometry.
-- Undo and redo transforms, procedural/material edits, polygon face edits, and hierarchy Group/Ungroup operations with toolbar buttons or `Ctrl+Z` / `Ctrl+Y`.
+- Undo and redo transforms, procedural/material/light edits, polygon face edits, and hierarchy Group/Ungroup operations with toolbar buttons or `Ctrl+Z` / `Ctrl+Y`.
 - Expand a mesh through a lazy `… show faces` row. Logical face rows are virtual and paged 200 at a time, so a Cube shows six editable faces rather than twelve renderer triangles and browsing them does not enlarge the scene or GPU buffers.
 - Save and reopen `.lscene` compositions.
 - Preview with software raster, Vulkan raster, Vulkan compute, or CPU ray rendering. When CPU is selected, **CPU…** opens render settings for resolution, samples, bounces, field of view, and exposure.
@@ -69,6 +70,7 @@ A path may also be passed without the `compose` verb:
 ## Viewport controls
 
 - Left click in Object mode: select the highest imported object group under the pointer. **Ctrl+left click** toggles objects into/out of a multi-selection. Click empty viewport space to deselect everything.
+- Light markers are editor overlays. Left-click a marker to select that light; drag its X/Y/Z move gizmo to reposition it; right-click the marker to open the Lighting Editor. In **Render → Lighting…**, clear **Show light markers and light move gizmo in preview** to hide the representation without disabling the lights.
 - `1`, `2`, `3`, and `4`: switch to Vertex, Edge, Face, and Object selection. Edge and vertex picks must be close to the projected component; Face mode selects the complete logical polygon under the pointer, not merely one renderer triangle. Component modes hide the object bounding box until a component is selected, then show only the component highlight and move gizmo.
 - In Face mode, **right-click a face** for **Extrude Face…** or **Inset Face…**. Extrude uses a signed real-world distance: positive moves toward the object exterior and negative moves inward, even if imported source triangles are wound backwards. Inset has independent **Inset distance** and **Signed depth** controls in meters; `+0.02 m` moves the inset inward, `-0.02 m` protrudes it outward, and `0` keeps it planar. Inset also offers a **Depth profile**: **Square (90° reveal)** preserves the existing flat-ring-plus-wall construction, while **Sloped (Blender-style)** connects the source boundary directly to the displaced inset boundary for a tapered border. At zero depth the profiles are geometrically identical. A topology operation explicitly converts a procedural primitive to an editable mesh; Undo restores the prior procedural definition.
 - Logical faces are editor topology layered over the triangle renderer. Authored primitive faces are retained explicitly; triangle-only imports are merged conservatively only for structurally valid, connected, consistently wound faces with one boundary loop. Inferred groups must also be planar, material-compatible, and preserve textured UV seams. Ambiguous coplanar edges remain separate. Native `.lscene` saves persist explicit logical-face groups.
@@ -123,6 +125,12 @@ The texture editor accepts PNG, JPEG, BMP, TGA, GIF, PSD, and HDR images support
 Texture mapping provides **Authored / current UVs** or **Box projection (meters)**, plus per-texture U/V offset, U/V scale, rotation in degrees, and Repeat / ClampToEdge / MirroredRepeat address modes. Box projection uses a real-world tile size such as `0.3 m` for a 30 cm material tile. Parameterized primitives retain the projection mode through regeneration. Imported meshes currently retain one UV channel in Composer; multiple `TEXCOORD_n` sets and face-by-face UV editing are reserved for a future UV Editor.
 
 Preset, direct-property, color, texture-slot, mapping, and clear-texture operations each create an undo entry. Material edits invalidate renderer material/texture caches but do not alter object topology.
+
+## Lighting editor
+
+**Render → Lighting…** opens the scene-wide Lighting Editor. It lists and edits point, spot, and directional lights using the same `SceneLight` data consumed by the renderers. Available controls include ID, type, enabled/shadow state, world position, direction, RGB color, intensity, range, and spot cone angles. The editor can also add and delete lights.
+
+Composer draws editor-only light markers after the renderer output. A selected marker gets a translation gizmo; Shift gives precision and Ctrl snaps. Right-clicking a marker opens the editor. The **Show light markers and light move gizmo in preview** checkbox hides all marker/gizmo overlays while leaving illumination unchanged. See [`LIGHTING_EDITOR.md`](LIGHTING_EDITOR.md).
 
 ## Command-line rendering
 

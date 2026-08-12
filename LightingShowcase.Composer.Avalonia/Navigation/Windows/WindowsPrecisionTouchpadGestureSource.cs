@@ -1,15 +1,9 @@
-/*
- * This UI code turns editor state into controls and converts user edits back into validated domain operations.
- * Dialog/window state is intentionally temporary: values should only become authoritative scene changes through
- * the session/controller path, which preserves cancel, undo, and renderer invalidation behavior.
- */
 namespace LightingShowcase.Composer.Navigation.Windows;
 
 internal readonly record struct NativeTrackpadOrbit(double X, double Y);
 internal readonly record struct NativeTrackpadZoom(double Amount);
 internal readonly record struct NativeTrackpadTurn(double Radians);
 
-// WindowsPrecisionTouchpadGestureSource owns resources/subscriptions whose lifetime must be ended explicitly.
 /// <summary>
 /// Direct Windows 11 Precision Touchpad source.
 ///
@@ -189,8 +183,6 @@ internal sealed class WindowsPrecisionTouchpadGestureSource : IDisposable
             Console.WriteLine($"[NAV-WIN32] {text}");
     }
 
-    // ReadPositiveEnvironmentDouble reads positive environment double from the external stream/document, advancing
-    // through the format in the order required to resolve references and produce valid internal data.
     private static double ReadPositiveEnvironmentDouble(string name, double fallback)
     {
         string? text = Environment.GetEnvironmentVariable(name);
@@ -205,7 +197,5 @@ internal sealed class WindowsPrecisionTouchpadGestureSource : IDisposable
                 : fallback;
     }
 
-    // Dispose ends this object’s active lifetime: owned cancellations/resources/listeners are released so completed
-    // windows/renderers do not keep receiving work or retain unmanaged memory.
     public void Dispose() => Detach();
 }

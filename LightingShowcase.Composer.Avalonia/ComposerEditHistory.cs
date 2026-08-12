@@ -1,16 +1,8 @@
-/*
- * Undo/redo is command-based: an edit stores enough “before” and “after” information to reproduce a logical user
- * action without rerunning the original gesture. Applying a new command clears redo history, while undo and redo
- * move the same command between stacks. Geometry-heavy commands snapshot the baked node state so topology can be
- * restored exactly.
- */
 using LightingShowcase.Math3D;
 using LightingShowcase.SceneGraph;
 
 namespace LightingShowcase.Composer;
 
-// IComposerEditCommand defines a capability boundary: callers depend on the contract rather than the concrete
-// plugin/backend implementing it. New implementations can therefore participate without changing the core caller.
 internal interface IComposerEditCommand
 {
     string Description { get; }
@@ -20,8 +12,11 @@ internal interface IComposerEditCommand
     void Redo(Scene scene);
 }
 
-// BakedGeometryState is a working/snapshot state object whose fields must move together; callers use it to capture
-// one coherent point in an interaction, render, or undo workflow.
+/// <summary>Marks edits whose renderer resources cannot be refreshed by the geometry-only fast path.</summary>
+internal interface IFullRendererInvalidationEditCommand
+{
+}
+
 /// <summary>
 /// Immutable references to the original triangle objects in one subtree. Triangle
 /// is immutable, so retaining references is substantially cheaper than cloning
@@ -77,8 +72,6 @@ internal sealed class BakedGeometryState
     }
 }
 
-// BakedTransformEditCommand represents one logical action with the information needed to apply/reverse it, which is
-// what lets undo/redo operate on user actions instead of raw UI events.
 /// <summary>
 /// Undo record for a baked transform. Original immutable triangle references are
 /// retained so undo is exact; redo reapplies the transform to those originals.
@@ -124,16 +117,6 @@ internal sealed class BakedTransformEditCommand : IComposerEditCommand
     public int? UndoSelectionId => groupId;
     public int? RedoSelectionId => groupId;
 
-    // Undo pops the most recent command from the undo stack, asks that command to restore its “before” state,
-    // pushes it onto redo, and returns the affected object id so the editor can restore a sensible selection.
-    // Undo pops the most recent command from the undo stack, asks that command to restore its “before” state,
-    // pushes it onto redo, and returns the affected object id so the editor can restore a sensible selection.
-    // Undo pops the most recent command from the undo stack, asks that command to restore its “before” state,
-    // pushes it onto redo, and returns the affected object id so the editor can restore a sensible selection.
-    // Undo pops the most recent command from the undo stack, asks that command to restore its “before” state,
-    // pushes it onto redo, and returns the affected object id so the editor can restore a sensible selection.
-    // Undo pops the most recent command from the undo stack, asks that command to restore its “before” state,
-    // pushes it onto redo, and returns the affected object id so the editor can restore a sensible selection.
     public void Undo(Scene scene)
     {
         SceneObjectGroup group = RequireGroup(scene);
@@ -143,16 +126,6 @@ internal sealed class BakedTransformEditCommand : IComposerEditCommand
         Rebuild(scene, group);
     }
 
-    // Redo pops the next command from the redo stack, reapplies its “after” state, and returns it to the undo
-    // stack, recreating the same logical edit without replaying the original UI gesture.
-    // Redo pops the next command from the redo stack, reapplies its “after” state, and returns it to the undo
-    // stack, recreating the same logical edit without replaying the original UI gesture.
-    // Redo pops the next command from the redo stack, reapplies its “after” state, and returns it to the undo
-    // stack, recreating the same logical edit without replaying the original UI gesture.
-    // Redo pops the next command from the redo stack, reapplies its “after” state, and returns it to the undo
-    // stack, recreating the same logical edit without replaying the original UI gesture.
-    // Redo pops the next command from the redo stack, reapplies its “after” state, and returns it to the undo
-    // stack, recreating the same logical edit without replaying the original UI gesture.
     public void Redo(Scene scene)
     {
         SceneObjectGroup group = RequireGroup(scene);
@@ -163,8 +136,6 @@ internal sealed class BakedTransformEditCommand : IComposerEditCommand
         Rebuild(scene, group);
     }
 
-    // RequireGroup resolves group but treats absence as a programming/state error. This is used after preconditions
-    // should already guarantee the object exists, making broken invariants fail close to their source.
     private SceneObjectGroup RequireGroup(Scene scene) => scene.GroupById(groupId)
         ?? throw new InvalidOperationException("The transformed scene node no longer exists.");
 
@@ -177,8 +148,6 @@ internal sealed class BakedTransformEditCommand : IComposerEditCommand
     }
 }
 
-// ParametricTransformEditCommand represents one logical action with the information needed to apply/reverse it,
-// which is what lets undo/redo operate on user actions instead of raw UI events.
 /// <summary>
 /// Undo/redo for a non-destructive transform of a parameterized primitive. Only
 /// the small parameter dictionary is retained; the shadow mesh is regenerated on
@@ -244,8 +213,6 @@ internal sealed class ParametricTransformEditCommand : IComposerEditCommand
     }
 }
 
-// GeometryStateEditCommand represents one logical action with the information needed to apply/reverse it, which is
-// what lets undo/redo operate on user actions instead of raw UI events.
 /// <summary>Undo/redo for a small object geometry/metadata replacement such as procedural parameter edits.</summary>
 internal sealed class GeometryStateEditCommand : IComposerEditCommand
 {
@@ -280,8 +247,6 @@ internal sealed class GeometryStateEditCommand : IComposerEditCommand
     }
 }
 
-// SceneSnapshotEditCommand represents one logical action with the information needed to apply/reverse it, which is
-// what lets undo/redo operate on user actions instead of raw UI events.
 /// <summary>Deep snapshot command used only for topology-changing edits such as ungroup/delete.</summary>
 internal sealed class SceneSnapshotEditCommand : IComposerEditCommand
 {
@@ -312,25 +277,21 @@ internal sealed class SceneSnapshotEditCommand : IComposerEditCommand
 internal sealed class ComposerEditHistory
 {
     private const int MaximumEntries = 10;
-    // Commands in the undo stack describe edits that are already reflected in the scene and carry enough
-    // before/after state to restore them without replaying the original mouse or dialog gesture.
     private readonly Stack<IComposerEditCommand> undo = new();
-    // Undo moves commands here so their captured after-state can be reapplied. Committing any new edit clears this
-    // stack because the user has created a new history branch.
     private readonly Stack<IComposerEditCommand> redo = new();
 
     public bool CanUndo => undo.Count > 0;
     public bool CanRedo => redo.Count > 0;
     public string? UndoDescription => undo.TryPeek(out IComposerEditCommand? command) ? command.Description : null;
     public string? RedoDescription => redo.TryPeek(out IComposerEditCommand? command) ? command.Description : null;
+    public bool UndoRequiresFullRendererInvalidation =>
+        undo.TryPeek(out IComposerEditCommand? command) && command is IFullRendererInvalidationEditCommand;
+    public bool RedoRequiresFullRendererInvalidation =>
+        redo.TryPeek(out IComposerEditCommand? command) && command is IFullRendererInvalidationEditCommand;
 
-    // PushApplied records a command that has already been applied by pushing it onto the undo stack and clearing
-    // the redo stack. Clearing redo is essential because a new edit creates a new history branch.
     public void PushApplied(IComposerEditCommand command)
     {
         undo.Push(command);
-        // Once a new edit is committed after an undo, the previous redo path is no longer reachable from the new
-        // scene state, so the redo branch must be discarded.
         redo.Clear();
         if (undo.Count <= MaximumEntries)
             return;
@@ -359,13 +320,9 @@ internal sealed class ComposerEditHistory
         return command.RedoSelectionId;
     }
 
-    // Clear drops both undo and redo stacks. This is used when the scene is replaced and old commands would refer
-    // to object identities/state that no longer belong to the current document.
     public void Clear()
     {
         undo.Clear();
-        // Once a new edit is committed after an undo, the previous redo path is no longer reachable from the new
-        // scene state, so the redo branch must be discarded.
         redo.Clear();
     }
 }

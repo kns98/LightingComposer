@@ -1,8 +1,3 @@
-/*
- * This is desktop-editor glue around the scene and rendering layers. The code should be read in terms of how it
- * translates user interaction into domain operations while keeping platform UI state, mutable scene state, and
- * renderer state from becoming entangled.
- */
 using Avalonia;
 using LightingShowcase.CommandLine;
 using LightingShowcase.SceneGraph;
@@ -51,10 +46,6 @@ internal static class Program
         return builder.LogToTrace();
     }
 
-    // RunCommandLineAsync executes command line async as one coordinated action and centralizes success/failure
-    // handling so callers do not each implement inconsistent exception/UI behavior. Cancellation is propagated so
-    // shutdown or a newer request can make obsolete work stop early. Serializer-specific handling stays at this
-    // boundary rather than leaking into the live scene model.
     private static async Task<int> RunCommandLineAsync(string[] args)
     {
         using CancellationTokenSource cancellation = new();
@@ -123,10 +114,6 @@ internal static class Program
         }
     }
 
-    // RunExport executes export as one coordinated action and centralizes success/failure handling so callers do
-    // not each implement inconsistent exception/UI behavior. Cancellation is propagated so shutdown or a newer
-    // request can make obsolete work stop early. Serializer-specific handling stays at this boundary rather than
-    // leaking into the live scene model.
     private static int RunExport(string[] args, CancellationToken cancellationToken)
     {
         CommandLineArguments values = CommandLineArguments.Parse(args);

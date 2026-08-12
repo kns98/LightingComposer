@@ -1,8 +1,3 @@
-/*
- * This is desktop-editor glue around the scene and rendering layers. The code should be read in terms of how it
- * translates user interaction into domain operations while keeping platform UI state, mutable scene state, and
- * renderer state from becoming entangled.
- */
 using Avalonia.Platform.Storage;
 
 namespace LightingShowcase.Composer;
@@ -62,14 +57,9 @@ internal static class ComposerFileTypes
         MimeTypes = ["application/octet-stream"]
     };
 
-    // IsSupportedPath tests whether supported path is true for the supplied/current value. Keeping the predicate
-    // here ensures every caller uses the same definition instead of duplicating a slightly different condition.
     public static bool IsSupportedPath(string path) =>
         SupportedExtensions.Any(extension => path.EndsWith(extension, StringComparison.OrdinalIgnoreCase));
 
-    // IsBinaryScenePath tests whether binary scene path is true for the supplied/current value. Keeping the
-    // predicate here ensures every caller uses the same definition instead of duplicating a slightly different
-    // condition.
     public static bool IsBinaryScenePath(string path) =>
         path.EndsWith(".lscene", StringComparison.OrdinalIgnoreCase) ||
         path.EndsWith(".lsb", StringComparison.OrdinalIgnoreCase);

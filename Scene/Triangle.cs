@@ -1,8 +1,12 @@
-/*
- * This file belongs to the renderer-neutral scene layer, which is the shared source of truth for geometry,
- * transforms, grouping, materials, resources, and serialization-facing state. Higher layers manipulate these
- * abstractions rather than maintaining parallel copies of scene data.
- */
+// -----------------------------------------------------------------------------
+// File: Scene/Triangle.cs
+// Purpose: Triangle primitive.
+//
+// Stores one renderable triangle and performs ray intersection and bounds calculation.
+// This comment is intentionally kept in source code so future maintainers can
+// understand the role of this file without opening external documentation.
+// -----------------------------------------------------------------------------
+
 using LightingShowcase.Math3D;
 using LightingShowcase.Rendering;
 
@@ -28,10 +32,14 @@ public sealed class Triangle
 
     private readonly Vec3 edge1;
     private readonly Vec3 edge2;
+
+    /// <summary>Constructs and initializes this component.</summary>
     public Triangle(Vec3 a, Vec3 b, Vec3 c, Material material, int groupId = -1)
         : this(a, b, c, new Vec2(0, 0), new Vec2(1, 0), new Vec2(0, 1), material, groupId)
     {
     }
+
+    /// <summary>Constructs and initializes this component.</summary>
     public Triangle(Vec3 a, Vec3 b, Vec3 c, Vec2 uvA, Vec2 uvB, Vec2 uvC, Material material, int groupId = -1)
         : this(a, b, c, uvA, uvB, uvC, Vec3.Zero, Vec3.Zero, Vec3.Zero, material, groupId)
     {
@@ -61,9 +69,6 @@ public sealed class Triangle
     public Hit? Intersect(Ray ray)
     {
         const double eps = 1e-6;
-        // The ray test is the Möller–Trumbore algorithm. The determinant first rejects rays parallel to the
-        // triangle plane; the following u/v barycentric tests reject hits outside the three edges without
-        // constructing a plane equation.
         Vec3 h = ray.Direction.Cross(edge2);
         double det = edge1.Dot(h);
         if (System.Math.Abs(det) < eps) return null;
@@ -80,8 +85,6 @@ public sealed class Triangle
         double t = invDet * edge2.Dot(q);
         if (t < eps) return null;
 
-        // The three barycentric weights are reused to interpolate UVs and authored vertex normals at the exact hit
-        // position. That keeps texture lookup and smooth shading consistent with the geometric intersection.
         double w = 1.0 - u - v;
         Vec2 uv = UvA * w + UvB * u + UvC * v;
         Vec3 shadingNormal = NormalizeOrFallback(NormalA * w + NormalB * u + NormalC * v, Normal);
@@ -101,16 +104,10 @@ public sealed class Triangle
             bitangent);
     }
 
-    // Tangent and bitangent directions are derived from the triangle edges and UV gradients, then orthogonalized
-    // against the shading normal. The handedness test preserves mirrored UV orientation; degenerate UVs fall back
-    // to a geometric basis.
     private void BuildTangentBasis(Vec3 shadingNormal, out Vec3 tangent, out Vec3 bitangent)
     {
         Vec2 deltaUv1 = new(UvB.U - UvA.U, UvB.V - UvA.V);
         Vec2 deltaUv2 = new(UvC.U - UvA.U, UvC.V - UvA.V);
-        // The UV derivatives define how texture-space U and V map onto the triangle edges. Solving that 2x2 system
-        // produces tangent/bitangent directions for normal mapping; a near-zero determinant means the UVs are
-        // degenerate.
         double determinant = deltaUv1.U * deltaUv2.V - deltaUv1.V * deltaUv2.U;
         if (Math.Abs(determinant) > 1e-12)
         {
@@ -126,9 +123,6 @@ public sealed class Triangle
             }
         }
 
-        // When UVs cannot provide a tangent basis, choose a world axis that is not almost parallel to the normal
-        // and build an arbitrary orthonormal basis from cross products. This keeps normal mapping numerically
-        // stable instead of returning zero vectors.
         Vec3 axis = Math.Abs(shadingNormal.Z) < 0.999
             ? new Vec3(0.0, 0.0, 1.0)
             : new Vec3(0.0, 1.0, 0.0);

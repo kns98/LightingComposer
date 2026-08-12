@@ -1,15 +1,13 @@
-/*
- * This is an extensibility seam. Callers discover capabilities through a registry/interface instead of referencing
- * every concrete format or object-library assembly, allowing plugins to be added while the core scene/editor code
- * remains unchanged.
- */
+// -----------------------------------------------------------------------------
+// File: Scene/SceneFormatRegistry.cs
+// Purpose: Discovers and routes scene import/export plugins.
+// -----------------------------------------------------------------------------
+
 using System.Reflection;
 using LightingShowcase.Math3D;
 
 namespace LightingShowcase.SceneGraph;
 
-// SceneFormatRegistry is a discovery table that maps stable names/capabilities to registered implementations,
-// removing the need for central switch statements that know every plugin or primitive at compile time.
 public static class SceneFormatRegistry
 {
     private static readonly object Gate = new();
@@ -89,9 +87,6 @@ public static class SceneFormatRegistry
         plugins.Sort((a, b) => string.Compare(a.DisplayName, b.DisplayName, StringComparison.OrdinalIgnoreCase));
     }
 
-    // IsImportExtension tests whether import extension is true for the supplied/current value. Keeping the
-    // predicate here ensures every caller uses the same definition instead of duplicating a slightly different
-    // condition.
     public static bool IsImportExtension(string extension)
     {
         EnsureInitialized();
@@ -99,9 +94,6 @@ public static class SceneFormatRegistry
         return plugins.Any(p => p.CanImport && p.Extensions.Any(e => NormalizeExtension(e) == extension));
     }
 
-    // IsExportExtension tests whether export extension is true for the supplied/current value. Keeping the
-    // predicate here ensures every caller uses the same definition instead of duplicating a slightly different
-    // condition.
     public static bool IsExportExtension(string extension)
     {
         EnsureInitialized();

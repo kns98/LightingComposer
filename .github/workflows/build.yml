@@ -1,4 +1,3 @@
-# CI executes this workflow as an ordered proof that the repository can be restored, built, and tested in a clean environment. Trigger rules decide when that proof is required; each later step relies on artifacts/environment established by earlier steps, so changing versions, paths, or conditions changes what a green workflow actually guarantees.
 name: Build Lighting Composer
 
 on:

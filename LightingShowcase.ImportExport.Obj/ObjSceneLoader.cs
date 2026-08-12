@@ -1,35 +1,13 @@
-/*
- * Importing OBJ is a translation problem, not a file-copy operation. The code parses the external representation,
- * resolves indices/resources/transforms, and creates Composer triangles, object groups, materials, and textures in
- * the coordinate and ownership conventions expected by the scene layer.
- */
 using LightingShowcase.Math3D;
 using LightingShowcase.SceneGraph;
 
 namespace LightingShowcase.ImportExport.Obj;
 
-// ObjSceneLoader owns parsing and translation from its external file format into Composer scene objects;
-// parser-specific intermediate state stays here instead of leaking into the renderer-neutral scene model.
 /// <summary>Imports Wavefront OBJ mesh geometry, MTL diffuse colors, UVs, and diffuse texture references.</summary>
 public static class ObjSceneLoader
 {
-    // FaceVertex pairs one OBJ position index with its optional texture-coordinate index after a face token is
-    // decoded; keeping the pair together simplifies later fan triangulation. Record value semantics make the
-    // snapshot easy to compare/copy without sharing mutable state. Its constructor values (VertexIndex,
-    // TextureIndex) travel together because consumers need a consistent snapshot rather than reading those values
-    // independently from mutable objects.
     private sealed record FaceVertex(int VertexIndex, int TextureIndex);
-    // RawFace keeps a parsed OBJ polygon together with the material and object/group names active when the f
-    // directive was read, so later triangulation still has the correct contextual metadata. Record value semantics
-    // make the snapshot easy to compare/copy without sharing mutable state. Its constructor values (Vertices,
-    // MaterialName, ObjectName) travel together because consumers need a consistent snapshot rather than reading
-    // those values independently from mutable objects.
     private sealed record RawFace(List<FaceVertex> Vertices, string MaterialName, string ObjectName);
-    // ObjMaterial is the small intermediate result of MTL parsing: diffuse color plus an optional texture path are
-    // enough for the OBJ importer to construct the Composer material used by faces. Record value semantics make the
-    // snapshot easy to compare/copy without sharing mutable state. Its constructor values (Color, TexturePath)
-    // travel together because consumers need a consistent snapshot rather than reading those values independently
-    // from mutable objects.
     private sealed record ObjMaterial(Vec3 Color, string? TexturePath);
 
     public static ObjLoadResult LoadIntoScene(
@@ -167,8 +145,6 @@ public static class ObjSceneLoader
         return new ObjLoadResult(filePath, vertices.Count, faces.Count, triangleCount);
     }
 
-    // GetOrCreateGroup maps an OBJ object/group name to one SceneObjectGroup, creating it on first use so faces
-    // with the same name remain grouped in the imported hierarchy.
     private static SceneObjectGroup GetOrCreateGroup(Scene scene, Dictionary<string, SceneObjectGroup> groups, string name)
     {
         string key = string.IsNullOrWhiteSpace(name) ? "OBJ Object" : name;
@@ -178,8 +154,6 @@ public static class ObjSceneLoader
         return group;
     }
 
-    // BuildMaterialCache converts parsed MTL definitions into reusable Composer Material instances before face
-    // emission, avoiding repeated material/texture reconstruction for each triangle.
     private static Dictionary<string, Material> BuildMaterialCache(Dictionary<string, ObjMaterial> materialDefs, string baseDirectory, Material fallback)
     {
         Dictionary<string, Material> result = new(StringComparer.OrdinalIgnoreCase);
@@ -199,13 +173,9 @@ public static class ObjSceneLoader
         return result;
     }
 
-    // ResolveMaterial selects the face’s named material and falls back safely when the OBJ/MTL reference is missing
-    // or incomplete.
     private static Material ResolveMaterial(Dictionary<string, Material> materialCache, string name, Material fallback) =>
         !string.IsNullOrWhiteSpace(name) && materialCache.TryGetValue(name, out Material? material) ? material : fallback;
 
-    // LoadMaterialLibrary parses an .mtl file into named diffuse-color/texture definitions; newmtl commits the
-    // previous definition while subsequent directives modify the current one.
     private static Dictionary<string, ObjMaterial> LoadMaterialLibrary(string filePath)
     {
         Dictionary<string, ObjMaterial> result = new(StringComparer.OrdinalIgnoreCase);
@@ -216,8 +186,6 @@ public static class ObjSceneLoader
         Vec3 currentColor = new(0.82, 0.82, 0.78);
         string? currentTexture = null;
 
-        // Commit stores the MTL definition currently being assembled under its newmtl name, skipping it when no
-        // valid name has been established.
         void Commit()
         {
             if (!string.IsNullOrWhiteSpace(currentName))
@@ -251,8 +219,6 @@ public static class ObjSceneLoader
         return result;
     }
 
-    // ResolveTextureToken extracts the texture filename portion of an MTL map directive after supported options and
-    // resolves it relative to the material-library file.
     private static string ResolveTextureToken(string mtlDirectory, IEnumerable<string> tokens)
     {
         List<string> useful = tokens.Where(t => !t.StartsWith('-')).ToList();
@@ -260,16 +226,12 @@ public static class ObjSceneLoader
         return ResolveRelativePath(mtlDirectory, textureName);
     }
 
-    // ParseMaterialLibraryNames parses an OBJ mtllib directive into the referenced material-library filenames after
-    // comment/whitespace handling.
     private static IEnumerable<string> ParseMaterialLibraryNames(string text)
     {
         if (text.Length == 0) yield break;
         yield return text.Trim('"');
     }
 
-    // ParseFaceVertex decodes an OBJ face token such as v, v/vt, or v/vt/vn into the position and optional UV
-    // indices needed for triangulation.
     private static FaceVertex ParseFaceVertex(string token, int vertexCount, int textureCount, int lineNumber)
     {
         string[] parts = token.Split('/');
@@ -282,8 +244,6 @@ public static class ObjSceneLoader
         return new FaceVertex(vertexIndex, textureIndex);
     }
 
-    // ResolveIndex implements OBJ’s 1-based and negative-relative index rules, translating them into zero-based
-    // indices and rejecting invalid references.
     private static int ResolveIndex(int objIndex, int count, int lineNumber, string kind)
     {
         int zeroBased = objIndex > 0 ? objIndex - 1 : count + objIndex;
@@ -292,11 +252,9 @@ public static class ObjSceneLoader
         return zeroBased;
     }
 
-    // GetUv returns the referenced texture coordinate or a safe default when a face omits UV data.
     private static Vec2 GetUv(List<Vec2> textureCoordinates, int index, Vec2 fallback) =>
         index >= 0 && index < textureCoordinates.Count ? textureCoordinates[index] : fallback;
 
-    // GetBounds computes the source vertex bounding box used by the importer’s normalization/placement transform.
     private static void GetBounds(List<Vec3> vertices, out Vec3 min, out Vec3 max)
     {
         min = vertices[0]; max = vertices[0];
@@ -307,35 +265,19 @@ public static class ObjSceneLoader
         }
     }
 
-    // Transform recenters/scales an OBJ point and applies the requested destination offset uniformly to imported
-    // vertices.
     private static Vec3 Transform(Vec3 p, Vec3 sourceCenter, double scale, Vec3 offset) => (p - sourceCenter) * scale + offset;
-    // IsDegenerate rejects triangles with effectively zero area so invalid geometry does not enter bounds, BVH, or
-    // rendering code.
     private static bool IsDegenerate(Vec3 a, Vec3 b, Vec3 c) => (b - a).Cross(c - a).Length() < 1e-10;
 
-    // StripComment removes the # suffix from an OBJ/MTL line before tokenization so comments never become parser
-    // tokens.
     private static string StripComment(string line)
     {
         int index = line.IndexOf('#');
         return index >= 0 ? line[..index] : line;
     }
 
-    // SplitWhitespace tokenizes a directive on arbitrary whitespace while dropping empty fields.
     private static string[] SplitWhitespace(string line) => line.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
-    // ParseDouble converts user/file text into double and rejects values that violate the numeric/domain
-    // constraints before they can enter scene state.
     private static double ParseDouble(string text, int lineNumber) => double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out double value) ? value : throw new InvalidDataException($"Invalid numeric value '{text}' at OBJ line {lineNumber}.");
-    // ParseLooseDouble converts user/file text into loose double and rejects values that violate the numeric/domain
-    // constraints before they can enter scene state.
     private static double ParseLooseDouble(string text) => double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out double value) ? value : 0.0;
-    // ParseInt converts user/file text into int and rejects values that violate the numeric/domain constraints
-    // before they can enter scene state.
     private static int ParseInt(string text, int lineNumber) => int.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out int value) ? value : throw new InvalidDataException($"Invalid integer value '{text}' at OBJ line {lineNumber}.");
-    // ResolveRelativePath combines an asset reference with the directory of the file that referenced it and
-    // canonicalizes the resulting filesystem path.
     private static string ResolveRelativePath(string baseDirectory, string path) => Path.GetFullPath(Path.IsPathRooted(path) ? path : Path.Combine(baseDirectory, path.Trim('"')));
-    // SanitizeObjectName turns missing/blank object names into a usable editor label and trims real names.
     private static string SanitizeObjectName(string name, string fallback) => string.IsNullOrWhiteSpace(name) ? fallback : name.Trim();
 }

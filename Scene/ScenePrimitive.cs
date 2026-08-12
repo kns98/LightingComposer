@@ -1,8 +1,8 @@
-/*
- * This file belongs to the renderer-neutral scene layer, which is the shared source of truth for geometry,
- * transforms, grouping, materials, resources, and serialization-facing state. Higher layers manipulate these
- * abstractions rather than maintaining parallel copies of scene data.
- */
+// -----------------------------------------------------------------------------
+// File: Scene/ScenePrimitive.cs
+// Purpose: Self-discoverable editable object contract.
+// -----------------------------------------------------------------------------
+
 using LightingShowcase.Math3D;
 
 namespace LightingShowcase.SceneGraph;
@@ -15,9 +15,6 @@ namespace LightingShowcase.SceneGraph;
 public delegate void AddTriangleCallback(Vec3 a, Vec3 b, Vec3 c, Vec2 uvA, Vec2 uvB, Vec2 uvC, Material material);
 
 
-// PrimitiveParameterKind makes a closed set of choices compiler-visible instead of passing loosely related integers
-// or strings. Code that switches over Length, Integer, Number, Toggle, Choice is where the behavioral meaning of
-// each choice is implemented.
 /// <summary>Editor control type for one authored primitive parameter.</summary>
 public enum PrimitiveParameterKind
 {
@@ -43,8 +40,6 @@ public sealed record PrimitiveParameterDescriptor(
     string UnitLabel = "",
     IReadOnlyList<string>? Choices = null)
 {
-    // Normalize returns a unit-length direction while guarding the degenerate near-zero case so division does not
-    // create infinities or unstable directions.
     public double Normalize(double value)
     {
         if (!double.IsFinite(value))
@@ -56,17 +51,12 @@ public sealed record PrimitiveParameterDescriptor(
     }
 }
 
-// IEditablePrimitiveDefinition defines a capability boundary: callers depend on the contract rather than the
-// concrete plugin/backend implementing it. New implementations can therefore participate without changing the core
-// caller.
 /// <summary>Optional editor metadata for procedural definitions with user-editable parameters.</summary>
 public interface IEditablePrimitiveDefinition
 {
     IReadOnlyList<PrimitiveParameterDescriptor> EditableParameters { get; }
 }
 
-// ISceneObjectDefinition defines a capability boundary: callers depend on the contract rather than the concrete
-// plugin/backend implementing it. New implementations can therefore participate without changing the core caller.
 /// <summary>
 /// Contract for insertable objects that can emit their own triangle shadow mesh and own
 /// the gizmo-to-parameter rules used by the editor. Implement this in an external
@@ -103,8 +93,6 @@ public interface ISceneObjectDefinition
 }
 
 
-// IScenePrimitive defines a capability boundary: callers depend on the contract rather than the concrete
-// plugin/backend implementing it. New implementations can therefore participate without changing the core caller.
 /// <summary>Backward-compatible alias for older primitive plugin classes.</summary>
 public interface IScenePrimitive : ISceneObjectDefinition
 {

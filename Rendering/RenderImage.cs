@@ -1,12 +1,5 @@
-/*
- * The code here converts renderer-neutral scene/camera data into pixels or backend-ready state. Dimensions, cache
- * identity, data packing, and deterministic conversion are treated as part of the rendering contract so
- * interactive UI code does not need to know backend details.
- */
 namespace LightingShowcase.Rendering;
 
-// RenderImage owns a pixel buffer plus its dimensions/format semantics so renderers and writers agree on how image
-// memory is laid out.
 /// <summary>Cross-platform RGBA render result. Each uint stores R, G, B, A in low-to-high byte order.</summary>
 public sealed class RenderImage
 {
@@ -27,7 +20,5 @@ public sealed class RenderImage
         PackedRgba32 = packedRgba32;
     }
 
-    // SavePng serializes png from current internal state, making persistence a snapshot operation rather than
-    // allowing the serializer to walk concurrently mutating editor objects.
     public void SavePng(string path) => PngWriter.Write(path, this);
 }

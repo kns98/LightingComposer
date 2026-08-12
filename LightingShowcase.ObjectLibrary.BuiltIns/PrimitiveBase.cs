@@ -1,8 +1,3 @@
-/*
- * Object-library definitions generate scene geometry from named, authored parameters. Keeping those parameters
- * attached to the generated object is important: a cube with width/height/depth is still editable as a cube until
- * a topology edit deliberately converts it into ordinary mesh geometry.
- */
 using LightingShowcase.Math3D;
 using LightingShowcase.SceneGraph;
 
@@ -16,8 +11,6 @@ public abstract class PrimitiveBase : IScenePrimitive, IEditablePrimitiveDefinit
     public abstract PrimitiveGizmoEditMetadata GizmoMetadata { get; }
     public abstract Dictionary<string, double> CreateDefaultParameters();
 
-    // CreateParametersFromBounds constructs parameters from bounds in the normalized form expected downstream, so
-    // allocation plus initialization of its invariants happen together.
     public virtual Dictionary<string, double> CreateParametersFromBounds(Aabb bounds)
     {
         Vec3 size = bounds.Max - bounds.Min;
@@ -110,8 +103,6 @@ public abstract class PrimitiveBase : IScenePrimitive, IEditablePrimitiveDefinit
         return true;
     }
 
-    // Multiply performs component-wise multiplication, preserving independent axes/color channels instead of
-    // reducing them to a scalar.
     protected static bool Multiply(IDictionary<string, double> parameters, string key, double factor)
     {
         factor = SanitizeScale(factor);

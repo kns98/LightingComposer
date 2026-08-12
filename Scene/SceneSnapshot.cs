@@ -1,8 +1,11 @@
-/*
- * This representation separates durable or isolated scene state from the mutable live editor graph. Save/load,
- * undo, background rendering, and tests need snapshots/documents that can be copied or serialized without exposing
- * shared mutable objects across threads.
- */
+// -----------------------------------------------------------------------------
+// File: Scene/SceneSnapshot.cs
+// Purpose: Undo/redo snapshot support.
+//
+// Captures deep copies of recursive scene state and restores them for undo/redo
+// commands. Parent/child links are rebuilt during cloning.
+// -----------------------------------------------------------------------------
+
 using LightingShowcase.Lighting;
 
 namespace LightingShowcase.SceneGraph;

@@ -1,8 +1,3 @@
-/*
- * This is desktop-editor glue around the scene and rendering layers. The code should be read in terms of how it
- * translates user interaction into domain operations while keeping platform UI state, mutable scene state, and
- * renderer state from becoming entangled.
- */
 using LightingShowcase.Math3D;
 
 namespace LightingShowcase.Composer;
@@ -151,9 +146,6 @@ internal sealed record ComposerRenderOptions(
         return string.Join(", ", parts);
     }
 
-    // ValidateColor checks the invariants required for color and throws/reports an error for non-finite,
-    // out-of-range, or otherwise unsupported values. Keeping validation next to mutation prevents invalid state
-    // from propagating into renderers.
     private static void ValidateColor(Vec3 value, string name)
     {
         if (!double.IsFinite(value.X) || !double.IsFinite(value.Y) || !double.IsFinite(value.Z) ||

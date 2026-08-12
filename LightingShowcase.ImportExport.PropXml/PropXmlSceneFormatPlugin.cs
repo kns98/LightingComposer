@@ -1,15 +1,8 @@
-/*
- * This adapter registers PROPXML with the format registry. The registry sees a uniform `SceneFormat` capability,
- * while this assembly remains responsible for constructing the actual PROPXML loader/saver; that keeps the core
- * scene layer free of hard-coded format dependencies.
- */
 using System.IO;
 using LightingShowcase.SceneGraph;
 
 namespace LightingShowcase.ImportExport.PropXml;
 
-// PropXmlSceneFormatPlugin is the adapter that registers this assembly’s capability with a shared registry, keeping
-// discovery separate from the concrete implementation.
 public sealed class PropXmlSceneFormatPlugin : ISceneFormatPlugin
 {
     public string FormatId => "prop-xml";

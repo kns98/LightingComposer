@@ -1,8 +1,12 @@
-/*
- * This file belongs to the renderer-neutral scene layer, which is the shared source of truth for geometry,
- * transforms, grouping, materials, resources, and serialization-facing state. Higher layers manipulate these
- * abstractions rather than maintaining parallel copies of scene data.
- */
+// -----------------------------------------------------------------------------
+// File: Scene/Scene.cs
+// Purpose: Scene root.
+//
+// Owns all object groups and lights, rebuilds acceleration structures, and exposes add/remove/selection helpers.
+// This comment is intentionally kept in source code so future maintainers can
+// understand the role of this file without opening external documentation.
+// -----------------------------------------------------------------------------
+
 using LightingShowcase.Math3D;
 using LightingShowcase.Rendering;
 using LightingShowcase.Lighting;
@@ -18,8 +22,6 @@ public sealed class Scene
 
     private readonly SceneMaterials materials = new();
     private BvhNode? bvhRoot;
-    // BVH creation is lazy, so multiple rendering threads can discover a missing acceleration structure at the same
-    // time. This gate ensures only one thread builds/publishes the tree for a given geometry revision.
     private readonly object accelerationGate = new();
     private readonly Stack<SceneObjectGroup> activeGroups = new();
     private int nextGroupId = 1;
@@ -49,9 +51,6 @@ public sealed class Scene
     }
 
 
-    // Opening a model selects an importer from the extension, clears the previous scene, supplies fallback viewing
-    // lights when the format does not carry lights, and asks the importer to normalize the asset into the
-    // composer’s standard viewing volume.
     /// <summary>Opens any supported static model file as a replacement scene through a format plugin.</summary>
     public ObjLoadResult OpenModelFile(string filePath, Action<ObjLoadProgress>? progress = null)
     {
@@ -96,6 +95,8 @@ public sealed class Scene
 
     /// <summary>Backward-compatible OBJ insert helper routed through the plugin registry.</summary>
     public ObjLoadResult InsertObjFromFile(string filePath, Action<ObjLoadProgress>? progress = null) => InsertModelFromFile(filePath, progress);
+
+    /// <summary>Implements the insert ready made object operation for this file's subsystem.</summary>
     public SceneObjectGroup InsertReadyMadeObject(string objectName)
     {
         SceneObjectGroup group = ObjectLibraryRegistry.Insert(this, materials, objectName);
@@ -184,8 +185,6 @@ public sealed class Scene
         nextGroupId = 1;
         InvalidateAccelerationStructure();
         Description = "Empty scene";
-        // The revision is a cheap coherence token for renderer/editor caches. Any operation that changes world
-        // geometry increments it so cached buffers or evidence can be rejected without deep-comparing the scene.
         Interlocked.Increment(ref revision);
     }
 
@@ -285,6 +284,8 @@ public sealed class Scene
     {
         return new SceneSnapshot(Description, ObjectGroups, Lights);
     }
+
+    /// <summary>Implements the restore snapshot operation for this file's subsystem.</summary>
     public void RestoreSnapshot(SceneSnapshot snapshot)
     {
         Clear();
@@ -294,8 +295,8 @@ public sealed class Scene
         nextGroupId = ObjectGroups.SelectMany(g => g.SelfAndDescendants()).Select(g => g.Id).DefaultIfEmpty(0).Max() + 1;
         RebuildWorldGeometry();
     }
-    // DuplicateGroup creates an independent copy of group with a new scene identity while preserving the source
-    // geometry/material/authored metadata that should carry over.
+
+    /// <summary>Implements the duplicate group operation for this file's subsystem.</summary>
     public SceneObjectGroup DuplicateGroup(int id)
     {
         SceneObjectGroup source = GroupById(id) ?? throw new ArgumentException("Group not found.", nameof(id));
@@ -314,8 +315,8 @@ public sealed class Scene
         RebuildWorldGeometry();
         return duplicate;
     }
-    // DeleteGroup deletes group as a logical editor operation, including the bookkeeping needed so
-    // selection/history/caches do not retain a dangling object reference.
+
+    /// <summary>Implements the delete group operation for this file's subsystem.</summary>
     public void DeleteGroup(int id)
     {
         SceneObjectGroup? group = GroupById(id);
@@ -346,8 +347,6 @@ public sealed class Scene
         return selected.All(group => ReferenceEquals(group.Parent, commonParent));
     }
 
-    // GroupSelectedObjects collects selected objects under a common hierarchy node so they can be manipulated as a
-    // unit without baking away each child’s own geometry/material state.
     /// <summary>Creates a new parent group from selected sibling objects, at any hierarchy depth.</summary>
     public SceneObjectGroup GroupSelectedObjects(IEnumerable<int> ids, string name = "Group")
     {
@@ -651,8 +650,6 @@ public sealed class Scene
         double spanY = Math.Max(1e-9, max.Y - min.Y);
         double spanZ = Math.Max(1e-9, max.Z - min.Z);
         double volume = spanX * spanY * spanZ;
-        // Spatial chunking starts from the cube-root cell size that would divide the object’s bounding volume into
-        // roughly the requested number of chunks; per-axis correction below handles long or flat meshes.
         double cellVolume = volume / Math.Max(1, desiredChunkCount);
         double cellSize = Math.Pow(Math.Max(1e-9, cellVolume), 1.0 / 3.0);
 
@@ -715,8 +712,6 @@ public sealed class Scene
 
     private static List<List<int>> BuildConnectedTriangleComponents(IReadOnlyList<Triangle> triangles)
     {
-        // Connected components are found with union-find: triangles sharing a quantized vertex are unioned, then
-        // triangles with the same root become one component. This avoids an expensive all-pairs adjacency search.
         DisjointSet disjointSet = new(triangles.Count);
         Dictionary<VertexKey, int> firstTriangleAtVertex = new(triangles.Count * 2);
 
@@ -752,8 +747,6 @@ public sealed class Scene
 
     private static List<List<int>> BuildRectangularFacePairs(IReadOnlyList<Triangle> triangles)
     {
-        // An edge-to-triangle adjacency map lets the grouping code identify pairs of triangles that share an edge.
-        // That is the basis for reconstructing logical rectangular faces from triangulated meshes.
         Dictionary<EdgeKey, List<int>> edgeToTriangles = new(triangles.Count * 3);
         for (int i = 0; i < triangles.Count; i++)
         {
@@ -900,9 +893,6 @@ public sealed class Scene
         }
     }
 
-    // Object-local triangles and hierarchy transforms are the editable source of truth. This method flattens them
-    // into the world-space triangle list consumed by renderers and picking, increments the scene revision, and
-    // optionally rebuilds the CPU BVH.
     /// <summary>
     /// Rebuilds visible world geometry. CPU acceleration construction can be
     /// deferred for realtime raster/compute preview and is then created lazily
@@ -923,8 +913,6 @@ public sealed class Scene
                 Triangles.AddRange(group.BuildWorldTriangles());
         }
 
-        // The revision is a cheap coherence token for renderer/editor caches. Any operation that changes world
-        // geometry increments it so cached buffers or evidence can be rejected without deep-comparing the scene.
         Interlocked.Increment(ref revision);
         if (buildAccelerationStructure)
             RebuildAccelerationStructure();
@@ -943,9 +931,6 @@ public sealed class Scene
             bvhRoot = null;
     }
 
-    // The BVH is built lazily so raster/compute-only workflows do not pay CPU acceleration cost. A double-check
-    // under accelerationGate ensures another thread cannot publish a duplicate tree after the initial volatile
-    // read.
     private BvhNode? GetOrBuildAccelerationStructure()
     {
         BvhNode? cached = Volatile.Read(ref bvhRoot);
@@ -973,6 +958,8 @@ public sealed class Scene
         BvhNode? acceleration = GetOrBuildAccelerationStructure();
         return acceleration?.Intersect(ray, 1e-6, double.PositiveInfinity);
     }
+
+    /// <summary>Implements the any intersection operation for this file's subsystem.</summary>
     public bool AnyIntersection(Ray ray, double maxDistance)
     {
         BvhNode? acceleration = GetOrBuildAccelerationStructure();
@@ -985,11 +972,15 @@ public sealed class Scene
         BvhNode? acceleration = GetOrBuildAccelerationStructure();
         return acceleration?.ShadowOpacity(ray, 1e-6, maxDistance, maxSamples) ?? 0.0;
     }
+
+    /// <summary>Implements the quad operation for this file's subsystem.</summary>
     public void Quad(Vec3 a, Vec3 b, Vec3 c, Vec3 d, Material material)
     {
         AddTriangle(a, b, c, new Vec2(0, 0), new Vec2(1, 0), new Vec2(1, 1), material);
         AddTriangle(a, c, d, new Vec2(0, 0), new Vec2(1, 1), new Vec2(0, 1), material);
     }
+
+    /// <summary>Implements the box operation for this file's subsystem.</summary>
     public void Box(Vec3 min, Vec3 max, Material material)
     {
         double x0 = min.X, y0 = min.Y, z0 = min.Z, x1 = max.X, y1 = max.Y, z1 = max.Z;

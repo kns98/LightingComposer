@@ -1,15 +1,8 @@
-/*
- * This adapter registers STL with the format registry. The registry sees a uniform `SceneFormat` capability, while
- * this assembly remains responsible for constructing the actual STL loader/saver; that keeps the core scene layer
- * free of hard-coded format dependencies.
- */
 using System.IO;
 using LightingShowcase.SceneGraph;
 
 namespace LightingShowcase.ImportExport.Stl;
 
-// StlSceneFormatPlugin is the adapter that registers this assembly’s capability with a shared registry, keeping
-// discovery separate from the concrete implementation.
 public sealed class StlSceneFormatPlugin : ISceneFormatPlugin
 {
     public string FormatId => "stl";

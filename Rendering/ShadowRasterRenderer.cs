@@ -1,8 +1,14 @@
-/*
- * The code here converts renderer-neutral scene/camera data into pixels or backend-ready state. Dimensions, cache
- * identity, data packing, and deterministic conversion are treated as part of the rendering contract so
- * interactive UI code does not need to know backend details.
- */
+// -----------------------------------------------------------------------------
+// File: Rendering/ShadowRasterRenderer.cs
+// Purpose: Independent fast raster preview with depth buffering and shadow maps.
+//
+// This renderer is independent of the UI and the CPU/Vulkan
+// ray tracers. It owns a small AMD-style preview pipeline: build reusable shadow
+// maps from scene lights, project triangles, rasterize a depth buffer, and shade
+// visible pixels with direct lighting. It is not a path tracer and it does not
+// call Scene.Intersect for visibility or shadows.
+// -----------------------------------------------------------------------------
+
 using System.Diagnostics;
 using System.Threading;
 using LightingShowcase.CameraSystem;
@@ -12,9 +18,6 @@ using LightingShowcase.SceneGraph;
 
 namespace LightingShowcase.Rendering;
 
-// ShadowRasterRenderer turns camera/scene state into an image using one rendering backend. Its caches/resources are
-// implementation details of that backend; callers should depend on the common rendered result rather than those
-// internals.
 /// <summary>Independent realtime-style raster preview renderer with z-buffered triangle drawing and shadow-map shadows.</summary>
 public static class ShadowRasterRenderer
 {
@@ -25,8 +28,6 @@ public static class ShadowRasterRenderer
     private const int MaxInteractiveLights = 2;
 
 
-    // PreviewCache stores derived data that is expensive to rebuild; correctness depends on invalidating it
-    // whenever the source scene state used to create it changes.
     /// <summary>
     /// Reusable raster cache. Shadow maps are view-independent, so they should be
     /// rebuilt only when the scene or lights change, not on every camera orbit.
@@ -46,8 +47,6 @@ public static class ShadowRasterRenderer
 
         public SceneCacheStamp CacheStamp { get; }
         public Scene Scene { get; }
-        // IsCurrent tests whether current is true for the supplied/current value. Keeping the predicate here
-        // ensures every caller uses the same definition instead of duplicating a slightly different condition.
         public bool IsCurrent(Scene scene) => CacheStamp.Matches(scene);
         public int TriangleCount { get; }
         public int LightCount { get; }
@@ -147,8 +146,6 @@ public static class ShadowRasterRenderer
         return prepared.ToArray();
     }
 
-    // ClearBackground removes/resets background to its empty/default state. This is an explicit state transition
-    // rather than leaving old values around for later code to accidentally reuse.
     private static void ClearBackground(uint[] pixels, int width, int height)
     {
         for (int y = 0; y < height; y++)
@@ -254,8 +251,6 @@ public static class ShadowRasterRenderer
         }
     }
 
-    // ShadeFast evaluates fast from hit/material/light information, combining the relevant surface and illumination
-    // terms into the color returned to the renderer.
     private static Vec3 ShadeFast(Vec3 albedo, Vec3 point, Vec3 normal, IReadOnlyList<PreparedLight> lights)
     {
         Vec3 color = albedo * 0.085;
@@ -410,8 +405,6 @@ public static class ShadowRasterRenderer
         return maps;
     }
 
-    // CreateShadowProjection constructs shadow projection in the normalized form expected downstream, so allocation
-    // plus initialization of its invariants happen together.
     private static ShadowProjection CreateShadowProjection(SceneLight light, Vec3 center, double radius)
     {
         if (light.Kind == SceneLightKind.Directional)
@@ -469,17 +462,12 @@ public static class ShadowRasterRenderer
                 if (depth < map.Depth[index])
                 {
                     map.Depth[index] = depth;
-                    // HasDepth is a read-only predicate over the object’s existing state; it exists so callers
-                    // share one exact condition when enabling commands or deciding whether an operation is
-                    // applicable.
                     map.HasDepth = true;
                 }
             }
         }
     }
 
-    // FindShadowFactorFast searches for shadow factor fast and returns the matching object/value rather than
-    // assuming it exists. Callers can therefore distinguish a missing match from the found instance.
     private static double FindShadowFactorFast(ShadowMap? map, Vec3 point, Vec3 normal)
     {
         if (map == null || !map.Enabled)
@@ -499,8 +487,6 @@ public static class ShadowRasterRenderer
         return 0.30 + visibility * 0.70;
     }
 
-    // FindShadowFactor searches for shadow factor and returns the matching object/value rather than assuming it
-    // exists. Callers can therefore distinguish a missing match from the found instance.
     private static double FindShadowFactor(ShadowMap? map, Vec3 point, Vec3 normal)
     {
         if (map == null || !map.Enabled)
@@ -589,8 +575,6 @@ public static class ShadowRasterRenderer
         double CosOuter,
         double CosInner);
 
-    // ShadowMap represents sampled/mapped data together with the addressing/transform rules needed to look values
-    // up consistently.
     internal sealed class ShadowMap
     {
         public string LightId { get; }
@@ -635,16 +619,12 @@ public static class ShadowRasterRenderer
             Bias = Math.Max(0.0001, bias);
         }
 
-        // CreateOrthographic constructs orthographic in the normalized form expected downstream, so allocation plus
-        // initialization of its invariants happen together.
         public static ShadowProjection CreateOrthographic(Vec3 origin, Vec3 forward, double halfExtent, double farPlane, double bias)
         {
             CreateBasis(forward, out Vec3 f, out Vec3 r, out Vec3 u);
             return new ShadowProjection(origin, f, r, u, false, halfExtent, 1.0, farPlane, bias);
         }
 
-        // CreatePerspective constructs perspective in the normalized form expected downstream, so allocation plus
-        // initialization of its invariants happen together.
         public static ShadowProjection CreatePerspective(Vec3 origin, Vec3 forward, double fovRadians, double farPlane, double bias)
         {
             CreateBasis(forward, out Vec3 f, out Vec3 r, out Vec3 u);
@@ -698,8 +678,6 @@ public static class ShadowRasterRenderer
             return true;
         }
 
-        // CreateBasis constructs basis in the normalized form expected downstream, so allocation plus
-        // initialization of its invariants happen together.
         private static void CreateBasis(Vec3 forward, out Vec3 f, out Vec3 r, out Vec3 u)
         {
             f = forward.Normalize();

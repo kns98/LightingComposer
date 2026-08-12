@@ -1,8 +1,12 @@
-/*
- * This file belongs to the renderer-neutral scene layer, which is the shared source of truth for geometry,
- * transforms, grouping, materials, resources, and serialization-facing state. Higher layers manipulate these
- * abstractions rather than maintaining parallel copies of scene data.
- */
+// -----------------------------------------------------------------------------
+// File: Scene/SceneObjectGroup.cs
+// Purpose: Editable recursive object group.
+//
+// A group can now contain triangles and child groups. Top-level groups are shown
+// in the editor as selectable objects; ungrouping promotes child groups back into
+// the scene so compound props such as tables can be edited as legs/top pieces.
+// -----------------------------------------------------------------------------
+
 using LightingShowcase.Math3D;
 
 namespace LightingShowcase.SceneGraph;
@@ -56,9 +60,6 @@ public sealed class SceneObjectGroup
     /// <summary>True when this node carries explicit logical-face topology for its current local triangle list.</summary>
     public bool HasLogicalFaceTopology => logicalFaceTriangleGroups.Count > 0;
 
-    // SetLogicalFaceTriangleGroups validates and stores the mapping from logical faces to triangle indices. Later
-    // selection and face editing reuse this stable topology rather than regrouping triangles heuristically on every
-    // pick.
     /// <summary>Replaces the logical-face topology with validated triangle-index groups.</summary>
     public void SetLogicalFaceTriangleGroups(IEnumerable<IEnumerable<int>> groups)
     {
@@ -101,10 +102,6 @@ public sealed class SceneObjectGroup
     }
 
 
-    // ApplyParametricScaleDelta tries to express a gizmo scale change by modifying the primitive’s authored
-    // dimensions through its editable definition. Success lets geometry regenerate while remaining procedural.
-    // Primitive definitions are resolved through the registry, allowing plugin-provided primitives to follow the
-    // same path as built-ins.
     /// <summary>Applies an incremental gizmo scale directly to authored primitive size parameters.</summary>
     public bool ApplyParametricScaleDelta(char axis, double factor)
     {
@@ -117,10 +114,6 @@ public sealed class SceneObjectGroup
     }
 
 
-    // ApplyPendingTransformToPrimitiveParameters tries to absorb the group’s pending transform into procedural
-    // parameters before geometry is baked, preserving the fact that the object is still a named primitive such as a
-    // cube or cylinder. Primitive definitions are resolved through the registry, allowing plugin-provided
-    // primitives to follow the same path as built-ins.
     /// <summary>
     /// Applies pending move/scale gizmo transforms to authored primitive parameters.
     /// Returns true when the shadow mesh should be regenerated from parameters.
@@ -175,16 +168,11 @@ public sealed class SceneObjectGroup
 
     /// <summary>Controls whether this group and its descendants participate in preview, raytracing, export, and bounds.</summary>
     public bool Visible { get; set; } = true;
-    // IsSelectable is a read-only predicate over the object’s existing state; it exists so callers share one exact
-    // condition when enabling commands or deciding whether an operation is applicable.
     public bool IsSelectable { get; }
 
     public bool HasChildren => Children.Count > 0;
     public bool HasLocalGeometry => LocalTriangles.Count > 0;
 
-    // The SceneObjectGroup constructor establishes the stable object id, display name, and selectability flag.
-    // Geometry and children may be attached later, but identity is fixed immediately so hierarchy, selection, and
-    // history can refer to the group consistently.
     public SceneObjectGroup(int id, string name, bool selectable = true)
     {
         Id = id;
@@ -192,8 +180,6 @@ public sealed class SceneObjectGroup
         IsSelectable = selectable;
     }
 
-    // AddChild attaches a child group to this hierarchy node, making parent traversal, bounds, transform, and
-    // material operations include that child.
     public void AddChild(SceneObjectGroup child, bool recalculatePivot = true)
     {
         if (child == null) throw new ArgumentNullException(nameof(child));
@@ -215,8 +201,6 @@ public sealed class SceneObjectGroup
         return true;
     }
 
-    // SelfAndDescendants enumerates this group and then recursively yields descendants, providing one consistent
-    // hierarchy traversal rule for callers.
     public IEnumerable<SceneObjectGroup> SelfAndDescendants()
     {
         yield return this;
@@ -266,8 +250,6 @@ public sealed class SceneObjectGroup
         LocalTriangles.EnsureCapacity(checked(LocalTriangles.Count + additionalTriangleCount));
     }
 
-    // RecalculatePivot recomputes the pivot from the bounds of local geometry and descendants so rotation/scale
-    // gizmos are centered on actual content.
     public void RecalculatePivot()
     {
         bool hasPoint = false;
@@ -292,8 +274,6 @@ public sealed class SceneObjectGroup
         Pivot = hasPoint ? (min + max) * 0.5 : Vec3.Zero;
     }
 
-    // BakeCurrentTransform applies the group’s pending position/rotation/scale to geometry/hierarchy and then
-    // resets transform fields to identity, turning authored transform state into baked geometry.
     /// <summary>Bakes this group's pending transform into all contained geometry, including descendants.</summary>
     public void BakeCurrentTransform()
     {
@@ -315,8 +295,6 @@ public sealed class SceneObjectGroup
         RecalculatePivot();
     }
 
-    // BakeTransform propagates a supplied transform through the group and descendants, composing it with child
-    // transforms so world-space placement is preserved.
     /// <summary>
     /// Applies one transform directly to authored triangle positions and normals.
     /// The group transform fields remain identity, so renderers consume ordinary
@@ -336,8 +314,6 @@ public sealed class SceneObjectGroup
         RecalculatePivot();
     }
 
-    // ApplyBakedTransform rewrites local triangles with the supplied transform and updates pivot/derived state to
-    // match the baked geometry.
     /// <summary>
     /// Applies or reverses a previously baked transform around a fixed pivot.
     /// This is used by the composer's undo/redo command without storing a second
@@ -542,10 +518,6 @@ public sealed class SceneObjectGroup
         RecalculatePivot();
     }
 
-    // RetileTexture recomputes texture coordinates from world dimensions and tile size so texture density stays
-    // approximately constant when object size changes, while keeping parametric projection metadata synchronized.
-    // Procedural/object-library metadata is accessed through the registry so editable primitive identity survives
-    // operations that should preserve it.
     /// <summary>Reprojects all textured triangles using a chosen scene-unit tile size.</summary>
     public void RetileTexture(double tileWorldUnits)
     {
@@ -585,9 +557,6 @@ public sealed class SceneObjectGroup
             ObjectLibraryRegistry.StoreParametricTextureProjection(this, safeTileWorldUnits, forceBoxProjection: false);
     }
 
-    // ClearTexture removes/resets texture to its empty/default state. This is an explicit state transition rather
-    // than leaving old values around for later code to accidentally reuse. Procedural/object-library metadata is
-    // accessed through the registry so editable primitive identity survives operations that should preserve it.
     public void ClearTexture()
     {
         ClearTexture(MaterialTextureSlot.BaseColor);
@@ -623,8 +592,6 @@ public sealed class SceneObjectGroup
         return count;
     }
 
-    // SimplifyGeometry bakes transforms, simplifies local meshes recursively, and returns the number of triangles
-    // removed so callers can report the actual reduction.
     /// <summary>
     /// Reduces triangle count in this group and its descendants using a fast
     /// spatial decimator.  Transforms are baked first so simplification operates
@@ -670,8 +637,6 @@ public sealed class SceneObjectGroup
         RecalculatePivot();
     }
 
-    // FirstMaterialOrDefault walks this group and descendants and returns the first material found, giving
-    // inspector code a representative editable material without duplicating hierarchy traversal.
     /// <summary>Returns the first material found in this group or any descendant.</summary>
     public Material? FirstMaterialOrDefault()
     {
@@ -689,8 +654,6 @@ public sealed class SceneObjectGroup
             ? bounds
             : new Aabb(Vec3.Zero, Vec3.Zero);
 
-    // TryGetWorldBounds accumulates world-space bounds from local geometry and descendants and reports false when
-    // the hierarchy contains no geometric point, avoiding a fabricated zero-sized box.
     /// <summary>Computes bounds without materializing world-triangle copies when the subtree has identity transforms.</summary>
     internal bool TryGetWorldBounds(bool includeHidden, out Aabb bounds)
     {
@@ -752,8 +715,6 @@ public sealed class SceneObjectGroup
             child.AccumulateLocalBounds(includeHidden, ref hasPoint, ref min, ref max);
     }
 
-    // BuildWorldTriangles materializes local triangles in world coordinates, including hierarchy transforms, so
-    // renderers/exporters do not need to reimplement transform composition.
     /// <summary>Builds visible world triangles while preserving each leaf group id for picking.</summary>
     public IEnumerable<Triangle> BuildWorldTriangles() => BuildWorldTriangles(includeHidden: false);
 

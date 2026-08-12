@@ -1,8 +1,3 @@
-/*
- * The code here converts renderer-neutral scene/camera data into pixels or backend-ready state. Dimensions, cache
- * identity, data packing, and deterministic conversion are treated as part of the rendering contract so
- * interactive UI code does not need to know backend details.
- */
 using System.Buffers.Binary;
 using System.IO.Compression;
 
@@ -63,8 +58,6 @@ public static class PngWriter
     }
 
 
-    // WriteRgba writes rgba to the external stream/document in the format’s required order, using stable
-    // indices/references so another reader can reconstruct the same relationships.
     /// <summary>Writes an 8-bit RGBA pixel buffer to a PNG file.</summary>
     public static void WriteRgba(string path, int width, int height, byte[] rgba)
     {
@@ -111,8 +104,6 @@ public static class PngWriter
         WriteChunk(output, "IEND"u8, ReadOnlySpan<byte>.Empty);
     }
 
-    // WriteChunk writes chunk to the external stream/document in the format’s required order, using stable
-    // indices/references so another reader can reconstruct the same relationships.
     private static void WriteChunk(Stream output, ReadOnlySpan<byte> type, ReadOnlySpan<byte> data)
     {
         Span<byte> number = stackalloc byte[4];
@@ -192,8 +183,6 @@ public static class PngWriter
             completed = true;
         }
 
-        // Dispose ends this object’s active lifetime: owned cancellations/resources/listeners are released so
-        // completed windows/renderers do not keep receiving work or retain unmanaged memory.
         protected override void Dispose(bool disposing)
         {
             if (disposing) Complete();

@@ -1,14 +1,8 @@
-/*
- * This UI code turns editor state into controls and converts user edits back into validated domain operations.
- * Dialog/window state is intentionally temporary: values should only become authoritative scene changes through
- * the session/controller path, which preserves cancel, undo, and renderer invalidation behavior.
- */
 using System.ComponentModel;
 using System.Runtime.InteropServices;
 
 namespace LightingShowcase.Composer.Navigation.Windows;
 
-// WindowsPrecisionTouchpadApi owns resources/subscriptions whose lifetime must be ended explicitly.
 /// <summary>
 /// Direct Windows 11 Precision Touchpad API loader.
 ///
@@ -30,9 +24,6 @@ internal sealed unsafe class WindowsPrecisionTouchpadApi : IDisposable
         ref uint pointerCount,
         WindowsPointerTouchInfo* touchpadInfo);
 
-    // These P/Invoke declarations are the narrow boundary between managed Avalonia code and Windows pointer APIs.
-    // Signatures and calling conventions must match the native ABI exactly; changing field sizes or character sets
-    // can corrupt the call stack/data.
     [DllImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool GetPointerType(
@@ -120,9 +111,6 @@ internal sealed unsafe class WindowsPrecisionTouchpadApi : IDisposable
             registerWindow(hwnd, false);
     }
 
-    // IsTouchpadPointer tests whether touchpad pointer is true for the supplied/current value. Keeping the
-    // predicate here ensures every caller uses the same definition instead of duplicating a slightly different
-    // condition.
     public bool IsTouchpadPointer(uint pointerId)
     {
         return GetPointerType(pointerId, out WindowsPointerInputType pointerType)
@@ -167,8 +155,6 @@ internal sealed unsafe class WindowsPrecisionTouchpadApi : IDisposable
         return true;
     }
 
-    // Dispose ends this object’s active lifetime: owned cancellations/resources/listeners are released so completed
-    // windows/renderers do not keep receiving work or retain unmanaged memory.
     public void Dispose()
     {
         if (disposed)

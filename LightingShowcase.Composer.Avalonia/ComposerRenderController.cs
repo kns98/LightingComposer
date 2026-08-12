@@ -1,10 +1,3 @@
-/*
- * Rendering requests arrive much faster than a heavyweight renderer can necessarily finish them, so this
- * controller behaves like a small scheduler. It coalesces repeated requests, cancels obsolete non-interactive
- * frames, lowers interactive resolution when appropriate, and only presents a completed frame if it still
- * corresponds to the newest request. That prevents stale renders from flashing into the viewport after the user
- * has already moved on.
- */
 using System.Diagnostics;
 using Avalonia;
 using Avalonia.Controls;
@@ -44,12 +37,7 @@ internal sealed class ComposerRenderController : IDisposable
     private bool renderAgain;
     private bool pendingInteractive;
     private long renderVersion;
-    // Only the newest interactive render is allowed to publish. This token source belongs to the currently running
-    // request so camera movement, edits, or a backend change can cancel obsolete work before it races with the next
-    // frame.
     private CancellationTokenSource? activeRenderCancellation;
-    // Resize events arrive in bursts. This token source cancels the previous debounce delay, so expensive rendering
-    // resumes only after the latest size has had a short quiet period.
     private CancellationTokenSource? resizeDebounceCancellation;
 
     public ComposerRenderController(
@@ -74,8 +62,6 @@ internal sealed class ComposerRenderController : IDisposable
 
     public Func<bool> ObjectGizmoOnlyProvider { get; set; } = static () => false;
 
-    // IsRendering mirrors the controller’s render-loop flag, allowing input/window code to ask whether a frame is
-    // actively being produced without being able to mutate the scheduler state.
     public bool IsRendering => rendering;
     public int LastRenderWidth { get; private set; } = 1;
     public int LastRenderHeight { get; private set; } = 1;
@@ -89,9 +75,6 @@ internal sealed class ComposerRenderController : IDisposable
         renderOptions[kind] = options;
     }
 
-    // CanRenderContinuously decides whether drag/navigation can request another frame immediately. The software
-    // rasterizer is always considered fast enough, the CPU ray tracer is deliberately excluded, and Vulkan modes
-    // are enabled only after a measured frame time exists and stays below 160 ms for raster or 220 ms for compute.
     public bool CanRenderContinuously(ComposerRendererKind renderer)
     {
         if (renderer == ComposerRendererKind.Raster)
@@ -103,10 +86,6 @@ internal sealed class ComposerRenderController : IDisposable
         return milliseconds <= (renderer == ComposerRendererKind.VulkanRaster ? 160.0 : 220.0);
     }
 
-    // RequestRenderAsync is the render coalescer. It increments a version for every request, cancels an active
-    // frame when a new non-interactive request supersedes it, and if a render is already running merely sets
-    // renderAgain. The loop then renders the newest pending state without starting overlapping frames. Cancellation
-    // is propagated so shutdown or a newer request can make obsolete work stop early.
     public async Task RequestRenderAsync(bool interactive)
     {
         if (!session.HasRenderableScene || lifetimeToken.IsCancellationRequested)
@@ -115,8 +94,6 @@ internal sealed class ComposerRenderController : IDisposable
         pendingInteractive = interactive;
         renderVersion++;
         if (!interactive)
-            // Interactive rendering is latest-wins. Cancel the older request before starting another so a slow
-            // frame cannot finish later and overwrite a newer camera/scene view.
             activeRenderCancellation?.Cancel();
 
         if (rendering)
@@ -156,11 +133,6 @@ internal sealed class ComposerRenderController : IDisposable
         }
     }
 
-    // RenderOneFrameAsync takes a snapshot of renderer choice, options, camera, output size, and gizmo mode for one
-    // frame, renders that snapshot on a worker thread, and discards the result if cancellation or a newer request
-    // makes it stale. Accepted frames update exponentially smoothed timing, bitmap pixels, FPS/memory statistics,
-    // and backend details. Potentially blocking/CPU work runs on a worker task rather than Avalonia’s UI thread.
-    // Cancellation is propagated so shutdown or a newer request can make obsolete work stop early.
     private async Task RenderOneFrameAsync(bool interactive, long requestVersion, CancellationToken token)
     {
         ComposerRendererKind renderer = selectedRenderer();
@@ -180,8 +152,6 @@ internal sealed class ComposerRenderController : IDisposable
 
         try
         {
-            // Rendering is CPU/GPU orchestration work that must not block Avalonia’s UI thread. The worker task
-            // produces an immutable frame that is published only after cancellation/revision checks succeed.
             ComposerFrame frame = await Task.Run(
                 () => session.Render(
                     renderer,
@@ -222,9 +192,6 @@ internal sealed class ComposerRenderController : IDisposable
         }
     }
 
-    // ScheduleResizeRender debounces resize-driven rendering. Each resize cancels the previous delay and starts a
-    // linked cancellation source, so only the last resize in a burst survives long enough to request a full render.
-    // Cancellation is propagated so shutdown or a newer request can make obsolete work stop early.
     public void ScheduleResizeRender()
     {
         if (!session.HasRenderableScene || lifetimeToken.IsCancellationRequested)
@@ -236,15 +203,10 @@ internal sealed class ComposerRenderController : IDisposable
         _ = RenderAfterResizeDelayAsync(cancellation);
     }
 
-    // RenderAfterResizeDelayAsync waits 140 ms after the most recent resize before requesting a non-interactive
-    // frame. Cancellation is expected during continuous resizing and is swallowed; the exact cancellation source is
-    // then cleared and disposed.
     private async Task RenderAfterResizeDelayAsync(CancellationTokenSource cancellation)
     {
         try
         {
-            // The resize debounce intentionally waits for a short quiet period. Continuous window-resize events
-            // cancel this delay, avoiding a full render for every intermediate pixel size.
             await Task.Delay(140, cancellation.Token);
             await RequestRenderAsync(interactive: false);
         }
@@ -259,33 +221,23 @@ internal sealed class ComposerRenderController : IDisposable
         }
     }
 
-    // StopCurrentRenderAsync invalidates the current render version, clears queued follow-up work, cancels the
-    // active frame, and waits in short 8 ms intervals until the render loop has actually exited. Callers can
-    // therefore know that no old frame is still in flight before replacing scene state. Cancellation is propagated
-    // so shutdown or a newer request can make obsolete work stop early.
     public async Task StopCurrentRenderAsync()
     {
         renderVersion++;
         renderAgain = false;
         pendingInteractive = false;
-        // Interactive rendering is latest-wins. Cancel the older request before starting another so a slow frame
-        // cannot finish later and overwrite a newer camera/scene view.
         activeRenderCancellation?.Cancel();
 
         while (rendering && !lifetimeToken.IsCancellationRequested)
             await Task.Delay(8, lifetimeToken);
     }
 
-    // CancelCurrentRender marks any current result obsolete by advancing the version and signals its cancellation
-    // token. Unlike StopCurrentRenderAsync, it does not wait for the worker to finish.
     public void CancelCurrentRender()
     {
         renderVersion++;
         activeRenderCancellation?.Cancel();
     }
 
-    // ClearImage detaches and disposes the current WriteableBitmap, then resets remembered dimensions to 1×1.
-    // Disposing the old bitmap is necessary because Avalonia bitmaps own unmanaged pixel resources.
     public void ClearImage()
     {
         WriteableBitmap? old = bitmap;
@@ -320,10 +272,6 @@ internal sealed class ComposerRenderController : IDisposable
         return (width, height);
     }
 
-    // ShowImage copies the renderer’s packed RGBA pixels into an Avalonia WriteableBitmap. It reallocates only when
-    // dimensions change, locks the framebuffer for direct row copies, respects the destination row stride, then
-    // invalidates the image so Avalonia repaints the new pixels. Row data is copied directly into the destination
-    // buffer, so byte count and destination stride are handled explicitly.
     private unsafe void ShowImage(RenderImage rendered)
     {
         bool sizeChanged = bitmap == null ||
@@ -356,12 +304,8 @@ internal sealed class ComposerRenderController : IDisposable
         image.InvalidateVisual();
     }
 
-    // AlignToEight rounds a positive dimension up to the next multiple of eight with bit masking, never allowing a
-    // value below eight.
     private static int AlignToEight(int value) => Math.Max(8, (value + 7) & ~7);
 
-    // FormatBytes formats process memory as GiB once it reaches one GiB and otherwise as MiB, keeping the status
-    // line compact while retaining useful scale.
     private static string FormatBytes(long bytes)
     {
         const double gib = 1024.0 * 1024.0 * 1024.0;
@@ -369,8 +313,6 @@ internal sealed class ComposerRenderController : IDisposable
         return bytes >= gib ? $"{bytes / gib:0.00} GiB" : $"{bytes / mib:0} MiB";
     }
 
-    // Dispose ends this object’s active lifetime: owned cancellations/resources/listeners are released so completed
-    // windows/renderers do not keep receiving work or retain unmanaged memory.
     public void Dispose()
     {
         activeRenderCancellation?.Cancel();

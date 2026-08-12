@@ -1,9 +1,13 @@
-/*
- * The Vulkan path makes resource ownership and cache validity explicit. CPU-side scene data is packed into GPU
- * buffers/images, commands are submitted against those resources, and stale resources must be rebuilt when
- * geometry or transforms change; a numerically correct algorithm can still be wrong here if lifetime or
- * synchronization is mishandled.
- */
+// -----------------------------------------------------------------------------
+// File: Rendering/VeldridVulkanDevicePreflight.cs
+// Purpose: Runs Vulkan/Veldrid device creation in an isolated child process.
+//
+// Some Vulkan driver/Veldrid failures can terminate the process with a native
+// fast-fail such as 0xc0000409 before managed exception handlers can run.  This
+// helper lets the main app find and report that exact failure without losing the
+// editor process.
+// -----------------------------------------------------------------------------
+
 using System.Diagnostics;
 using Veldrid;
 
@@ -13,9 +17,6 @@ public static class VeldridVulkanDevicePreflight
 {
     public const string ChildArgument = "--lighting-showcase-vulkan-device-test";
 
-    // RunChildDeviceCreationTest executes child device creation test as one coordinated action and centralizes
-    // success/failure handling so callers do not each implement inconsistent exception/UI behavior. GPU resource
-    // creation/update is explicit, so correct lifetime and cache invalidation are part of the method’s correctness.
     public static int RunChildDeviceCreationTest()
     {
         try

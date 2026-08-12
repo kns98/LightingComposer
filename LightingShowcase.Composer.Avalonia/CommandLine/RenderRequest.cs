@@ -1,15 +1,8 @@
-/*
- * This is desktop-editor glue around the scene and rendering layers. The code should be read in terms of how it
- * translates user interaction into domain operations while keeping platform UI state, mutable scene state, and
- * renderer state from becoming entangled.
- */
 using LightingShowcase.Math3D;
 using LightingShowcase.SceneGraph;
 
 namespace LightingShowcase.CommandLine;
 
-// RenderRequest packages all inputs for one operation so validation/execution can consume a stable request instead
-// of reading changing UI state piecemeal.
 public sealed class RenderRequest
 {
     private static readonly string[] KnownOptions =
@@ -85,8 +78,6 @@ public sealed class RenderRequest
     };
 
 
-    // ParseBackend converts user/file text into backend and rejects values that violate the numeric/domain
-    // constraints before they can enter scene state.
     public static RenderBackend ParseBackend(string? value)
     {
         string normalized = string.IsNullOrWhiteSpace(value)
@@ -134,16 +125,10 @@ public sealed class RenderRequest
         _ = ParseColor(BackgroundBottom, nameof(BackgroundBottom));
     }
 
-    // ParseVector converts user/file text into vector and rejects values that violate the numeric/domain
-    // constraints before they can enter scene state.
     public static Vec3? ParseVector(string? value, string name) => ParseTriple(value, name, requireNonNegative: false);
 
-    // ParseColor converts user/file text into color and rejects values that violate the numeric/domain constraints
-    // before they can enter scene state.
     public static Vec3? ParseColor(string? value, string name) => ParseTriple(value, name, requireNonNegative: true);
 
-    // ParseTriple converts user/file text into triple and rejects values that violate the numeric/domain
-    // constraints before they can enter scene state.
     private static Vec3? ParseTriple(string? value, string name, bool requireNonNegative)
     {
         if (string.IsNullOrWhiteSpace(value)) return null;

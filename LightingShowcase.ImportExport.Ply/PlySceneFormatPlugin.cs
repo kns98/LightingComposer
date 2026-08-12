@@ -1,15 +1,8 @@
-/*
- * This adapter registers PLY with the format registry. The registry sees a uniform `SceneFormat` capability, while
- * this assembly remains responsible for constructing the actual PLY loader/saver; that keeps the core scene layer
- * free of hard-coded format dependencies.
- */
 using System.IO;
 using LightingShowcase.SceneGraph;
 
 namespace LightingShowcase.ImportExport.Ply;
 
-// PlySceneFormatPlugin is the adapter that registers this assembly’s capability with a shared registry, keeping
-// discovery separate from the concrete implementation.
 public sealed class PlySceneFormatPlugin : ISceneFormatPlugin
 {
     public string FormatId => "ply";

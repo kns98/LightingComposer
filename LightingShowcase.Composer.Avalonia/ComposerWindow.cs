@@ -1,8 +1,3 @@
-/*
- * This UI code turns editor state into controls and converts user edits back into validated domain operations.
- * Dialog/window state is intentionally temporary: values should only become authoritative scene changes through
- * the session/controller path, which preserves cancel, undo, and renderer invalidation behavior.
- */
 using System.Diagnostics;
 using Avalonia;
 using Avalonia.Controls;
@@ -16,20 +11,10 @@ using LightingShowcase.SceneGraph;
 
 namespace LightingShowcase.Composer;
 
-// ComposerWindow owns temporary Avalonia presentation/edit state. Values become durable only when accepted and
-// routed through the relevant session/controller operation, preserving validation and cancellation semantics.
 internal sealed class ComposerWindow : Window
 {
     private sealed record RendererChoice(ComposerRendererKind Kind, string Label, string Description)
     {
-        // ToString returns the human-facing label/name for this value so Avalonia controls display meaningful text
-        // instead of the generated record/type representation.
-        // ToString returns the human-facing label/name for this value so Avalonia controls display meaningful text
-        // instead of the generated record/type representation.
-        // ToString returns the human-facing label/name for this value so Avalonia controls display meaningful text
-        // instead of the generated record/type representation.
-        // ToString returns the human-facing label/name for this value so Avalonia controls display meaningful text
-        // instead of the generated record/type representation.
         public override string ToString() => Label;
     }
 
@@ -46,6 +31,21 @@ internal sealed class ComposerWindow : Window
     private sealed record MoveAxisChoice(ComposerGizmoAxis Axis, string Label)
     {
         public override string ToString() => Label;
+    }
+
+    private sealed class LightGizmoDragState
+    {
+        public LightGizmoDragState(Vec3 startPosition, Point lastImagePoint, ComposerGizmoHit hit)
+        {
+            StartPosition = startPosition;
+            LastImagePoint = lastImagePoint;
+            Hit = hit;
+        }
+
+        public Vec3 StartPosition { get; }
+        public Point LastImagePoint { get; set; }
+        public ComposerGizmoHit Hit { get; }
+        public double AccumulatedGesture { get; set; }
     }
 
 
@@ -151,6 +151,7 @@ internal sealed class ComposerWindow : Window
 
     private bool leftPressed;
     private Point leftPressPoint;
+    private LightGizmoDragState? lightGizmoDrag;
     private readonly DispatcherTimer hoverPulseTimer;
     private long lastHoverProbeTimestamp;
 
@@ -308,7 +309,7 @@ internal sealed class ComposerWindow : Window
             () => SelectedRenderer.Kind,
             () => SelectedRenderer.Label,
             requestRender => ClearMeshHoverOverlay(requestRender),
-            ShowFaceContextMenuAsync,
+            ShowViewportContextMenuAsync,
             lifetimeCancellation.Token);
 
         menuController = new ComposerMenuController(
@@ -333,6 +334,7 @@ internal sealed class ComposerWindow : Window
             index => selectionModeBox.SelectedIndex = index,
             index => gizmoModeBox.SelectedIndex = index,
             index => moveAxisBox.SelectedIndex = index,
+            () => { OpenLightEditor(session.SelectedLightIndex); return Task.CompletedTask; },
             OpenRenderSettingsAsync);
 
         selectionController = new ComposerSelectionController(
@@ -387,9 +389,6 @@ internal sealed class ComposerWindow : Window
         Closed += (_, _) => DisposeWindowResources();
     }
 
-    // WireEvents connects the window’s controls and pointer/keyboard lifecycle events to their handlers after
-    // construction. Centralizing the wiring makes it easier to see which user actions can trigger editor commands
-    // and avoids duplicate subscriptions.
     private void WireEvents()
     {
         newButton.Click += async (_, _) => await NewSceneAsync();
@@ -480,6 +479,7 @@ internal sealed class ComposerWindow : Window
         {
             navigationController.HandleCaptureLost();
             leftPressed = false;
+            CancelLightGizmoDrag();
             transformController.CancelActiveDrag();
             _ = renderController.RequestRenderAsync(interactive: false);
         };
@@ -499,8 +499,6 @@ internal sealed class ComposerWindow : Window
         (moveAxisBox.SelectedItem as MoveAxisChoice)?.Axis ?? ComposerGizmoAxis.None;
 
 
-// OpenRenderSettingsAsync opens render settings async using the current selection/session as its initial state. The
-// window/dialog is a temporary editor; durable changes still flow through the session operation it invokes.
 private async Task OpenRenderSettingsAsync()
 {
     RendererChoice renderer = SelectedRenderer;
@@ -530,15 +528,35 @@ private async Task OpenRenderSettingsAsync()
     }
 }
 
-    private Task NewSceneAsync() => commandCoordinator.NewSceneAsync();
+    private async Task NewSceneAsync()
+    {
+        await commandCoordinator.NewSceneAsync();
+        dialogController.RefreshLightEditor();
+    }
 
-    private Task BrowseAndOpenAsync() => commandCoordinator.BrowseAndOpenAsync();
+    private async Task BrowseAndOpenAsync()
+    {
+        await commandCoordinator.BrowseAndOpenAsync();
+        dialogController.RefreshLightEditor();
+    }
 
-    private Task BrowseAndInsertAsync() => commandCoordinator.BrowseAndInsertAsync();
+    private async Task BrowseAndInsertAsync()
+    {
+        await commandCoordinator.BrowseAndInsertAsync();
+        dialogController.RefreshLightEditor();
+    }
 
-    private Task LoadSceneAsync(string path) => commandCoordinator.LoadSceneAsync(path);
+    private async Task LoadSceneAsync(string path)
+    {
+        await commandCoordinator.LoadSceneAsync(path);
+        dialogController.RefreshLightEditor();
+    }
 
-    private Task InsertModelAsync(string path) => commandCoordinator.InsertModelAsync(path);
+    private async Task InsertModelAsync(string path)
+    {
+        await commandCoordinator.InsertModelAsync(path);
+        dialogController.RefreshLightEditor();
+    }
 
     private Task AddPrimitiveAsync() => commandCoordinator.AddPrimitiveAsync();
 
@@ -559,9 +577,17 @@ private async Task OpenRenderSettingsAsync()
 
     private Task ResetSelectedTransformAsync() => transformController.ResetSelectedTransformAsync();
 
-    private Task UndoAsync() => commandCoordinator.UndoAsync();
+    private async Task UndoAsync()
+    {
+        await commandCoordinator.UndoAsync();
+        dialogController.RefreshLightEditor();
+    }
 
-    private Task RedoAsync() => commandCoordinator.RedoAsync();
+    private async Task RedoAsync()
+    {
+        await commandCoordinator.RedoAsync();
+        dialogController.RefreshLightEditor();
+    }
 
     private Task GroupSelectedAsync() => commandCoordinator.GroupSelectedAsync();
 
@@ -587,6 +613,14 @@ private async Task OpenRenderSettingsAsync()
         PointerPoint point = e.GetCurrentPoint(viewport);
         if (point.Properties.IsLeftButtonPressed)
         {
+            if (TryBeginLightGizmoDrag(position))
+            {
+                ClearMeshHoverOverlay(requestRender: false);
+                e.Pointer.Capture(viewport);
+                e.Handled = true;
+                return;
+            }
+
             if (transformController.TryBeginGizmoDrag(position))
             {
                 ClearMeshHoverOverlay(requestRender: false);
@@ -608,6 +642,13 @@ private async Task OpenRenderSettingsAsync()
             return;
 
         Point current = e.GetPosition(viewport);
+        if (lightGizmoDrag != null)
+        {
+            UpdateLightGizmoDrag(current, e.KeyModifiers);
+            e.Handled = true;
+            return;
+        }
+
         if (transformController.HasActiveDrag)
         {
             transformController.UpdateGizmoDrag(current, e.KeyModifiers);
@@ -622,6 +663,7 @@ private async Task OpenRenderSettingsAsync()
     {
         if (SelectedSelectionMode == ComposerSelectionMode.Object ||
             leftPressed ||
+            lightGizmoDrag != null ||
             transformController.HasActiveDrag ||
             navigationController.IsNavigating)
         {
@@ -668,8 +710,6 @@ private async Task OpenRenderSettingsAsync()
         _ = renderController.RequestRenderAsync(interactive: true);
     }
 
-    // ClearMeshHoverOverlay removes/resets mesh hover overlay to its empty/default state. This is an explicit state
-    // transition rather than leaving old values around for later code to accidentally reuse.
     private void ClearMeshHoverOverlay(bool requestRender)
     {
         if (!session.ClearMeshHover())
@@ -684,6 +724,14 @@ private async Task OpenRenderSettingsAsync()
             return;
 
         Point releasePoint = e.GetPosition(viewport);
+        if (lightGizmoDrag != null)
+        {
+            await CommitLightGizmoDragAsync(releasePoint, e.KeyModifiers);
+            e.Pointer.Capture(null);
+            e.Handled = true;
+            return;
+        }
+
         if (transformController.HasActiveDrag)
         {
             bool handledTransform = await transformController.CommitActiveDragAsync(releasePoint, e.KeyModifiers);
@@ -706,7 +754,9 @@ private async Task OpenRenderSettingsAsync()
                 {
                     if (SelectedSelectionMode == ComposerSelectionMode.Object)
                     {
+                        session.SetSelectedLight(null);
                         selectionController.DeselectObjectFromViewport();
+                        dialogController.RefreshLightEditor();
                         await renderController.RequestRenderAsync(interactive: false);
                     }
                 }
@@ -717,22 +767,37 @@ private async Task OpenRenderSettingsAsync()
                     CameraDefinition camera = session.Camera.Snapshot();
                     if (SelectedSelectionMode == ComposerSelectionMode.Object)
                     {
-                        int? hitId = await Task.Run(() => session.PickObject(
+                        int? lightHit = session.PickLightMarker(
                             camera,
                             normalizedX,
                             normalizedY,
                             renderController.LastRenderWidth,
-                            renderController.LastRenderHeight));
-                        if (hitId.HasValue)
+                            renderController.LastRenderHeight);
+                        if (lightHit.HasValue)
                         {
-                            selectionController.SelectObject(hitId.Value, e.KeyModifiers.HasFlag(KeyModifiers.Control));
+                            SelectLight(lightHit.Value);
                         }
                         else
                         {
-                            // A normal viewport click on empty space clears object
-                            // selection, matching common DCC viewport behavior.
-                            selectionController.DeselectObjectFromViewport();
-                            await renderController.RequestRenderAsync(interactive: false);
+                            session.SetSelectedLight(null);
+                            int? hitId = await Task.Run(() => session.PickObject(
+                                camera,
+                                normalizedX,
+                                normalizedY,
+                                renderController.LastRenderWidth,
+                                renderController.LastRenderHeight));
+                            if (hitId.HasValue)
+                            {
+                                selectionController.SelectObject(hitId.Value, e.KeyModifiers.HasFlag(KeyModifiers.Control));
+                            }
+                            else
+                            {
+                                // A normal viewport click on empty space clears object/light
+                                // selection, matching common DCC viewport behavior.
+                                selectionController.DeselectObjectFromViewport();
+                                dialogController.RefreshLightEditor();
+                                await renderController.RequestRenderAsync(interactive: false);
+                            }
                         }
                     }
                     else
@@ -768,6 +833,175 @@ private async Task OpenRenderSettingsAsync()
             e.Handled = true;
         }
     }
+
+    private async Task ShowViewportContextMenuAsync(Point viewportPoint)
+    {
+        if (session.ShowLightMarkers &&
+            transformController.TryViewportToImagePoint(viewportPoint, out Point imagePoint))
+        {
+            double normalizedX = imagePoint.X / Math.Max(1, renderController.LastRenderWidth);
+            double normalizedY = imagePoint.Y / Math.Max(1, renderController.LastRenderHeight);
+            int? lightHit = session.PickLightMarker(
+                session.Camera.Snapshot(),
+                normalizedX,
+                normalizedY,
+                renderController.LastRenderWidth,
+                renderController.LastRenderHeight);
+            if (lightHit.HasValue)
+            {
+                SelectLight(lightHit.Value);
+                OpenLightEditor(lightHit.Value);
+                return;
+            }
+        }
+
+        await ShowFaceContextMenuAsync(viewportPoint);
+    }
+
+    private void OpenLightEditor(int? preferredIndex)
+    {
+        int? index = preferredIndex ?? session.SelectedLightIndex;
+        if (!index.HasValue)
+        {
+            IReadOnlyList<ComposerLightModel> lights = session.GetLightInfos();
+            if (lights.Count > 0)
+                index = 0;
+        }
+        if (index.HasValue)
+            SelectLight(index.Value);
+
+        dialogController.OpenLightEditor(
+            index,
+            SelectLight,
+            message => statusText.Text = message,
+            () => pathText.Text = "Untitled composition (modified)",
+            () => { if (session.HasRenderableScene) _ = renderController.RequestRenderAsync(interactive: false); },
+            UpdateHistoryButtons);
+    }
+
+    private void SelectLight(int? index)
+    {
+        if (index.HasValue)
+        {
+            if (SelectedSelectionMode != ComposerSelectionMode.Object)
+                SelectSelectionMode(ComposerSelectionMode.Object);
+            selectionController.DeselectObjectFromViewport();
+            session.SetSelectedLight(index);
+            ComposerLightModel? light = session.GetLightInfo(index.Value);
+            statusText.Text = light == null
+                ? "The selected light no longer exists."
+                : $"Selected {light.Id} ({light.Kind}) light. Drag the X/Y/Z gizmo to move it; right-click its marker to edit properties.";
+        }
+        else
+        {
+            session.SetSelectedLight(null);
+        }
+
+        dialogController.RefreshLightEditor();
+        if (session.HasRenderableScene)
+            _ = renderController.RequestRenderAsync(interactive: true);
+    }
+
+    private bool TryBeginLightGizmoDrag(Point viewportPoint)
+    {
+        if (SelectedSelectionMode != ComposerSelectionMode.Object ||
+            session.SelectedLightIndex is not int lightIndex ||
+            !transformController.TryViewportToImagePoint(viewportPoint, out Point imagePoint) ||
+            session.GetSelectedLightGizmoBounds() is not Aabb bounds)
+        {
+            return false;
+        }
+
+        CameraDefinition camera = session.Camera.Snapshot();
+        if (!ComposerOverlayRenderer.TryHitTranslationAxis(
+                camera,
+                bounds,
+                renderController.LastRenderWidth,
+                renderController.LastRenderHeight,
+                imagePoint.X,
+                imagePoint.Y,
+                out ComposerGizmoHit hit))
+        {
+            return false;
+        }
+
+        ComposerLightModel? light = session.BeginSelectedLightMove();
+        if (light == null)
+            return false;
+
+        lightGizmoDrag = new LightGizmoDragState(light.Position, imagePoint, hit);
+        statusText.Text = $"Moving light {light.Id} on {hit.Axis}. Shift = precision; Ctrl = snap.";
+        return true;
+    }
+
+    private void UpdateLightGizmoDrag(Point viewportPoint, KeyModifiers modifiers)
+    {
+        LightGizmoDragState? current = lightGizmoDrag;
+        if (current == null || !transformController.TryViewportToImagePoint(viewportPoint, out Point imagePoint))
+            return;
+
+        double deltaX = imagePoint.X - current.LastImagePoint.X;
+        double deltaY = imagePoint.Y - current.LastImagePoint.Y;
+        double pixelStep = deltaX * current.Hit.ScreenDirectionX + deltaY * current.Hit.ScreenDirectionY;
+        double precision = modifiers.HasFlag(KeyModifiers.Shift) ? 0.20 : 1.0;
+        current.AccumulatedGesture += pixelStep * precision;
+        current.LastImagePoint = imagePoint;
+
+        double worldDistance = current.AccumulatedGesture * current.Hit.WorldUnitsPerPixel;
+        if (modifiers.HasFlag(KeyModifiers.Control))
+        {
+            double increment = Math.Max(0.01, current.Hit.WorldUnitsPerPixel * 10.0);
+            worldDistance = Math.Round(worldDistance / increment) * increment;
+        }
+
+        Vec3 updatedPosition = current.StartPosition + LightAxisVector(current.Hit.Axis) * worldDistance;
+        if (!session.PreviewSelectedLightPosition(updatedPosition))
+        {
+            lightGizmoDrag = null;
+            statusText.Text = "The selected light no longer exists.";
+            return;
+        }
+
+        pathText.Text = "Untitled composition (modified)";
+        dialogController.RefreshLightEditor();
+        if (renderController.CanRenderContinuously(SelectedRenderer.Kind))
+            _ = renderController.RequestRenderAsync(interactive: true);
+    }
+
+    private async Task CommitLightGizmoDragAsync(Point viewportPoint, KeyModifiers modifiers)
+    {
+        if (lightGizmoDrag == null)
+            return;
+
+        UpdateLightGizmoDrag(viewportPoint, modifiers);
+        bool changed = session.CommitSelectedLightMove();
+        lightGizmoDrag = null;
+        dialogController.RefreshLightEditor();
+        if (changed)
+        {
+            pathText.Text = "Untitled composition (modified)";
+            UpdateHistoryButtons();
+            statusText.Text = "Light position updated.";
+        }
+        await renderController.RequestRenderAsync(interactive: false);
+    }
+
+    private void CancelLightGizmoDrag()
+    {
+        if (lightGizmoDrag == null)
+            return;
+        session.CancelSelectedLightMove();
+        lightGizmoDrag = null;
+        dialogController.RefreshLightEditor();
+    }
+
+    private static Vec3 LightAxisVector(ComposerGizmoAxis axis) => axis switch
+    {
+        ComposerGizmoAxis.X => new Vec3(1, 0, 0),
+        ComposerGizmoAxis.Y => new Vec3(0, 1, 0),
+        ComposerGizmoAxis.Z => new Vec3(0, 0, 1),
+        _ => Vec3.Zero
+    };
 
     private async Task ShowFaceContextMenuAsync(Point viewportPoint)
     {
@@ -810,9 +1044,6 @@ private async Task OpenRenderSettingsAsync()
         menu.Open(viewport);
     }
 
-    // RunFaceOperationAsync executes face operation async as one coordinated action and centralizes success/failure
-    // handling so callers do not each implement inconsistent exception/UI behavior. Potentially blocking/CPU work
-    // runs on a worker task rather than Avalonia’s UI thread.
     private async Task RunFaceOperationAsync(bool insetOperation)
     {
         if (selectionController.ActiveObjectId is not int id || !session.CanEditSelectedFace(id))
@@ -881,8 +1112,6 @@ private async Task OpenRenderSettingsAsync()
         }
     }
 
-    // OpenPrimitiveParameters opens primitive parameters using the current selection/session as its initial state.
-    // The window/dialog is a temporary editor; durable changes still flow through the session operation it invokes.
     private void OpenPrimitiveParameters()
     {
         if (selectionController.ActiveObjectId is not int id)
@@ -900,8 +1129,6 @@ private async Task OpenRenderSettingsAsync()
             objectId => selectionController.RefreshObjectTree(objectId));
     }
 
-    // OpenMaterialEditor opens material editor using the current selection/session as its initial state. The
-    // window/dialog is a temporary editor; durable changes still flow through the session operation it invokes.
     private void OpenMaterialEditor()
     {
         if (selectionController.ActiveObjectId is not int id)
@@ -1068,8 +1295,6 @@ private async Task OpenRenderSettingsAsync()
             moveAxisBox.SelectedIndex = index;
     }
 
-    // SelectGizmoMode changes the editor’s current gizmo mode choice and synchronizes the controls/overlay behavior
-    // that depend on that mode.
     private void SelectGizmoMode(ComposerGizmoMode mode)
     {
         if (SelectedSelectionMode != ComposerSelectionMode.Object && mode != ComposerGizmoMode.Translate)

@@ -1,8 +1,8 @@
-/*
- * This file belongs to the renderer-neutral scene layer, which is the shared source of truth for geometry,
- * transforms, grouping, materials, resources, and serialization-facing state. Higher layers manipulate these
- * abstractions rather than maintaining parallel copies of scene data.
- */
+// -----------------------------------------------------------------------------
+// File: Scene/PrimitiveGizmoEditMetadata.cs
+// Purpose: Describes how gizmo edits map onto authored primitive parameters.
+// -----------------------------------------------------------------------------
+
 namespace LightingShowcase.SceneGraph;
 
 /// <summary>
@@ -31,7 +31,5 @@ public sealed class PrimitiveGizmoEditMetadata
     public string ScaleRule { get; }
     public string RotationRule { get; }
 
-    // ToString returns the human-facing label/name for this value so Avalonia controls display meaningful text
-    // instead of the generated record/type representation.
     public override string ToString() => $"{DisplayName}; move: {(MoveUpdatesOrigin ? "origin" : "transform")}; scale: {ScaleRule}; rotate: {RotationRule}";
 }

@@ -1,8 +1,13 @@
-/*
- * This representation separates durable or isolated scene state from the mutable live editor graph. Save/load,
- * undo, background rendering, and tests need snapshots/documents that can be copied or serialized without exposing
- * shared mutable objects across threads.
- */
+// -----------------------------------------------------------------------------
+// File: Scene/BinarySceneFile.cs
+// Purpose: Compact native binary scene save/load.
+//
+// The .lscene format is the fast/default project format.  It preserves editor
+// objects, transforms, lights, materials, textures, hierarchy, and semantic
+// primitives where possible.  XML remains available for manual editing, but this
+// file avoids verbose triangle XML for normal saves.
+// -----------------------------------------------------------------------------
+
 using System.IO.Compression;
 using System.Text;
 using LightingShowcase.Lighting;
@@ -10,8 +15,6 @@ using LightingShowcase.Math3D;
 
 namespace LightingShowcase.SceneGraph;
 
-// BinarySceneSaveOptions collects one operation/backend’s tunable choices and provides a single
-// validation/defaulting boundary before those choices affect execution.
 /// <summary>Saves and loads the compact Lighting Showcase binary scene format.</summary>
 public sealed class BinarySceneSaveOptions
 {
@@ -27,9 +30,6 @@ public static class BinarySceneFile
     private const string Magic = "LSCN";
     private const int Version = 12;
 
-    // GeometryKind makes a closed set of choices compiler-visible instead of passing loosely related integers or
-    // strings. Code that switches over None, Cuboid, Rectangle, ReadyMadePrimitive, Mesh is where the behavioral
-    // meaning of each choice is implemented.
     private enum GeometryKind : byte
     {
         None = 0,
@@ -171,8 +171,6 @@ public static class BinarySceneFile
         writer.Write(light.OuterConeAngle);
     }
 
-    // ReadLight reads light from the external stream/document, advancing through the format in the order required
-    // to resolve references and produce valid internal data.
     private static SceneLight ReadLight(BinaryReader reader, int version)
     {
         string id = reader.ReadString();
@@ -191,8 +189,6 @@ public static class BinarySceneFile
         return new SceneLight(id, position, color, intensity, enabled, kind, direction, range, innerConeAngle, outerConeAngle);
     }
 
-    // WriteObject writes object to the external stream/document in the format’s required order, using stable
-    // indices/references so another reader can reconstruct the same relationships.
     private static void WriteObject(BinaryWriter writer, SceneObjectGroup group, TextureWriteTable textureTable, MaterialWriteTable materialTable)
     {
         writer.Write(group.Name ?? string.Empty);
@@ -241,8 +237,6 @@ public static class BinarySceneFile
         return parameters;
     }
 
-    // WriteLogicalFaceGroups writes logical face groups to the external stream/document in the format’s required
-    // order, using stable indices/references so another reader can reconstruct the same relationships.
     private static void WriteLogicalFaceGroups(BinaryWriter writer, SceneObjectGroup group)
     {
         // Procedural primitives can reconstruct their authored polygon topology
@@ -259,8 +253,6 @@ public static class BinarySceneFile
         }
     }
 
-    // ReadLogicalFaceGroups reads logical face groups from the external stream/document, advancing through the
-    // format in the order required to resolve references and produce valid internal data.
     private static void ReadLogicalFaceGroups(BinaryReader reader, SceneObjectGroup group)
     {
         int faceCount = reader.ReadInt32();
@@ -281,8 +273,6 @@ public static class BinarySceneFile
         group.SetLogicalFaceTriangleGroups(groups);
     }
 
-    // HasValidLogicalFacePartition reports whether valid logical face partition is present/usable in the current
-    // state, without changing that state.
     private static bool HasValidLogicalFacePartition(SceneObjectGroup group)
     {
         if (!group.HasLogicalFaceTopology || group.LocalTriangles.Count == 0)
@@ -302,8 +292,6 @@ public static class BinarySceneFile
         return covered.All(value => value);
     }
 
-    // ReadObject reads object from the external stream/document, advancing through the format in the order required
-    // to resolve references and produce valid internal data.
     private static SceneObjectGroup ReadObject(BinaryReader reader, Scene scene, SceneObjectGroup? parent, string sceneFilePath, int version, TextureReadTable? textureTable, MaterialReadTable? materialTable)
     {
         string name = reader.ReadString();
@@ -352,8 +340,6 @@ public static class BinarySceneFile
         return group;
     }
 
-    // CreateGeometryRecords constructs geometry records in the normalized form expected downstream, so allocation
-    // plus initialization of its invariants happen together.
     private static IEnumerable<GeometryRecord> CreateGeometryRecords(SceneObjectGroup group)
     {
         if (group.LocalTriangles.Count == 0)
@@ -395,8 +381,6 @@ public static class BinarySceneFile
         }
     }
 
-    // WriteGeometryRecord writes geometry record to the external stream/document in the format’s required order,
-    // using stable indices/references so another reader can reconstruct the same relationships.
     private static void WriteGeometryRecord(BinaryWriter writer, GeometryRecord record, TextureWriteTable textureTable, MaterialWriteTable materialTable)
     {
         writer.Write((byte)record.Kind);
@@ -427,9 +411,6 @@ public static class BinarySceneFile
         }
     }
 
-    // ReadGeometryRecord reads geometry record from the external stream/document, advancing through the format in
-    // the order required to resolve references and produce valid internal data. Procedural/object-library metadata
-    // is accessed through the registry so editable primitive identity survives operations that should preserve it.
     private static void ReadGeometryRecord(BinaryReader reader, Scene scene, SceneObjectGroup group, string sceneFilePath, int version, TextureReadTable? textureTable, MaterialReadTable? materialTable)
     {
         GeometryKind kind = (GeometryKind)reader.ReadByte();
@@ -499,8 +480,6 @@ public static class BinarySceneFile
 
     private readonly record struct MeshVertex(Vec3 Position, Vec2 Uv, Vec3 Normal);
 
-    // WriteIndexedMesh writes indexed mesh to the external stream/document in the format’s required order, using
-    // stable indices/references so another reader can reconstruct the same relationships.
     private static void WriteIndexedMesh(BinaryWriter writer, IReadOnlyList<Triangle> triangles, MaterialWriteTable materialTable)
     {
         Dictionary<string, int> indexByVertex = new(StringComparer.Ordinal);
@@ -533,8 +512,6 @@ public static class BinarySceneFile
         }
     }
 
-    // ReadIndexedMesh reads indexed mesh from the external stream/document, advancing through the format in the
-    // order required to resolve references and produce valid internal data.
     private static void ReadIndexedMesh(BinaryReader reader, SceneObjectGroup group, MaterialReadTable? materialTable, int version)
     {
         int vertexCount = reader.ReadInt32();
@@ -597,8 +574,6 @@ public static class BinarySceneFile
         writer.Write((byte)unsigned);
     }
 
-    // ReadCompactInt reads compact int from the external stream/document, advancing through the format in the order
-    // required to resolve references and produce valid internal data.
     private static int ReadCompactInt(BinaryReader reader)
     {
         uint result = 0;
@@ -660,8 +635,6 @@ public static class BinarySceneFile
         return ReadMaterial(reader, sceneFilePath, version, textureTable);
     }
 
-    // WriteMaterial writes material to the external stream/document in the format’s required order, using stable
-    // indices/references so another reader can reconstruct the same relationships.
     private static void WriteMaterial(BinaryWriter writer, Material material, TextureWriteTable textureTable)
     {
         WriteVec3(writer, material.Color);

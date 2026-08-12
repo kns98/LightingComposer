@@ -1,14 +1,16 @@
-/*
- * Camera state is kept independent of Avalonia and renderer-specific code. That lets interactive navigation,
- * scripted paths, tests, and multiple render backends use the same definitions for position, orientation,
- * projection, and interpolation.
- */
+// -----------------------------------------------------------------------------
+// File: Camera/DemoCameraPath.cs
+// Purpose: Demo camera animation.
+//
+// Stores camera keyframes, interpolates between them, and provides an editable camera path for playback.
+// This comment is intentionally kept in source code so future maintainers can
+// understand the role of this file without opening external documentation.
+// -----------------------------------------------------------------------------
+
 using LightingShowcase.Math3D;
 
 namespace LightingShowcase.CameraSystem;
 
-// DemoCameraPath represents an ordered path/keyframe sequence and the interpolation rules needed to sample it at
-// arbitrary times/positions.
 /// <summary>Editable camera animation path with time-based interpolation.</summary>
 public sealed class DemoCameraPath
 {
@@ -26,6 +28,8 @@ public sealed class DemoCameraPath
     };
 
     public IReadOnlyList<CameraKey> Keys => keys;
+
+    /// <summary>Implements the sample operation for this file's subsystem.</summary>
     public CameraSample Sample(double normalizedTime)
     {
         if (keys.Count == 0)
@@ -33,8 +37,6 @@ public sealed class DemoCameraPath
         if (keys.Count == 1)
             return new CameraSample(keys[0].Position, keys[0].Target);
 
-        // The double-modulo form wraps both positive and negative times into [0,1), allowing the camera path to
-        // loop continuously even when callers scrub backward.
         double t = ((normalizedTime % 1.0) + 1.0) % 1.0;
         SortKeys();
         for (int i = 0; i < keys.Count - 1; i++)
@@ -43,8 +45,6 @@ public sealed class DemoCameraPath
             if (t >= a.Time && t <= b.Time)
             {
                 double span = System.Math.Max(0.000001, b.Time - a.Time);
-                // Interpolation is performed inside the two surrounding keyframes, then passed through smoothstep
-                // so velocity eases at each key instead of changing abruptly.
                 double local = Smooth((t - a.Time) / span);
                 return new CameraSample(Vec3.Lerp(a.Position, b.Position, local), Vec3.Lerp(a.Target, b.Target, local));
             }
@@ -68,6 +68,8 @@ public sealed class DemoCameraPath
         SortKeys();
         return keys.FindIndex(k => NearlyEqual(k.Time, ClampTime(key.Time)) && SameVector(k.Position, key.Position) && SameVector(k.Target, key.Target));
     }
+
+    /// <summary>Implements the remove key operation for this file's subsystem.</summary>
     public void RemoveKey(int index)
     {
         if (index < 0 || index >= keys.Count || keys.Count <= 1)
@@ -75,9 +77,12 @@ public sealed class DemoCameraPath
         keys.RemoveAt(index);
         SortKeys();
     }
+
+    /// <summary>Implements the sort keys operation for this file's subsystem.</summary>
     private void SortKeys() => keys.Sort((a, b) => a.Time.CompareTo(b.Time));
     private static CameraKey ClampKey(CameraKey key) => new(ClampTime(key.Time), key.Position, key.Target);
     private static double ClampTime(double v) => System.Math.Max(0.0, System.Math.Min(1.0, v));
+    /// <summary>Implements the smooth operation for this file's subsystem.</summary>
     private static double Smooth(double t) => t * t * (3.0 - 2.0 * t);
     private static bool NearlyEqual(double a, double b) => System.Math.Abs(a - b) < 0.000001;
     private static bool SameVector(Vec3 a, Vec3 b) => (a - b).Length() < 0.000001;

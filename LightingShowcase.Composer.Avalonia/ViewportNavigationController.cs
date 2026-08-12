@@ -1,8 +1,3 @@
-/*
- * Viewport navigation is treated as a camera-manipulation state machine rather than as raw pointer deltas. Mouse
- * orbit/pan/zoom and Windows Precision Touchpad gestures are normalized into camera changes, while selection and
- * gizmo manipulation remain separate so two interaction systems do not fight over the same input stream.
- */
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
@@ -19,9 +14,6 @@ namespace LightingShowcase.Composer;
 /// </summary>
 internal sealed class ViewportNavigationController : IDisposable
 {
-    // DragMode makes a closed set of choices compiler-visible instead of passing loosely related integers or
-    // strings. Code that switches over None, Orbit, Pan is where the behavioral meaning of each choice is
-    // implemented.
     private enum DragMode
     {
         None,
@@ -89,13 +81,8 @@ internal sealed class ViewportNavigationController : IDisposable
         };
     }
 
-    // IsNavigating summarizes whether a mouse drag or native touchpad gesture currently owns viewport navigation,
-    // so selection/gizmo code can avoid interpreting the same input simultaneously.
     public bool IsNavigating => rightPressed || dragMode != DragMode.None;
 
-    // TryHandlePointerPressed claims only navigation gestures: right-drag begins orbit, while middle-drag or
-    // Shift+right begins pan. It captures the pointer and remembers the starting position so later movement becomes
-    // a delta.
     public bool TryHandlePointerPressed(PointerPressedEventArgs e)
     {
         if (!session.HasRenderableScene)
@@ -129,8 +116,6 @@ internal sealed class ViewportNavigationController : IDisposable
         return false;
     }
 
-    // TryHandlePointerMoved converts pointer displacement during an active navigation drag into camera orbit or
-    // pan, clears stale hover feedback, and requests an interactive render.
     public bool TryHandlePointerMoved(PointerEventArgs e)
     {
         Point current = e.GetPosition(viewport);
@@ -167,8 +152,6 @@ internal sealed class ViewportNavigationController : IDisposable
         return true;
     }
 
-    // TryHandlePointerReleasedAsync ends navigation, releases pointer capture, and requests a full-quality frame.
-    // It also preserves the distinction between a small right-click and an actual drag for context-menu behavior.
     public async Task<bool> TryHandlePointerReleasedAsync(PointerReleasedEventArgs e)
     {
         Point releasePoint = e.GetPosition(viewport);
@@ -202,8 +185,6 @@ internal sealed class ViewportNavigationController : IDisposable
         return false;
     }
 
-    // HandleWheel handles wheel by translating the incoming UI/native event into the camera/editor state change it
-    // represents, then requests whatever redraw/state synchronization that change requires.
     public void HandleWheel(PointerWheelEventArgs e)
     {
         if (!session.HasRenderableScene)
@@ -215,16 +196,12 @@ internal sealed class ViewportNavigationController : IDisposable
         e.Handled = true;
     }
 
-    // HandleCaptureLost handles capture lost by translating the incoming UI/native event into the camera/editor
-    // state change it represents, then requests whatever redraw/state synchronization that change requires.
     public void HandleCaptureLost()
     {
         dragMode = DragMode.None;
         rightPressed = false;
     }
 
-    // AttachWindowsTrackpadInput installs the native Precision Touchpad message source only when running on Windows
-    // with a usable native window handle, then wires orbit/zoom/turn gestures into this controller.
     public void AttachWindowsTrackpadInput()
     {
         if (!OperatingSystem.IsWindows() || windowsTrackpadInput is not null)
@@ -263,8 +240,6 @@ internal sealed class ViewportNavigationController : IDisposable
         }
     }
 
-    // OnWindowsTrackpadWndProc feeds native window messages into the touchpad recognizer and marks a message
-    // handled only when a viewport gesture actually consumed it.
     private nint OnWindowsTrackpadWndProc(nint hwnd, uint message, nint wParam, nint lParam, ref bool handled)
     {
         if (windowsTrackpadInput is null ||
@@ -296,8 +271,6 @@ internal sealed class ViewportNavigationController : IDisposable
         return 0;
     }
 
-    // OnWindowsTrackpadOrbit accumulates high-frequency two-finger orbit deltas and starts a frame timer instead of
-    // rendering on every raw device event.
     private void OnWindowsTrackpadOrbit(object? sender, NativeTrackpadOrbit e)
     {
         if (!session.HasRenderableScene)
@@ -308,8 +281,6 @@ internal sealed class ViewportNavigationController : IDisposable
             trackpadFrameTimer.Start();
     }
 
-    // OnWindowsTrackpadZoom accumulates touchpad zoom deltas for the next navigation frame, coalescing device
-    // events into one camera update.
     private void OnWindowsTrackpadZoom(object? sender, NativeTrackpadZoom e)
     {
         if (!session.HasRenderableScene)
@@ -319,8 +290,6 @@ internal sealed class ViewportNavigationController : IDisposable
             trackpadFrameTimer.Start();
     }
 
-    // OnWindowsTrackpadTurn accumulates the inferred two-finger rotation angle so turn input is applied with the
-    // same frame pacing as orbit and zoom.
     private void OnWindowsTrackpadTurn(object? sender, NativeTrackpadTurn e)
     {
         if (!session.HasRenderableScene)
@@ -330,9 +299,6 @@ internal sealed class ViewportNavigationController : IDisposable
             trackpadFrameTimer.Start();
     }
 
-    // ApplyPendingWindowsTrackpadNavigation consumes accumulated orbit/zoom/turn values once per timer tick,
-    // applies them to the camera, clears the accumulators, and requests one interactive render. Cancellation is
-    // propagated so shutdown or a newer request can make obsolete work stop early.
     private void ApplyPendingWindowsTrackpadNavigation()
     {
         double orbitX = pendingWindowsTrackpadOrbitX;
@@ -376,8 +342,6 @@ internal sealed class ViewportNavigationController : IDisposable
         trackpadIdleRenderTimer.Start();
     }
 
-    // DetachWindowsTrackpadInput unhooks the native WndProc callback and gesture delegates, disposes the source,
-    // and clears capture state so a closed/recreated window cannot receive stale native callbacks.
     private void DetachWindowsTrackpadInput()
     {
         windowsTrackpadGestureCapturedByViewport = false;
@@ -399,8 +363,6 @@ internal sealed class ViewportNavigationController : IDisposable
         }
     }
 
-    // Dispose ends this object’s active lifetime: owned cancellations/resources/listeners are released so completed
-    // windows/renderers do not keep receiving work or retain unmanaged memory.
     public void Dispose()
     {
         trackpadFrameTimer.Stop();

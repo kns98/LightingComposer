@@ -1,8 +1,3 @@
-/*
- * The code here converts renderer-neutral scene/camera data into pixels or backend-ready state. Dimensions, cache
- * identity, data packing, and deterministic conversion are treated as part of the rendering contract so
- * interactive UI code does not need to know backend details.
- */
 using LightingShowcase.SceneGraph;
 
 namespace LightingShowcase.Rendering;

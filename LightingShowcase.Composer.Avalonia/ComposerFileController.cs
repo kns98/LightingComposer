@@ -1,8 +1,3 @@
-/*
- * This controller translates Avalonia events and commands into editor operations while keeping the live scene
- * behind `ComposerSceneSession`. Its job is coordination: validate/route input, invoke the appropriate session or
- * renderer operation, and update presentation state without becoming a competing owner of scene data.
- */
 using System.Diagnostics;
 using Avalonia.Controls;
 using Avalonia.Platform.Storage;
@@ -28,9 +23,6 @@ internal sealed class ComposerFileController
         this.lifetimeToken = lifetimeToken;
     }
 
-    // PickOpenPathAsync opens Avalonia’s platform file picker with the caller’s format filter, requires single
-    // selection, and converts the selected storage item to a local path. It throws early if the platform storage
-    // provider cannot open files.
     public async Task<string?> PickOpenPathAsync(string title, IReadOnlyList<FilePickerFileType> types)
     {
         if (!owner.StorageProvider.CanOpen)
@@ -45,21 +37,12 @@ internal sealed class ComposerFileController
         return files.Count == 0 ? null : files[0].TryGetLocalPath();
     }
 
-    // NewSceneAsync creates a consistently configured scene async UI/domain object so repeated controls/objects
-    // share sizing, alignment, or default behavior. Cancellation is propagated so shutdown or a newer request can
-    // make obsolete work stop early.
     public Task NewSceneAsync() => Task.Run(() => session.NewScene(lifetimeToken), lifetimeToken);
 
     public Task LoadAsync(string path) => Task.Run(() => session.Load(path, lifetimeToken), lifetimeToken);
 
-    // InsertAsync inserts async into the live scene/model and returns the resulting identity/value needed by
-    // selection or subsequent editing. Cancellation is propagated so shutdown or a newer request can make obsolete
-    // work stop early.
     public Task<int> InsertAsync(string path) => Task.Run(() => session.Insert(path, lifetimeToken), lifetimeToken);
 
-    // PickSavePathAsync asks the platform save picker for an .lscene destination, suggesting either
-    // composition.lscene or the current scene name. Returning null represents user cancellation rather than an
-    // error.
     public async Task<string?> PickSavePathAsync()
     {
         if (!owner.StorageProvider.CanSave)
@@ -77,10 +60,6 @@ internal sealed class ComposerFileController
         return file?.TryGetLocalPath();
     }
 
-    // SaveAsync runs the blocking scene save off the UI thread while periodically reporting elapsed time and the
-    // triangle count captured at save start. Awaiting the actual save task at the end ensures success/failure is
-    // not hidden by the progress loop. Potentially blocking/CPU work runs on a worker task rather than Avalonia’s
-    // UI thread. Cancellation is propagated so shutdown or a newer request can make obsolete work stop early.
     public async Task<TimeSpan> SaveAsync(string path, Action<string>? progress = null)
     {
         int triangleCountAtSave = session.TriangleCount;
@@ -102,11 +81,6 @@ internal sealed class ComposerFileController
         return stopwatch.Elapsed;
     }
 
-    // ExportPackageAsync first verifies there is renderable content, then asks the user for an export format and
-    // parent folder. Only after both choices are complete does it run session.ExportPackage on a worker thread, so
-    // cancellation of either dialog causes no scene/export mutation. Potentially blocking/CPU work runs on a worker
-    // task rather than Avalonia’s UI thread. Cancellation is propagated so shutdown or a newer request can make
-    // obsolete work stop early.
     public async Task<SceneExportPackageResult?> ExportPackageAsync()
     {
         if (!session.HasRenderableScene)

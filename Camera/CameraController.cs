@@ -1,8 +1,12 @@
-/*
- * Camera state is kept independent of Avalonia and renderer-specific code. That lets interactive navigation,
- * scripted paths, tests, and multiple render backends use the same definitions for position, orientation,
- * projection, and interpolation.
- */
+// -----------------------------------------------------------------------------
+// File: Camera/CameraController.cs
+// Purpose: Interactive camera model.
+//
+// Stores canonical orbit/look-at camera state and applies keyboard/mouse movement
+// for manual navigation. The controller owns user interaction only; import/render
+// coordinate fixes belong in TransformConverter or renderer adapters.
+// -----------------------------------------------------------------------------
+
 using LightingShowcase.Math3D;
 using LightingShowcase.SceneGraph;
 
@@ -71,8 +75,6 @@ public sealed class CameraController
     public void Pan(double deltaX, double deltaY, double speed = 1.0)
     {
         CameraBasis basis = GetBasis();
-        // Pan speed scales with camera distance so the same pointer motion feels useful both close to a model and
-        // far away from it, while the small floor prevents movement from collapsing near the target.
         double scale = Math.Max(0.001, Distance * 0.001 * speed);
         Vec3 offset = basis.Right * (-deltaX * scale) + basis.Up * (deltaY * scale);
         Position += offset;
@@ -82,8 +84,6 @@ public sealed class CameraController
     /// <summary>Dolly zooms toward/away from the target while preserving orbit angle.</summary>
     public void Zoom(double wheelDelta, double sensitivity = 0.0015)
     {
-        // Using an exponential factor makes wheel zoom multiplicative rather than additive: each notch changes
-        // distance by a proportion, which gives smoother control across very different scene scales.
         double factor = Math.Exp(-wheelDelta * sensitivity);
         RebuildPositionFromOrbit(Clamp(Distance * factor, MinDistance, MaxDistance));
     }
@@ -103,8 +103,6 @@ public sealed class CameraController
         Vec3 diagonal = bounds.Max - bounds.Min;
         double radius = Math.Max(0.05, diagonal.Length() * 0.5);
         double fov = Math.Max(5.0, Math.Min(140.0, Camera.FieldOfViewDegrees)) * Math.PI / 180.0;
-        // Framing solves the perspective geometry directly: the bounding-sphere radius divided by tan(FOV/2) gives
-        // the minimum camera distance needed to fit the object vertically, then padding adds breathing room.
         double distance = radius / Math.Tan(fov * 0.5) * Math.Max(1.0, padding);
         Target = center;
         RebuildPositionFromOrbit(distance);
@@ -115,9 +113,6 @@ public sealed class CameraController
 
     public CameraDefinition ToDefinition() => Camera.Clone();
 
-    // Orbit navigation is represented by target, yaw, pitch, and distance. Recomputing Position from those values
-    // keeps rotation and zoom on the same spherical orbit and avoids accumulating error through repeated
-    // incremental transforms.
     private void RebuildPositionFromOrbit(double distance)
     {
         Vec3 forward = ForwardFromAngles();
@@ -135,9 +130,6 @@ public sealed class CameraController
         return normalized.Length() < 1e-8 ? TransformConverter.WorldForward : normalized;
     }
 
-    // When callers set Position/Target directly, derive yaw and pitch from the resulting look vector so the next
-    // orbit/rotate gesture starts from the same view. The Y component is clamped before asin to protect against
-    // small normalization overshoot.
     private void UpdateAnglesFromLookAt()
     {
         Vec3 dir = (Target - Position).Normalize();

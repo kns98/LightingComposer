@@ -1,8 +1,3 @@
-/*
- * This controller translates Avalonia events and commands into editor operations while keeping the live scene
- * behind `ComposerSceneSession`. Its job is coordination: validate/route input, invoke the appropriate session or
- * renderer operation, and update presentation state without becoming a competing owner of scene data.
- */
 using Avalonia.Controls;
 
 namespace LightingShowcase.Composer;
@@ -16,6 +11,7 @@ internal sealed class ComposerDialogController : IDisposable
     private readonly ComposerSceneSession session;
     private PrimitiveParametersWindow? primitiveParametersWindow;
     private MaterialEditorWindow? materialEditorWindow;
+    private LightEditorWindow? lightEditorWindow;
 
     public ComposerDialogController(Window owner, ComposerSceneSession session)
     {
@@ -23,11 +19,7 @@ internal sealed class ComposerDialogController : IDisposable
         this.session = session;
     }
 
-    // HasPrimitiveEditorFor reports whether primitive editor for is present/usable in the current state, without
-    // changing that state.
     public bool HasPrimitiveEditorFor(int objectId) => primitiveParametersWindow?.ObjectId == objectId;
-    // HasMaterialEditorFor reports whether material editor for is present/usable in the current state, without
-    // changing that state.
     public bool HasMaterialEditorFor(int objectId) => materialEditorWindow?.ObjectId == objectId;
 
     public void RebasePrimitiveAfterExternalTransform(int objectId)
@@ -161,6 +153,59 @@ internal sealed class ComposerDialogController : IDisposable
         setStatus("Material editor opened. Presets, direct PBR properties, exact RGB/hex color, and image textures apply to the selected object.");
     }
 
+
+    public void OpenLightEditor(
+        int? selectedLightIndex,
+        Action<int?> selectLight,
+        Action<string> setStatus,
+        Action markModified,
+        Action requestFinalRender,
+        Action refreshHistory)
+    {
+        if (lightEditorWindow != null)
+        {
+            lightEditorWindow.SelectLight(selectedLightIndex ?? session.SelectedLightIndex);
+            return;
+        }
+
+        LightEditorWindow? dialog = null;
+        dialog = new LightEditorWindow(
+            session,
+            selectLight,
+            onLightChanged: () =>
+            {
+                refreshHistory();
+                markModified();
+                setStatus("Lighting updated.");
+                requestFinalRender();
+            },
+            onPreviewChanged: requestFinalRender,
+            onClosed: () =>
+            {
+                if (ReferenceEquals(lightEditorWindow, dialog))
+                    lightEditorWindow = null;
+            });
+        lightEditorWindow = dialog;
+        dialog.Show(owner);
+        if (selectedLightIndex.HasValue)
+            dialog.SelectLight(selectedLightIndex);
+        setStatus("Lighting editor opened. Viewport light markers are editor-only overlays and can be hidden without disabling illumination.");
+    }
+
+    public void RefreshLightEditor()
+    {
+        lightEditorWindow?.RefreshFromScene(session.SelectedLightIndex);
+    }
+
+    public void CloseLightEditor()
+    {
+        LightEditorWindow? dialog = lightEditorWindow;
+        if (dialog == null)
+            return;
+        lightEditorWindow = null;
+        try { dialog.Close(); } catch { }
+    }
+
     public void ClosePrimitiveParameters()
     {
         PrimitiveParametersWindow? dialog = primitiveParametersWindow;
@@ -185,7 +230,9 @@ internal sealed class ComposerDialogController : IDisposable
         CloseMaterialEditor();
     }
 
-    // Dispose ends this object’s active lifetime: owned cancellations/resources/listeners are released so completed
-    // windows/renderers do not keep receiving work or retain unmanaged memory.
-    public void Dispose() => CloseEditors();
+    public void Dispose()
+    {
+        CloseEditors();
+        CloseLightEditor();
+    }
 }

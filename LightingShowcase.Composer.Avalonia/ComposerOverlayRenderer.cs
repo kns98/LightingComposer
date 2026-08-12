@@ -1,18 +1,11 @@
-/*
- * This is desktop-editor glue around the scene and rendering layers. The code should be read in terms of how it
- * translates user interaction into domain operations while keeping platform UI state, mutable scene state, and
- * renderer state from becoming entangled.
- */
 using LightingShowcase.CameraSystem;
 using LightingShowcase.Math3D;
+using LightingShowcase.Lighting;
 using LightingShowcase.Rendering;
 using LightingShowcase.SceneGraph;
 
 namespace LightingShowcase.Composer;
 
-// ComposerGizmoMode makes a closed set of choices compiler-visible instead of passing loosely related integers or
-// strings. Code that switches over Translate, Rotate, Scale is where the behavioral meaning of each choice is
-// implemented.
 /// <summary>
 /// Transform tool displayed in the editor viewport. The keyboard shortcuts match
 /// 3D viewport's primary transform commands: G=move, R=rotate, S=scale.
@@ -24,9 +17,6 @@ internal enum ComposerGizmoMode
     Scale
 }
 
-// ComposerGizmoAxis makes a closed set of choices compiler-visible instead of passing loosely related integers or
-// strings. Code that switches over None, X, Y, Z, Uniform is where the behavioral meaning of each choice is
-// implemented.
 internal enum ComposerGizmoAxis
 {
     None,
@@ -47,9 +37,6 @@ internal readonly record struct ComposerGizmoHit(
     Vec3 WorldCenter,
     Vec3 RotationStartVector);
 
-// ComposerOverlayRenderer turns camera/scene state into an image using one rendering backend. Its caches/resources
-// are implementation details of that backend; callers should depend on the common rendered result rather than those
-// internals.
 /// <summary>
 /// Draws editor-only selection bounds and transform controls directly over any
 /// renderer output. Keeping this as a post-process makes the overlay identical
@@ -122,6 +109,194 @@ internal static class ComposerOverlayRenderer
         }
     }
 
+
+    /// <summary>Draws editor-only light markers and the selected light move gizmo.</summary>
+    public static void DrawLights(
+        RenderImage image,
+        CameraDefinition camera,
+        IReadOnlyList<SceneLight> lights,
+        int? selectedLightIndex)
+    {
+        if (image == null) throw new ArgumentNullException(nameof(image));
+        if (camera == null) throw new ArgumentNullException(nameof(camera));
+        if (lights == null) throw new ArgumentNullException(nameof(lights));
+
+        for (int i = 0; i < lights.Count; i++)
+        {
+            SceneLight light = lights[i];
+            if (!TryProject(light.Position, camera, image.Width, image.Height, out ProjectedPoint projected))
+                continue;
+
+            bool selected = selectedLightIndex == i;
+            uint color = light.Enabled ? PackedLightColor(light.Color) : 0xff777777u;
+            DrawLightMarker(image, camera, light, projected, color, selected);
+        }
+
+        if (selectedLightIndex is int selected && selected >= 0 && selected < lights.Count)
+        {
+            Vec3 position = lights[selected].Position;
+            Aabb pointBounds = new(position, position);
+            if (TryCreateAxisGeometry(camera, pointBounds, image.Width, image.Height, out AxisGeometry geometry))
+                DrawTranslationGizmo(image, geometry, ComposerGizmoAxis.None);
+        }
+    }
+
+    /// <summary>Returns the nearest visible editor light marker under an image-space pointer.</summary>
+    public static bool TryPickLightMarker(
+        IReadOnlyList<SceneLight> lights,
+        CameraDefinition camera,
+        int width,
+        int height,
+        double imageX,
+        double imageY,
+        out int lightIndex)
+    {
+        lightIndex = -1;
+        double bestDistance = 14.0;
+        double bestDepth = double.PositiveInfinity;
+        for (int i = 0; i < lights.Count; i++)
+        {
+            if (!TryProject(lights[i].Position, camera, width, height, out ProjectedPoint projected))
+                continue;
+            double distance = Distance(imageX, imageY, projected.X, projected.Y);
+            if (distance < bestDistance || (Math.Abs(distance - bestDistance) < 0.5 && projected.Depth < bestDepth))
+            {
+                bestDistance = distance;
+                bestDepth = projected.Depth;
+                lightIndex = i;
+            }
+        }
+        return lightIndex >= 0;
+    }
+
+    private static void DrawLightMarker(
+        RenderImage image,
+        CameraDefinition camera,
+        SceneLight light,
+        ProjectedPoint center,
+        uint color,
+        bool selected)
+    {
+        uint outline = selected ? BoundsColor : 0xfff0f0f0u;
+        int cx = (int)Math.Round(center.X);
+        int cy = (int)Math.Round(center.Y);
+
+        DrawCircleOutline(image, center.X, center.Y, selected ? 10 : 8, outline, 2);
+        DrawDisc(image, cx, cy, 4, color);
+        DrawDisc(image, cx, cy, 1, 0xffffffffu);
+
+        switch (light.Kind)
+        {
+            case SceneLightKind.Directional:
+                DrawDirectionArrow(image, camera, light, center, color, 1.0);
+                DrawRay(image, center, -12, 0, outline);
+                DrawRay(image, center, 12, 0, outline);
+                DrawRay(image, center, 0, -12, outline);
+                DrawRay(image, center, 0, 12, outline);
+                break;
+            case SceneLightKind.Spot:
+                DrawDirectionArrow(image, camera, light, center, color, 1.25);
+                DrawSpotConeHint(image, camera, light, center, color);
+                break;
+            default:
+                DrawRay(image, center, -13, 0, color);
+                DrawRay(image, center, 13, 0, color);
+                DrawRay(image, center, 0, -13, color);
+                DrawRay(image, center, 0, 13, color);
+                DrawRay(image, center, -9, -9, color);
+                DrawRay(image, center, 9, -9, color);
+                DrawRay(image, center, -9, 9, color);
+                DrawRay(image, center, 9, 9, color);
+                break;
+        }
+    }
+
+    private static void DrawDirectionArrow(
+        RenderImage image,
+        CameraDefinition camera,
+        SceneLight light,
+        ProjectedPoint center,
+        uint color,
+        double lengthScale)
+    {
+        Vec3 direction = light.Direction.Normalize();
+        if (direction.Length() < 1e-8)
+            return;
+        double worldLength = Math.Max(0.1, (light.Position - camera.Position).Length() * 0.08 * lengthScale);
+        if (!TryProject(light.Position + direction * worldLength, camera, image.Width, image.Height, out ProjectedPoint tip))
+            return;
+        DrawLine(image, center.X, center.Y, tip.X, tip.Y, color, 3);
+        double dx = tip.X - center.X;
+        double dy = tip.Y - center.Y;
+        double len = Math.Sqrt(dx * dx + dy * dy);
+        if (len < 3.0)
+            return;
+        dx /= len;
+        dy /= len;
+        double px = -dy;
+        double py = dx;
+        DrawLine(image, tip.X, tip.Y, tip.X - dx * 8 + px * 5, tip.Y - dy * 8 + py * 5, color, 2);
+        DrawLine(image, tip.X, tip.Y, tip.X - dx * 8 - px * 5, tip.Y - dy * 8 - py * 5, color, 2);
+    }
+
+    private static void DrawSpotConeHint(
+        RenderImage image,
+        CameraDefinition camera,
+        SceneLight light,
+        ProjectedPoint center,
+        uint color)
+    {
+        Vec3 direction = light.Direction.Normalize();
+        if (direction.Length() < 1e-8)
+            return;
+        double worldLength = Math.Max(0.1, (light.Position - camera.Position).Length() * 0.10);
+        CameraBasis basis = camera.ToBasis();
+        Vec3 perpendicular = direction.Cross(basis.Up).Normalize();
+        if (perpendicular.Length() < 1e-8)
+            perpendicular = direction.Cross(basis.Right).Normalize();
+        double radius = worldLength * Math.Tan(Math.Clamp(light.OuterConeAngle, 0.02, Math.PI / 2.1));
+        Vec3 end = light.Position + direction * worldLength;
+        if (!TryProject(end + perpendicular * radius, camera, image.Width, image.Height, out ProjectedPoint a) ||
+            !TryProject(end - perpendicular * radius, camera, image.Width, image.Height, out ProjectedPoint b))
+            return;
+        DrawLine(image, center.X, center.Y, a.X, a.Y, color, 1);
+        DrawLine(image, center.X, center.Y, b.X, b.Y, color, 1);
+        DrawLine(image, a.X, a.Y, b.X, b.Y, color, 1);
+    }
+
+    private static void DrawRay(RenderImage image, ProjectedPoint center, double dx, double dy, uint color)
+    {
+        double length = Math.Sqrt(dx * dx + dy * dy);
+        if (length < 1e-6)
+            return;
+        double sx = center.X + dx / length * 8.0;
+        double sy = center.Y + dy / length * 8.0;
+        DrawLine(image, sx, sy, center.X + dx, center.Y + dy, color, 2);
+    }
+
+    private static void DrawCircleOutline(RenderImage image, double cx, double cy, double radius, uint color, int thickness)
+    {
+        const int segments = 28;
+        double previousX = cx + radius;
+        double previousY = cy;
+        for (int i = 1; i <= segments; i++)
+        {
+            double angle = Math.PI * 2.0 * i / segments;
+            double x = cx + Math.Cos(angle) * radius;
+            double y = cy + Math.Sin(angle) * radius;
+            DrawLine(image, previousX, previousY, x, y, color, thickness);
+            previousX = x;
+            previousY = y;
+        }
+    }
+
+    private static uint PackedLightColor(Vec3 color)
+    {
+        byte r = (byte)Math.Clamp((int)Math.Round(color.X * 255.0), 0, 255);
+        byte g = (byte)Math.Clamp((int)Math.Round(color.Y * 255.0), 0, 255);
+        byte b = (byte)Math.Clamp((int)Math.Round(color.Z * 255.0), 0, 255);
+        return (uint)(r | (g << 8) | (b << 16) | (255 << 24));
+    }
 
     public static void DrawMeshHover(
         RenderImage image,
@@ -257,10 +432,6 @@ internal static class ComposerOverlayRenderer
         hit = best;
         return true;
 
-        // TestAxis evaluates axis against the current hit-test conditions and updates the best candidate only when
-        // this candidate is within tolerance/closer than the previous one.
-        // TestAxis evaluates axis against the current hit-test conditions and updates the best candidate only when
-        // this candidate is within tolerance/closer than the previous one.
         void TestAxis(ComposerGizmoAxis axis, ProjectedPoint start, ProjectedPoint end)
         {
             double dx = end.X - start.X;
@@ -402,8 +573,6 @@ internal static class ComposerOverlayRenderer
             startVector);
         return true;
 
-        // TestRing evaluates ring against the current hit-test conditions and updates the best candidate only when
-        // this candidate is within tolerance/closer than the previous one.
         void TestRing(ComposerGizmoAxis axis)
         {
             ProjectedPoint? previous = null;
@@ -490,8 +659,6 @@ internal static class ComposerOverlayRenderer
         return true;
     }
 
-    // DrawBounds rasterizes bounds into the target image/overlay using projected geometry. Drawing is kept separate
-    // from scene mutation so gizmos/highlights remain presentation-only.
     private static void DrawBounds(RenderImage image, CameraDefinition camera, Aabb bounds)
     {
         Vec3[] corners =
@@ -537,8 +704,6 @@ internal static class ComposerOverlayRenderer
         DrawHandle(image, geometry.Center.X, geometry.Center.Y, OriginColor, radius: 4);
     }
 
-    // DrawScaleGizmo rasterizes scale gizmo into the target image/overlay using projected geometry. Drawing is kept
-    // separate from scene mutation so gizmos/highlights remain presentation-only.
     private static void DrawScaleGizmo(RenderImage image, AxisGeometry geometry)
     {
         DrawAxis(image, geometry.Center, geometry.XEnd, XAxisColor, squareHandle: true);
@@ -547,8 +712,6 @@ internal static class ComposerOverlayRenderer
         DrawSquareHandle(image, geometry.Center.X, geometry.Center.Y, OriginColor, halfSize: 6);
     }
 
-    // DrawRotationGizmo rasterizes rotation gizmo into the target image/overlay using projected geometry. Drawing
-    // is kept separate from scene mutation so gizmos/highlights remain presentation-only.
     private static void DrawRotationGizmo(RenderImage image, CameraDefinition camera, AxisGeometry geometry)
     {
         DrawRing(ComposerGizmoAxis.X, XAxisColor);
@@ -556,8 +719,6 @@ internal static class ComposerOverlayRenderer
         DrawRing(ComposerGizmoAxis.Z, ZAxisColor);
         DrawHandle(image, geometry.Center.X, geometry.Center.Y, OriginColor, radius: 3);
 
-        // DrawRing rasterizes ring into the target image/overlay using projected geometry. Drawing is kept separate
-        // from scene mutation so gizmos/highlights remain presentation-only.
         void DrawRing(ComposerGizmoAxis axis, uint color)
         {
             ProjectedPoint? previous = null;
@@ -689,8 +850,6 @@ internal static class ComposerOverlayRenderer
         return Distance(px, py, x0 + t * (x1 - x0), y0 + t * (y1 - y0));
     }
 
-    // Distance computes Euclidean distance between the supplied points/components. In hit-testing code this
-    // converts geometric proximity into a scalar that can be compared with a pixel/selection tolerance.
     private static double Distance(double x0, double y0, double x1, double y1)
     {
         double dx = x0 - x1;
@@ -788,8 +947,6 @@ internal static class ComposerOverlayRenderer
         }
     }
 
-    // DrawHandle rasterizes handle into the target image/overlay using projected geometry. Drawing is kept separate
-    // from scene mutation so gizmos/highlights remain presentation-only.
     private static void DrawHandle(RenderImage image, double x, double y, uint color, int radius)
     {
         int centerX = (int)Math.Round(x);
@@ -798,8 +955,6 @@ internal static class ComposerOverlayRenderer
         DrawDisc(image, centerX, centerY, Math.Max(1, radius - 3), 0xffffffffu);
     }
 
-    // DrawSquareHandle rasterizes square handle into the target image/overlay using projected geometry. Drawing is
-    // kept separate from scene mutation so gizmos/highlights remain presentation-only.
     private static void DrawSquareHandle(RenderImage image, double x, double y, uint color, int halfSize)
     {
         int centerX = (int)Math.Round(x);
@@ -814,8 +969,6 @@ internal static class ComposerOverlayRenderer
         }
     }
 
-    // DrawDisc rasterizes disc into the target image/overlay using projected geometry. Drawing is kept separate
-    // from scene mutation so gizmos/highlights remain presentation-only.
     private static void DrawDisc(RenderImage image, int centerX, int centerY, int radius, uint color)
     {
         int squaredRadius = radius * radius;
@@ -830,8 +983,6 @@ internal static class ComposerOverlayRenderer
         }
     }
 
-    // BlendPixel combines pixel with the destination pixel using alpha/color composition rather than overwriting it
-    // outright, allowing translucent overlays to remain readable over the rendered scene.
     private static void BlendPixel(RenderImage image, int x, int y, uint source)
     {
         if ((uint)x >= (uint)image.Width || (uint)y >= (uint)image.Height)
@@ -897,8 +1048,6 @@ internal static class ComposerOverlayRenderer
         return true;
     }
 
-    // IsFinite rejects NaN and infinity so geometry/projection code does not feed non-finite coordinates into
-    // clipping, rasterization, bounds, or scene transforms.
     private static bool IsFinite(Vec3 value) =>
         double.IsFinite(value.X) && double.IsFinite(value.Y) && double.IsFinite(value.Z);
 }

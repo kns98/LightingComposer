@@ -1,9 +1,13 @@
-/*
- * The Vulkan path makes resource ownership and cache validity explicit. CPU-side scene data is packed into GPU
- * buffers/images, commands are submitted against those resources, and stale resources must be rebuilt when
- * geometry or transforms change; a numerically correct algorithm can still be wrong here if lifetime or
- * synchronization is mishandled.
- */
+// -----------------------------------------------------------------------------
+// File: Rendering/VulkanRasterRenderer.cs
+// Purpose: Vulkan graphics-pipeline raster preview.
+//
+// This renderer is intentionally separate from VulkanSceneComputeRenderer.  It
+// uses Vulkan's normal vertex/fragment raster pipeline for fast preview frames:
+// vertex buffer -> depth-tested triangle rasterization -> fragment lighting ->
+// off-screen color texture -> staging readback -> cross-platform RGBA image.
+// -----------------------------------------------------------------------------
+
 using System.Diagnostics;
 using System.Numerics;
 using System.Runtime.InteropServices;
@@ -18,9 +22,6 @@ using Veldrid.SPIRV;
 
 namespace LightingShowcase.Rendering;
 
-// VulkanRasterRenderer turns camera/scene state into an image using one rendering backend. Its caches/resources are
-// implementation details of that backend; callers should depend on the common rendered result rather than those
-// internals.
 /// <summary>Vulkan hardware rasterizer for the Render tab preview.</summary>
 public static class VulkanRasterRenderer
 {
@@ -74,7 +75,6 @@ public static class VulkanRasterRenderer
     private static long targetUseSerial;
     private static bool preflightCompleted;
 
-    // SharedRasterResources owns resources/subscriptions whose lifetime must be ended explicitly.
     private sealed class SharedRasterResources : IDisposable
     {
         public required ResourceLayout Layout { get; init; }
@@ -82,14 +82,6 @@ public static class VulkanRasterRenderer
         public required Pipeline OpaquePipeline { get; init; }
         public required Pipeline TransparentPipeline { get; init; }
 
-        // Dispose ends this object’s active lifetime: owned cancellations/resources/listeners are released so
-        // completed windows/renderers do not keep receiving work or retain unmanaged memory. GPU resource
-        // creation/update is explicit, so correct lifetime and cache invalidation are part of the method’s
-        // correctness.
-        // Dispose ends this object’s active lifetime: owned cancellations/resources/listeners are released so
-        // completed windows/renderers do not keep receiving work or retain unmanaged memory.
-        // Dispose ends this object’s active lifetime: owned cancellations/resources/listeners are released so
-        // completed windows/renderers do not keep receiving work or retain unmanaged memory.
         public void Dispose()
         {
             try { OpaquePipeline.Dispose(); } catch { }
@@ -106,7 +98,6 @@ public static class VulkanRasterRenderer
     }
 
 
-    // PreparedRasterScene owns resources/subscriptions whose lifetime must be ended explicitly.
     private sealed class PreparedRasterScene : IDisposable
     {
         public required Scene Scene { get; init; }
@@ -157,7 +148,6 @@ public static class VulkanRasterRenderer
         }
     }
 
-    // RasterTargets owns resources/subscriptions whose lifetime must be ended explicitly.
     private sealed class RasterTargets : IDisposable
     {
         public required int Width { get; init; }
@@ -480,9 +470,6 @@ public static class VulkanRasterRenderer
 
                 if (device != null)
                 {
-                    // Shared Vulkan resources cannot be disposed while commands may still reference them. Waiting
-                    // here is a shutdown/rebuild safety boundary, not something the steady-state frame loop should
-                    // do.
                     try { Stage("Dispose shared Vulkan raster GraphicsDevice: WaitForIdle"); device.WaitForIdle(); } catch { }
                 }
 
@@ -500,9 +487,6 @@ public static class VulkanRasterRenderer
         }
     }
 
-    // ReleasePreparedScene releases prepared scene and its owned resources, used when cached/native objects are no
-    // longer valid or the owning scene/session is shutting down. GPU resource creation/update is explicit, so
-    // correct lifetime and cache invalidation are part of the method’s correctness.
     /// <summary>
     /// Releases scene-sized Vulkan buffers while keeping the device, pipelines,
     /// and small render-target cache alive. Call this before replacing a large
@@ -1023,10 +1007,6 @@ public static class VulkanRasterRenderer
         ranges.Add(new VertexRange(start, count));
     }
 
-    // GetOrCreatePreparedScene reads or create prepared scene. Cancellation is propagated so shutdown or a newer
-    // request can make obsolete work stop early. Native interop is localized here so handle/pointer lifetime and
-    // platform failure handling do not spread through editor code. GPU resource creation/update is explicit, so
-    // correct lifetime and cache invalidation are part of the method’s correctness.
     private static PreparedRasterScene GetOrCreatePreparedScene(GraphicsDevice gd, SharedRasterResources resources, Scene scene, CancellationToken cancellationToken)
     {
         bool gpuTextureSamplingRequested = UseGpuTextureSampling;
@@ -1074,9 +1054,6 @@ public static class VulkanRasterRenderer
         ResourceSet? previewSet = null;
         try
         {
-            // These buffers have distinct usage flags because Veldrid/Vulkan uses them differently: vertex buffers
-            // feed geometry, uniform buffers hold per-frame transforms/camera data, and structured buffers expose
-            // arrays such as lights/materials to shaders.
             opaque = factory.CreateBuffer(new BufferDescription(opaqueBytes, BufferUsage.VertexBuffer));
             transparent = factory.CreateBuffer(new BufferDescription(transparentBytes, BufferUsage.VertexBuffer));
             camera = factory.CreateBuffer(new BufferDescription((uint)Marshal.SizeOf<RasterCameraConstants>(), BufferUsage.UniformBuffer));
@@ -1289,8 +1266,6 @@ public static class VulkanRasterRenderer
         return checked((uint)bytes);
     }
 
-    // GetOrCreateTargets reads or create targets. GPU resource creation/update is explicit, so correct lifetime and
-    // cache invalidation are part of the method’s correctness.
     private static RasterTargets GetOrCreateTargets(GraphicsDevice gd, int width, int height)
     {
         (int Width, int Height) key = (width, height);
@@ -1330,8 +1305,6 @@ public static class VulkanRasterRenderer
         return created;
     }
 
-    // ComputeSceneBounds calculates scene bounds deterministically from its inputs; callers can use the result as
-    // derived data/cache evidence without mutating the underlying scene.
     private static void ComputeSceneBounds(Scene scene, out Vec3 center, out double radius)
     {
         if (scene.Triangles.Count == 0) { center = Vec3.Zero; radius = 10; return; }
@@ -1355,8 +1328,6 @@ public static class VulkanRasterRenderer
     private static double ComputeCachedCameraFarPlane(PreparedRasterScene scene, Vec3 cameraPosition) =>
         Math.Clamp((scene.BoundingCenter - cameraPosition).Length() + scene.BoundingRadius * 1.1 + 1.0, 10.0, CameraFar);
 
-    // GetOrCreateSharedDevice reads or create shared device. GPU resource creation/update is explicit, so correct
-    // lifetime and cache invalidation are part of the method’s correctness.
     private static GraphicsDevice GetOrCreateSharedDevice()
     {
         lock (DeviceSync)
@@ -1501,8 +1472,6 @@ public static class VulkanRasterRenderer
         }
     }
 
-    // CreateRasterShaders constructs raster shaders in the normalized form expected downstream, so allocation plus
-    // initialization of its invariants happen together.
     private static Shader[] CreateRasterShaders(ResourceFactory factory)
     {
         ShaderDescription vertex = new(
@@ -1700,8 +1669,6 @@ public static class VulkanRasterRenderer
         return lights.ToArray();
     }
 
-    // ComputeCameraFarPlane calculates camera far plane deterministically from its inputs; callers can use the
-    // result as derived data/cache evidence without mutating the underlying scene.
     private static double ComputeCameraFarPlane(Scene scene, Vec3 cameraPosition, CameraBasis basis)
     {
         // The CPU shadow rasterizer stores camera-space depth directly in a
@@ -2007,8 +1974,6 @@ public static class VulkanRasterRenderer
         }
         finally
         {
-            // The staging texture is mapped only long enough to copy the rendered pixels into managed memory;
-            // unmapping promptly avoids holding a driver mapping across later render work.
             gd.Unmap(stagingTexture);
         }
         return new RenderImage(width, height, pixels);

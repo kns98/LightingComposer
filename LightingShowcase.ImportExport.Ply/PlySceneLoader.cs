@@ -1,8 +1,15 @@
-/*
- * Importing PLY is a translation problem, not a file-copy operation. The code parses the external representation,
- * resolves indices/resources/transforms, and creates Composer triangles, object groups, materials, and textures in
- * the coordinate and ownership conventions expected by the scene layer.
- */
+// -----------------------------------------------------------------------------
+// File: Scene/PlySceneLoader.cs
+// Purpose: PLY import.
+//
+// Imports common ASCII and binary PLY polygon meshes into the internal scene
+// graph. The importer reads vertex positions and polygon faces, triangulates
+// n-gons, and generates box-projection UVs because most PLY files do not carry
+// portable texture coordinates. Binary support covers the common
+// binary_little_endian and binary_big_endian PLY variants used by 3D viewport,
+// MeshLab, CloudCompare, 3D scan datasets, and many free model repositories.
+// -----------------------------------------------------------------------------
+
 using System;
 using System.Collections.Generic;
 using System.Globalization;
@@ -12,8 +19,6 @@ using LightingShowcase.Math3D;
 
 namespace LightingShowcase.SceneGraph;
 
-// PlySceneLoader owns parsing and translation from its external file format into Composer scene objects;
-// parser-specific intermediate state stays here instead of leaking into the renderer-neutral scene model.
 /// <summary>Imports common ASCII and binary PLY assets into the internal scene graph.</summary>
 public static class PlySceneLoader
 {
@@ -71,9 +76,6 @@ public static class PlySceneLoader
         return new ObjLoadResult(filePath, vertices.Count, faces.Count, triangleCount);
     }
 
-    // PlyFormat makes a closed set of choices compiler-visible instead of passing loosely related integers or
-    // strings. Code that switches over Ascii, BinaryLittleEndian, BinaryBigEndian is where the behavioral meaning
-    // of each choice is implemented.
     private enum PlyFormat
     {
         Ascii,
@@ -81,8 +83,6 @@ public static class PlySceneLoader
         BinaryBigEndian
     }
 
-    // PlyHeader is the parsed metadata that tells the loader how to interpret the records that follow; later
-    // parsing depends on these counts/properties being correct.
     private sealed class PlyHeader
     {
         public PlyFormat Format { get; set; }
@@ -91,8 +91,6 @@ public static class PlySceneLoader
         public List<PlyElement> Elements { get; } = new();
     }
 
-    // PlyElement describes one declared element/section in the source format so subsequent records can be decoded
-    // with the correct property layout.
     private sealed class PlyElement
     {
         public string Name { get; }
@@ -106,8 +104,6 @@ public static class PlySceneLoader
         }
     }
 
-    // PlyVertex represents one geometric or parsed vertex and keeps the coordinate/attribute values that must
-    // remain associated with that point.
     private sealed class PlyVertex
     {
         public Vec3 Position { get; }
@@ -124,8 +120,6 @@ public static class PlySceneLoader
     {
         public string Name { get; }
         public string Type { get; }
-        // IsList is a read-only predicate over the object’s existing state; it exists so callers share one exact
-        // condition when enabling commands or deciding whether an operation is applicable.
         public bool IsList { get; }
         public string CountType { get; }
         public string ItemType { get; }
@@ -143,8 +137,6 @@ public static class PlySceneLoader
         public static PlyProperty List(string countType, string itemType, string name) => new(name, string.Empty, true, countType, itemType);
     }
 
-    // ReadHeader reads header from the external stream/document, advancing through the format in the order required
-    // to resolve references and produce valid internal data.
     private static PlyHeader ReadHeader(byte[] bytes, out int dataOffset)
     {
         if (bytes.Length < 4)
@@ -257,11 +249,7 @@ public static class PlySceneLoader
         }
 
         int offset = dataOffset;
-        // PLY may store binary scalars in either endian order. The reader normalizes byte order at the scalar
-        // boundary so the rest of the importer can work with ordinary numeric values.
         bool littleEndian = header.Format == PlyFormat.BinaryLittleEndian;
-        // PLY may store binary scalars in either endian order. The reader normalizes byte order at the scalar
-        // boundary so the rest of the importer can work with ordinary numeric values.
         ReadBinaryElements(bytes, ref offset, header, littleEndian, vertices, faces, progress);
     }
 
@@ -314,8 +302,6 @@ public static class PlySceneLoader
         }
     }
 
-    // ReadAsciiVertex reads ascii vertex from the external stream/document, advancing through the format in the
-    // order required to resolve references and produce valid internal data.
     private static PlyVertex ReadAsciiVertex(string line, PlyElement element)
     {
         string[] tokens = line.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
@@ -352,8 +338,6 @@ public static class PlySceneLoader
         return new PlyVertex(new Vec3(x, y, z), color);
     }
 
-    // ReadAsciiFace reads ascii face from the external stream/document, advancing through the format in the order
-    // required to resolve references and produce valid internal data.
     private static int[] ReadAsciiFace(string line, PlyElement element, PlyProperty faceList, int vertexCount)
     {
         string[] tokens = line.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
@@ -434,8 +418,6 @@ public static class PlySceneLoader
         }
     }
 
-    // ReadBinaryVertex reads binary vertex from the external stream/document, advancing through the format in the
-    // order required to resolve references and produce valid internal data.
     private static PlyVertex ReadBinaryVertex(byte[] bytes, ref int offset, PlyElement element, bool littleEndian)
     {
         double x = 0, y = 0, z = 0;
@@ -469,8 +451,6 @@ public static class PlySceneLoader
         return new PlyVertex(new Vec3(x, y, z), color);
     }
 
-    // ReadBinaryFace reads binary face from the external stream/document, advancing through the format in the order
-    // required to resolve references and produce valid internal data.
     private static int[] ReadBinaryFace(byte[] bytes, ref int offset, PlyElement element, PlyProperty faceList, bool littleEndian, int vertexCount)
     {
         foreach (PlyProperty property in element.Properties)
@@ -487,8 +467,6 @@ public static class PlySceneLoader
                 }
 
                 checked { offset += count * TypeSize(property.ItemType); }
-                // Binary reads validate the remaining byte count before advancing the offset. That turns
-                // truncated/corrupt PLY input into a controlled format error instead of an out-of-range read.
                 EnsureAvailable(bytes, offset, 0);
             }
             else
@@ -508,8 +486,6 @@ public static class PlySceneLoader
             {
                 int count = ReadBinaryListCount(bytes, ref offset, property.CountType, littleEndian);
                 checked { offset += count * TypeSize(property.ItemType); }
-                // Binary reads validate the remaining byte count before advancing the offset. That turns
-                // truncated/corrupt PLY input into a controlled format error instead of an out-of-range read.
                 EnsureAvailable(bytes, offset, 0);
             }
             else
@@ -607,8 +583,6 @@ public static class PlySceneLoader
         return null;
     }
 
-    // SelectFaceIndexProperty changes the editor’s current face index property choice and synchronizes the
-    // controls/overlay behavior that depend on that mode.
     private static PlyProperty SelectFaceIndexProperty(PlyElement faceElement)
     {
         PlyProperty? firstList = null;
@@ -720,8 +694,6 @@ public static class PlySceneLoader
         return (int)value;
     }
 
-    // ReadBinaryDouble reads binary double from the external stream/document, advancing through the format in the
-    // order required to resolve references and produce valid internal data.
     private static double ReadBinaryDouble(byte[] bytes, ref int offset, string type, bool littleEndian)
     {
         string normalized = NormalizeType(type);
@@ -750,8 +722,6 @@ public static class PlySceneLoader
         }
     }
 
-    // ReadUInt16 reads u int16 from the external stream/document, advancing through the format in the order
-    // required to resolve references and produce valid internal data.
     private static ushort ReadUInt16(byte[] bytes, ref int offset, bool littleEndian)
     {
         EnsureAvailable(bytes, offset, 2);
@@ -762,8 +732,6 @@ public static class PlySceneLoader
         return value;
     }
 
-    // ReadUInt32 reads u int32 from the external stream/document, advancing through the format in the order
-    // required to resolve references and produce valid internal data.
     private static uint ReadUInt32(byte[] bytes, ref int offset, bool littleEndian)
     {
         EnsureAvailable(bytes, offset, 4);
@@ -780,8 +748,6 @@ public static class PlySceneLoader
         return BitConverter.Int32BitsToSingle(unchecked((int)raw));
     }
 
-    // ReadDouble reads double from the external stream/document, advancing through the format in the order required
-    // to resolve references and produce valid internal data.
     private static double ReadDouble(byte[] bytes, ref int offset, bool littleEndian)
     {
         EnsureAvailable(bytes, offset, 8);
@@ -812,9 +778,6 @@ public static class PlySceneLoader
         return BitConverter.Int64BitsToDouble(unchecked((long)raw));
     }
 
-    // All binary scalar readers funnel through this bounds check before advancing the shared offset. Truncated
-    // files therefore fail with a format error at the read boundary instead of producing arbitrary values or an
-    // unrelated index exception.
     private static void EnsureAvailable(byte[] bytes, int offset, int count)
     {
         if (offset < 0 || count < 0 || offset + count > bytes.Length)

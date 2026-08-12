@@ -1,12 +1,5 @@
-/*
- * This is desktop-editor glue around the scene and rendering layers. The code should be read in terms of how it
- * translates user interaction into domain operations while keeping platform UI state, mutable scene state, and
- * renderer state from becoming entangled.
- */
 namespace LightingShowcase.CommandLine;
 
-// CommandLineArguments holds the parsed command-line configuration after syntax/default handling, separating text
-// parsing from the code that actually runs the requested job.
 internal sealed class CommandLineArguments
 {
     private static readonly HashSet<string> FlagOptions = new(StringComparer.OrdinalIgnoreCase)
@@ -77,13 +70,8 @@ internal sealed class CommandLineArguments
 
     public bool Has(string key) => _switches.Contains(key) || _values.ContainsKey(key);
 
-    // IsSwitch tests whether switch is true for the supplied/current value. Keeping the predicate here ensures
-    // every caller uses the same definition instead of duplicating a slightly different condition.
     public bool IsSwitch(string key) => _switches.Contains(key);
 
-    // ValidateKnownOptions checks the invariants required for known options and throws/reports an error for
-    // non-finite, out-of-range, or otherwise unsupported values. Keeping validation next to mutation prevents
-    // invalid state from propagating into renderers.
     public void ValidateKnownOptions(IEnumerable<string> knownOptions)
     {
         HashSet<string> known = new(knownOptions, StringComparer.OrdinalIgnoreCase);

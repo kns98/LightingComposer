@@ -1,17 +1,8 @@
-/*
- * Mesh editing first converts triangle soup into editor topology—welded vertices, unique edges, and logical
- * faces—because selection and face operations need stable identities that raw triangle indices alone do not
- * provide. The topology builder also preserves validated face groupings back onto the scene object so subsequent
- * picks/edit operations reuse the same face interpretation.
- */
 using LightingShowcase.Math3D;
 using LightingShowcase.SceneGraph;
 
 namespace LightingShowcase.Composer;
 
-// ComposerSelectionMode makes a closed set of choices compiler-visible instead of passing loosely related integers
-// or strings. Code that switches over Object, Vertex, Edge, Face is where the behavioral meaning of each choice is
-// implemented.
 /// <summary>
 /// Selection granularity used by the composer. Object mode keeps the existing
 /// whole-object transform workflow; the three mesh modes expose welded topology.
@@ -25,8 +16,6 @@ internal enum ComposerSelectionMode
     Face
 }
 
-// ComposerInsetProfile makes a closed set of choices compiler-visible instead of passing loosely related integers
-// or strings. Code that switches over then is where the behavioral meaning of each choice is implemented.
 /// <summary>Cross-section profile used when an inset also has signed depth.</summary>
 internal enum ComposerInsetProfile
 {
@@ -300,8 +289,6 @@ internal sealed class ComposerMeshTopology
             ? Faces[faceIndex].TriangleIndices[0]
             : -1;
 
-    // FindEdgeIndex searches for edge index and returns the matching object/value rather than assuming it exists.
-    // Callers can therefore distinguish a missing match from the found instance.
     public int FindEdgeIndex(int a, int b) =>
         edgeIndexByKey.TryGetValue(new EdgeKey(a, b), out int index) ? index : -1;
 
@@ -347,8 +334,6 @@ internal sealed class ComposerMeshTopology
         return result;
     }
 
-    // CreateMovedTriangles constructs moved triangles in the normalized form expected downstream, so allocation
-    // plus initialization of its invariants happen together.
     public List<Triangle> CreateMovedTriangles(IReadOnlyList<Triangle> source, ComposerMeshSelection selection, Vec3 delta)
     {
         ArgumentNullException.ThrowIfNull(source);
@@ -376,13 +361,9 @@ internal sealed class ComposerMeshTopology
         return result;
     }
 
-    // CreateExtrudedFaceTriangles constructs extruded face triangles in the normalized form expected downstream, so
-    // allocation plus initialization of its invariants happen together.
     public List<Triangle> CreateExtrudedFaceTriangles(IReadOnlyList<Triangle> source, int faceIndex, double distance) =>
         CreateExtrudedFaceEdit(source, faceIndex, distance).Triangles.ToList();
 
-    // CreateExtrudedFaceEdit constructs extruded face edit in the normalized form expected downstream, so
-    // allocation plus initialization of its invariants happen together.
     public ComposerMeshTopologyEditResult CreateExtrudedFaceEdit(IReadOnlyList<Triangle> source, int faceIndex, double distance)
     {
         if (faceIndex < 0 || faceIndex >= Faces.Count)
@@ -474,13 +455,9 @@ internal sealed class ComposerMeshTopology
         return new ComposerMeshTopologyEditResult(result, logicalFaces);
     }
 
-    // CreateInsetFaceTriangles constructs inset face triangles in the normalized form expected downstream, so
-    // allocation plus initialization of its invariants happen together.
     public List<Triangle> CreateInsetFaceTriangles(IReadOnlyList<Triangle> source, int faceIndex, double insetMeters) =>
         CreateInsetFaceEdit(source, faceIndex, insetMeters, recessDepthMeters: 0.0, profile: ComposerInsetProfile.Square).Triangles.ToList();
 
-    // CreateInsetFaceEdit constructs inset face edit in the normalized form expected downstream, so allocation plus
-    // initialization of its invariants happen together.
     public ComposerMeshTopologyEditResult CreateInsetFaceEdit(IReadOnlyList<Triangle> source, int faceIndex, double insetMeters) =>
         CreateInsetFaceEdit(source, faceIndex, insetMeters, recessDepthMeters: 0.0, profile: ComposerInsetProfile.Square);
 
@@ -822,8 +799,6 @@ internal sealed class ComposerMeshTopology
         return sum.Normalize();
     }
 
-    // ResolveExteriorNormal turns exterior normal into the canonical value/path/object the rest of the code
-    // expects, handling aliases/relative forms/registry lookup at one boundary instead of throughout the caller.
     private Vec3 ResolveExteriorNormal(Vec3 faceNormal, Vec3 faceCenter)
     {
         Vec3 outwardNormal = faceNormal.Normalize();
@@ -1481,9 +1456,6 @@ internal sealed class ComposerMeshTopology
         return true;
     }
 
-    // IsInteriorFanCenter tests whether interior fan center is true for the supplied/current value. Keeping the
-    // predicate here ensures every caller uses the same definition instead of duplicating a slightly different
-    // condition.
     private static bool IsInteriorFanCenter(int centerVertex, IReadOnlyList<int> triangleIndices, int[,] ids)
     {
         Dictionary<EdgeKey, int> edgeCounts = new();
@@ -1504,8 +1476,6 @@ internal sealed class ComposerMeshTopology
         }
     }
 
-    // ComputeTolerance calculates tolerance deterministically from its inputs; callers can use the result as
-    // derived data/cache evidence without mutating the underlying scene.
     private static double ComputeTolerance(IReadOnlyList<Triangle> triangles)
     {
         if (triangles.Count == 0) return 1e-7;

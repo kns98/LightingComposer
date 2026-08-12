@@ -1,8 +1,3 @@
-/*
- * This UI code turns editor state into controls and converts user edits back into validated domain operations.
- * Dialog/window state is intentionally temporary: values should only become authoritative scene changes through
- * the session/controller path, which preserves cancel, undo, and renderer invalidation behavior.
- */
 using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Media;
@@ -10,8 +5,6 @@ using LightingShowcase.SceneGraph;
 
 namespace LightingShowcase.Composer;
 
-// ExportFormatDialog owns temporary Avalonia presentation/edit state. Values become durable only when accepted and
-// routed through the relevant session/controller operation, preserving validation and cancellation semantics.
 /// <summary>Explicit format selection shown before choosing an export directory.</summary>
 internal sealed class ExportFormatDialog : Window
 {

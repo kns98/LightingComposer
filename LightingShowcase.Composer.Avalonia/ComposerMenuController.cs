@@ -1,8 +1,3 @@
-/*
- * This controller translates Avalonia events and commands into editor operations while keeping the live scene
- * behind `ComposerSceneSession`. Its job is coordination: validate/route input, invoke the appropriate session or
- * renderer operation, and update presentation state without becoming a competing owner of scene data.
- */
 using Avalonia.Controls;
 using Avalonia.Layout;
 
@@ -56,6 +51,7 @@ internal sealed class ComposerMenuController
     private readonly MenuItem applyTransformMenuItem;
     private readonly MenuItem frameSelectedMenuItem;
     private readonly MenuItem resetTransformMenuItem;
+    private readonly MenuItem lightingEditorMenuItem;
     private readonly MenuItem renderSettingsMenuItem;
     private readonly MenuItem[] primitiveMenuItems;
     private readonly MenuItem[] rendererMenuItems;
@@ -113,6 +109,7 @@ internal sealed class ComposerMenuController
         Action<int> selectSelectionMode,
         Action<int> selectGizmo,
         Action<int> selectAxis,
+        Func<Task> lightingEditor,
         Func<Task> renderSettings)
     {
         this.rendererBox = rendererBox;
@@ -155,6 +152,7 @@ internal sealed class ComposerMenuController
         applyTransformMenuItem = MenuCommand("_Apply transform", applyTransform);
         resetTransformMenuItem = MenuCommand("_Reset transform", resetTransform);
         frameSelectedMenuItem = MenuCommand("_Frame selected", frameSelected);
+        lightingEditorMenuItem = MenuCommand("_Lighting…", lightingEditor);
         renderSettingsMenuItem = MenuCommand("_Settings…", renderSettings);
 
         primitiveMenuItems = CreateCommands(primitiveLabels, addPrimitive);
@@ -193,7 +191,7 @@ internal sealed class ComposerMenuController
         MenuItem axisMenu = new() { Header = "Move _axis lock", ItemsSource = moveAxisMenuItems.Cast<object>().ToArray() };
         MenuItem modeMenu = new() { Header = "_Mode", ItemsSource = new object[] { selectionMenu, gizmoMenu, axisMenu } };
         MenuItem rendererMenu = new() { Header = "_Renderer", ItemsSource = rendererMenuItems.Cast<object>().ToArray() };
-        MenuItem renderMenu = new() { Header = "_Render", ItemsSource = new object[] { rendererMenu, new Separator(), renderSettingsMenuItem } };
+        MenuItem renderMenu = new() { Header = "_Render", ItemsSource = new object[] { rendererMenu, new Separator(), lightingEditorMenuItem, renderSettingsMenuItem } };
 
         return new Menu
         {
@@ -202,8 +200,6 @@ internal sealed class ComposerMenuController
         };
     }
 
-    // SyncChecks updates checks from the authoritative model so UI enable/check state reflects what commands are
-    // actually valid right now.
     public void SyncChecks()
     {
         SetChecked(rendererMenuItems, rendererBox.SelectedIndex);
@@ -212,8 +208,6 @@ internal sealed class ComposerMenuController
         SetChecked(moveAxisMenuItems, moveAxisBox.SelectedIndex);
     }
 
-    // SyncEnabledState updates enabled state from the authoritative model so UI enable/check state reflects what
-    // commands are actually valid right now.
     public void SyncEnabledState()
     {
         newMenuItem.IsEnabled = newButton.IsEnabled;
@@ -244,6 +238,7 @@ internal sealed class ComposerMenuController
         foreach (MenuItem item in moveAxisMenuItems)
             item.IsEnabled = moveAxisBox.IsEnabled && !objectMode();
 
+        lightingEditorMenuItem.IsEnabled = renderSettingsButton.IsEnabled;
         renderSettingsMenuItem.IsEnabled = renderSettingsButton.IsEnabled;
     }
 
@@ -260,8 +255,6 @@ internal sealed class ComposerMenuController
         redoMenuItem.IsEnabled = canRedo;
     }
 
-    // CreateCommands constructs commands in the normalized form expected downstream, so allocation plus
-    // initialization of its invariants happen together.
     private static MenuItem[] CreateCommands(IReadOnlyList<string> labels, Func<int, Task> action)
     {
         MenuItem[] items = new MenuItem[labels.Count];
@@ -273,8 +266,6 @@ internal sealed class ComposerMenuController
         return items;
     }
 
-    // CreateRadioItems constructs radio items in the normalized form expected downstream, so allocation plus
-    // initialization of its invariants happen together.
     private static MenuItem[] CreateRadioItems(IReadOnlyList<string> labels, string groupName, Action<int> action)
     {
         MenuItem[] items = new MenuItem[labels.Count];

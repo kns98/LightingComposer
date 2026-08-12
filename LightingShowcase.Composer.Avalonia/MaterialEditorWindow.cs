@@ -1,8 +1,3 @@
-/*
- * This UI code turns editor state into controls and converts user edits back into validated domain operations.
- * Dialog/window state is intentionally temporary: values should only become authoritative scene changes through
- * the session/controller path, which preserves cancel, undo, and renderer invalidation behavior.
- */
 using System.Globalization;
 using Avalonia;
 using Avalonia.Controls;
@@ -15,8 +10,6 @@ using LightingShowcase.SceneGraph;
 
 namespace LightingShowcase.Composer;
 
-// MaterialEditorWindow owns temporary Avalonia presentation/edit state. Values become durable only when accepted
-// and routed through the relevant session/controller operation, preserving validation and cancellation semantics.
 /// <summary>
 /// Modeless material editor for the selected object/subtree. Library presets are
 /// convenient starting points, while every renderer-backed scalar PBR property can
@@ -26,10 +19,6 @@ internal sealed class MaterialEditorWindow : Window
 {
     private sealed record TextureSlotChoice(MaterialTextureSlot Slot, string Label)
     {
-        // ToString returns the human-facing label/name for this value so Avalonia controls display meaningful text
-        // instead of the generated record/type representation.
-        // ToString returns the human-facing label/name for this value so Avalonia controls display meaningful text
-        // instead of the generated record/type representation.
         public override string ToString() => Label;
     }
 
@@ -217,8 +206,6 @@ internal sealed class MaterialEditorWindow : Window
         Closed += (_, _) => this.onClosed();
     }
 
-    // RefreshFromScene re-reads authoritative state and updates from scene so cached/presented data matches the
-    // current scene after an edit or external change.
     public void RefreshFromScene(string message = "Material state refreshed.")
     {
         ComposerMaterialModel? model = session.GetMaterialModel(objectId);
@@ -382,8 +369,6 @@ internal sealed class MaterialEditorWindow : Window
             "Direct material properties applied. Base color and texture maps were preserved.");
     }
 
-    // BrowseTextureAsync asks the platform picker for texture async and only proceeds when the user returns a valid
-    // local selection; cancellation remains a normal no-op path.
     private async Task BrowseTextureAsync(MaterialTextureSlot slot)
     {
         if (!StorageProvider.CanOpen)
@@ -489,9 +474,6 @@ internal sealed class MaterialEditorWindow : Window
         );
     }
 
-    // RunEditAsync executes edit async as one coordinated action and centralizes success/failure handling so
-    // callers do not each implement inconsistent exception/UI behavior. Potentially blocking/CPU work runs on a
-    // worker task rather than Avalonia’s UI thread.
     private async Task RunEditAsync(Func<bool> edit, string successMessage)
     {
         try
@@ -665,8 +647,6 @@ internal sealed class MaterialEditorWindow : Window
         return true;
     }
 
-    // SyncColorFromChannels updates color from channels from the authoritative model so UI enable/check state
-    // reflects what commands are actually valid right now.
     private void SyncColorFromChannels()
     {
         if (synchronizingColor || !TryReadRgb(out Vec3 color))

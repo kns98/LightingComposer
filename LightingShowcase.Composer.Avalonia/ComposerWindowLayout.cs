@@ -1,8 +1,3 @@
-/*
- * This UI code turns editor state into controls and converts user edits back into validated domain operations.
- * Dialog/window state is intentionally temporary: values should only become authoritative scene changes through
- * the session/controller path, which preserves cancel, undo, and renderer invalidation behavior.
- */
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Layout;

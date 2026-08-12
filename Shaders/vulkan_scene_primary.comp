@@ -1,5 +1,4 @@
 #version 460
-/* This shader is part of the CPU/GPU ABI: descriptor bindings, struct layout, index calculations, and coordinate conventions must match the C# code that fills its buffers. Invocations execute in parallel, so bounds checks and per-invocation writes are what prevent one work item from reading or corrupting another item’s data. */
 
 layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
 

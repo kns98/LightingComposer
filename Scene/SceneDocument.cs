@@ -1,8 +1,13 @@
-/*
- * This representation separates durable or isolated scene state from the mutable live editor graph. Save/load,
- * undo, background rendering, and tests need snapshots/documents that can be copied or serialized without exposing
- * shared mutable objects across threads.
- */
+// -----------------------------------------------------------------------------
+// File: Scene/SceneDocument.cs
+// Purpose: Editor-facing scene document facade.
+//
+// The UI should not manually infer object
+// metadata by walking low-level triangle/group data each time it refreshes.  This
+// document facade keeps the existing Scene as the geometry source of truth while
+// exposing stable, UI-friendly object records and a small set of mutation helpers.
+// -----------------------------------------------------------------------------
+
 using LightingShowcase.Lighting;
 using LightingShowcase.Math3D;
 

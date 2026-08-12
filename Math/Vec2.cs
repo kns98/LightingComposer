@@ -1,8 +1,12 @@
-/*
- * These math primitives are intentionally tiny and allocation-free because they sit on geometry and rendering hot
- * paths. Their formulas establish shared conventions for vector arithmetic, interpolation, normalization, and
- * component-wise operations; handling degenerate numeric cases here prevents subtle differences between callers.
- */
+// -----------------------------------------------------------------------------
+// File: Math/Vec2.cs
+// Purpose: 2D vector math.
+//
+// Small immutable helper for texture coordinates and other two-dimensional numeric data.
+// This comment is intentionally kept in source code so future maintainers can
+// understand the role of this file without opening external documentation.
+// -----------------------------------------------------------------------------
+
 namespace LightingShowcase.Math3D;
 
 /// <summary>Immutable two-dimensional vector used primarily for UV texture coordinates.</summary>
@@ -10,8 +14,8 @@ public readonly struct Vec2
 {
     public readonly double U;
     public readonly double V;
-    // The Vec2 constructor stores its coordinate components directly. Because the struct is immutable, those
-    // component values completely define the vector for the rest of its lifetime.
+
+    /// <summary>Constructs and initializes this component.</summary>
     public Vec2(double u, double v)
     {
         U = u;

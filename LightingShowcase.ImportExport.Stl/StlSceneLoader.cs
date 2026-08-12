@@ -1,8 +1,12 @@
-/*
- * Importing STL is a translation problem, not a file-copy operation. The code parses the external representation,
- * resolves indices/resources/transforms, and creates Composer triangles, object groups, materials, and textures in
- * the coordinate and ownership conventions expected by the scene layer.
- */
+// -----------------------------------------------------------------------------
+// File: Scene/StlSceneLoader.cs
+// Purpose: STL import.
+//
+// Imports widely available ASCII and binary STL files into the internal scene
+// graph. STL carries only triangle positions, so this loader generates stable
+// box-projection UVs for later texture application.
+// -----------------------------------------------------------------------------
+
 using System;
 using System.Collections.Generic;
 using System.Globalization;
@@ -12,8 +16,6 @@ using LightingShowcase.Math3D;
 
 namespace LightingShowcase.SceneGraph;
 
-// StlSceneLoader owns parsing and translation from its external file format into Composer scene objects;
-// parser-specific intermediate state stays here instead of leaking into the renderer-neutral scene model.
 /// <summary>Imports ASCII and binary STL assets into the internal scene graph.</summary>
 public static class StlSceneLoader
 {
@@ -89,9 +91,6 @@ public static class StlSceneLoader
         return new ObjLoadResult(filePath, 0, triangles.Count, scene.Triangles.Count);
     }
 
-    // IsProbablyBinaryStl tests whether probably binary stl is true for the supplied/current value. Keeping the
-    // predicate here ensures every caller uses the same definition instead of duplicating a slightly different
-    // condition.
     private static bool IsProbablyBinaryStl(string filePath)
     {
         long length = new FileInfo(filePath).Length;
@@ -110,9 +109,6 @@ public static class StlSceneLoader
         return !prefix.Equals("solid", StringComparison.OrdinalIgnoreCase);
     }
 
-    // ReadBinary reads binary from the external stream/document, advancing through the format in the order required
-    // to resolve references and produce valid internal data. Binary field order is explicit; changing it requires
-    // the corresponding reader/writer to remain symmetrical.
     private static List<RawTriangle> ReadBinary(string filePath, Action<ObjLoadProgress>? progress)
     {
         List<RawTriangle> triangles = new();
@@ -140,12 +136,8 @@ public static class StlSceneLoader
         return triangles;
     }
 
-    // ReadVec3 reads vec3 from the external stream/document, advancing through the format in the order required to
-    // resolve references and produce valid internal data.
     private static Vec3 ReadVec3(BinaryReader reader) => new(reader.ReadSingle(), reader.ReadSingle(), reader.ReadSingle());
 
-    // ReadAscii reads ascii from the external stream/document, advancing through the format in the order required
-    // to resolve references and produce valid internal data.
     private static List<RawTriangle> ReadAscii(string filePath, Action<ObjLoadProgress>? progress)
     {
         List<RawTriangle> triangles = new();

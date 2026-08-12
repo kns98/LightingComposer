@@ -1,8 +1,11 @@
-/*
- * This file belongs to the renderer-neutral scene layer, which is the shared source of truth for geometry,
- * transforms, grouping, materials, resources, and serialization-facing state. Higher layers manipulate these
- * abstractions rather than maintaining parallel copies of scene data.
- */
+// -----------------------------------------------------------------------------
+// File: Scene/SceneImportExportService.cs
+// Purpose: Scene import/export application service.
+//
+// Phase 1 architecture cleanup: file-format discovery, filters, load/save calls,
+// and export variants are centralized here instead of being hard-coded in the UI.
+// -----------------------------------------------------------------------------
+
 using LightingShowcase.Math3D;
 
 namespace LightingShowcase.SceneGraph;
@@ -23,28 +26,16 @@ public sealed class SceneImportExportService
     public string InsertDialogFilter => BuildOpenFilter(includePropXml: false);
     public string SaveDialogFilter => BuildSaveFilter();
 
-    // IsSupportedDropFile tests whether supported drop file is true for the supplied/current value. Keeping the
-    // predicate here ensures every caller uses the same definition instead of duplicating a slightly different
-    // condition.
     public bool IsSupportedDropFile(string filePath)
     {
         string extension = Path.GetExtension(filePath);
         return IsSupportedModelExtension(extension) || IsPropXmlFile(filePath);
     }
 
-    // IsSupportedModelFile tests whether supported model file is true for the supplied/current value. Keeping the
-    // predicate here ensures every caller uses the same definition instead of duplicating a slightly different
-    // condition.
     public bool IsSupportedModelFile(string filePath) => IsSupportedModelExtension(Path.GetExtension(filePath));
 
-    // OpenModel opens model using the current selection/session as its initial state. The window/dialog is a
-    // temporary editor; durable changes still flow through the session operation it invokes.
-    // OpenModel opens model using the current selection/session as its initial state. The window/dialog is a
-    // temporary editor; durable changes still flow through the session operation it invokes.
     public ObjLoadResult OpenModel(string filePath, Action<ObjLoadProgress>? progress = null) => OpenModel(filePath, simplifyKeepFraction: null, progress);
 
-    // OpenModelSimplified opens model simplified using the current selection/session as its initial state. The
-    // window/dialog is a temporary editor; durable changes still flow through the session operation it invokes.
     /// <summary>Opens a model as a replacement scene and reduces mesh detail during import when requested.</summary>
     public ObjLoadResult OpenModelSimplified(string filePath, double keepFraction, Action<ObjLoadProgress>? progress = null) => OpenModel(filePath, Math.Clamp(keepFraction, 0.02, 1.0), progress);
 
@@ -84,8 +75,6 @@ public sealed class SceneImportExportService
         return result;
     }
 
-    // OpenPropXml opens prop xml using the current selection/session as its initial state. The window/dialog is a
-    // temporary editor; durable changes still flow through the session operation it invokes.
     public void OpenPropXml(string filePath)
     {
         scene.LoadPropXmlFile(filePath);
@@ -117,16 +106,11 @@ public sealed class SceneImportExportService
         SceneFormatRegistry.Export(scene, fileName, new SceneSaveOptions { Variant = choice.Variant });
     }
 
-    // IsSupportedModelExtension tests whether supported model extension is true for the supplied/current value.
-    // Keeping the predicate here ensures every caller uses the same definition instead of duplicating a slightly
-    // different condition.
     private bool IsSupportedModelExtension(string extension) =>
         !string.IsNullOrWhiteSpace(extension) &&
         !extension.Equals(".xml", StringComparison.OrdinalIgnoreCase) &&
         SceneFormatRegistry.IsImportExtension(extension);
 
-    // IsPropXmlFile tests whether prop xml file is true for the supplied/current value. Keeping the predicate here
-    // ensures every caller uses the same definition instead of duplicating a slightly different condition.
     private static bool IsPropXmlFile(string filePath) =>
         filePath.EndsWith(".prop.xml", StringComparison.OrdinalIgnoreCase) ||
         Path.GetExtension(filePath).Equals(".xml", StringComparison.OrdinalIgnoreCase);

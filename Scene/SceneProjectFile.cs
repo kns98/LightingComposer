@@ -1,8 +1,8 @@
-/*
- * This representation separates durable or isolated scene state from the mutable live editor graph. Save/load,
- * undo, background rendering, and tests need snapshots/documents that can be copied or serialized without exposing
- * shared mutable objects across threads.
- */
+// -----------------------------------------------------------------------------
+// File: Scene/SceneProjectFile.cs
+// Purpose: Portable project manifest save/load helpers.
+// -----------------------------------------------------------------------------
+
 using System.Text.Json;
 using LightingShowcase.Lighting;
 using LightingShowcase.Math3D;
@@ -18,9 +18,6 @@ public static class SceneProjectFile
 {
     private static readonly JsonSerializerOptions Options = new() { WriteIndented = true, IncludeFields = true };
 
-    // SaveManifest serializes manifest from current internal state, making persistence a snapshot operation rather
-    // than allowing the serializer to walk concurrently mutating editor objects. Serializer-specific handling stays
-    // at this boundary rather than leaking into the live scene model.
     public static void SaveManifest(SceneDocument document, string filePath)
     {
         if (document == null) throw new ArgumentNullException(nameof(document));
@@ -105,11 +102,7 @@ public sealed class ProjectLightRecord
     public double OuterConeAngle { get; set; }
     public bool Enabled { get; set; } = true;
     public bool CastsShadow { get; set; } = true;
-    // IsImported is a read-only predicate over the object’s existing state; it exists so callers share one exact
-    // condition when enabling commands or deciding whether an operation is applicable.
     public bool IsImported { get; set; }
-    // IsDefault is a read-only predicate over the object’s existing state; it exists so callers share one exact
-    // condition when enabling commands or deciding whether an operation is applicable.
     public bool IsDefault { get; set; }
 
     public static ProjectLightRecord FromLight(SceneLight light) => new()

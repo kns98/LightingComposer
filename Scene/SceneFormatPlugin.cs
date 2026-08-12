@@ -1,14 +1,15 @@
-/*
- * This is an extensibility seam. Callers discover capabilities through a registry/interface instead of referencing
- * every concrete format or object-library assembly, allowing plugins to be added while the core scene/editor code
- * remains unchanged.
- */
+// -----------------------------------------------------------------------------
+// File: Scene/SceneFormatPlugin.cs
+// Purpose: Scene import/export plugin contracts.
+//
+// All model importers and exporters are reached through this interface so file
+// formats can live in separate DLLs instead of being hard-wired into the editor UI.
+// -----------------------------------------------------------------------------
+
 using LightingShowcase.Math3D;
 
 namespace LightingShowcase.SceneGraph;
 
-// SceneLoadOptions collects one operation/backend’s tunable choices and provides a single validation/defaulting
-// boundary before those choices affect execution.
 public sealed class SceneLoadOptions
 {
     public Material FallbackMaterial { get; init; } = new(new Vec3(0.82, 0.82, 0.78));
@@ -20,8 +21,6 @@ public sealed class SceneLoadOptions
     public Action<ObjLoadProgress>? Progress { get; init; }
 }
 
-// SceneSaveOptions collects one operation/backend’s tunable choices and provides a single validation/defaulting
-// boundary before those choices affect execution.
 public sealed class SceneSaveOptions
 {
     public string? Variant { get; init; }
@@ -50,18 +49,12 @@ public sealed class SceneSaveOptions
     public bool OptimizeGeometry { get; init; }
 }
 
-// ISceneFormatPlugin defines a capability boundary: callers depend on the contract rather than the concrete
-// plugin/backend implementing it. New implementations can therefore participate without changing the core caller.
 public interface ISceneFormatPlugin
 {
     string FormatId { get; }
     string DisplayName { get; }
     IReadOnlyList<string> Extensions { get; }
-    // CanImport is a read-only predicate over the object’s existing state; it exists so callers share one exact
-    // condition when enabling commands or deciding whether an operation is applicable.
     bool CanImport { get; }
-    // CanExport is a read-only predicate over the object’s existing state; it exists so callers share one exact
-    // condition when enabling commands or deciding whether an operation is applicable.
     bool CanExport { get; }
     bool CarriesLights { get; }
     IReadOnlyList<string> ExportVariants { get; }

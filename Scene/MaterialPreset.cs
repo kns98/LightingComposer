@@ -1,8 +1,8 @@
-/*
- * Surface appearance is normalized here so importers, editor controls, and every renderer use the same meaning for
- * colors, PBR values, alpha behavior, texture slots, UV transforms, and resource identity. That shared model is
- * what makes a material edited in the UI render consistently across backends.
- */
+// -----------------------------------------------------------------------------
+// File: Scene/MaterialPreset.cs
+// Purpose: Common physically based material presets for the editor material library.
+// -----------------------------------------------------------------------------
+
 using LightingShowcase.Math3D;
 
 namespace LightingShowcase.SceneGraph;
@@ -23,8 +23,6 @@ public sealed class MaterialPreset
         Summary = summary;
     }
 
-    // ToString returns the human-facing label/name for this value so Avalonia controls display meaningful text
-    // instead of the generated record/type representation.
     public override string ToString() => $"{Category} - {Name}";
 }
 

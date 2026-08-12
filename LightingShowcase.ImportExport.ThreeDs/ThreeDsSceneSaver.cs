@@ -1,16 +1,20 @@
-/*
- * Exporting THREEDS walks the internal scene and rebuilds the format’s object/index/material/resource structures.
- * The implementation must keep indices and references self-consistent and must make deliberate choices about
- * features that do not map one-to-one between Composer and THREEDS.
- */
+// -----------------------------------------------------------------------------
+// File: Scene/ThreeDsSceneSaver.cs
+// Purpose: 3DS export.
+//
+// Writes a broadly compatible legacy Autodesk 3DS mesh file. The 3DS format is
+// limited to 65,535 vertices/faces per mesh, so large scenes are automatically
+// split into multiple object chunks. Geometry and UVs are baked to world space;
+// lights, hierarchy, and advanced material properties are not represented by
+// this interchange format.
+// -----------------------------------------------------------------------------
+
 using System.IO;
 using System.Text;
 using LightingShowcase.Math3D;
 
 namespace LightingShowcase.SceneGraph;
 
-// ThreeDsSceneSaver owns translation from Composer scene state into its external file format, including the
-// indexing/resource relationships required for another program to reconstruct the exported model.
 /// <summary>Exports the current scene as a legacy Autodesk 3DS static mesh.</summary>
 public static class ThreeDsSceneSaver
 {
@@ -201,8 +205,6 @@ public static class ThreeDsSceneSaver
         using MemoryStream chunkStream = new();
         using BinaryWriter chunkWriter = new(chunkStream, Encoding.ASCII, leaveOpen: true);
         chunkWriter.Write(id);
-        // A 3DS chunk length includes the 2-byte ID, 4-byte length field, and payload. Writing the complete size is
-        // what lets older readers skip chunks they do not understand.
         chunkWriter.Write(checked((uint)(payloadStream.Length + 6)));
         chunkWriter.Write(payloadStream.ToArray());
         return chunkStream.ToArray();
@@ -219,12 +221,8 @@ public static class ThreeDsSceneSaver
         return name;
     }
 
-    // WriteBytes writes bytes to the external stream/document in the format’s required order, using stable
-    // indices/references so another reader can reconstruct the same relationships.
     private static void WriteBytes(BinaryWriter writer, byte[] bytes) => writer.Write(bytes);
 
-    // WriteCString writes c string to the external stream/document in the format’s required order, using stable
-    // indices/references so another reader can reconstruct the same relationships.
     private static void WriteCString(BinaryWriter writer, string value)
     {
         byte[] bytes = Encoding.ASCII.GetBytes(value.Where(ch => ch >= 32 && ch <= 126).ToArray());
@@ -232,8 +230,6 @@ public static class ThreeDsSceneSaver
         writer.Write((byte)0);
     }
 
-    // WriteFloatVec3 writes float vec3 to the external stream/document in the format’s required order, using stable
-    // indices/references so another reader can reconstruct the same relationships.
     private static void WriteFloatVec3(BinaryWriter writer, Vec3 value)
     {
         writer.Write((float)value.X);
@@ -241,8 +237,6 @@ public static class ThreeDsSceneSaver
         writer.Write((float)value.Z);
     }
 
-    // WriteFloatVec2 writes float vec2 to the external stream/document in the format’s required order, using stable
-    // indices/references so another reader can reconstruct the same relationships.
     private static void WriteFloatVec2(BinaryWriter writer, Vec2 value)
     {
         writer.Write((float)value.U);

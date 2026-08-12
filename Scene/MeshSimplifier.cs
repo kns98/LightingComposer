@@ -1,8 +1,19 @@
-/*
- * This file belongs to the renderer-neutral scene layer, which is the shared source of truth for geometry,
- * transforms, grouping, materials, resources, and serialization-facing state. Higher layers manipulate these
- * abstractions rather than maintaining parallel copies of scene data.
- */
+// -----------------------------------------------------------------------------
+// File: Scene/MeshSimplifier.cs
+// Purpose: Topology-conscious selected-object triangle reduction.
+//
+// The first Simplify implementation reduced triangle count by deleting spatially
+// distributed representative triangles.  That was fast, but it necessarily left
+// holes because faces were removed without rebuilding neighboring topology.
+//
+// This version uses vertex clustering instead: nearby vertices are collapsed to
+// shared averaged positions and the original faces are rebuilt against those
+// collapsed vertices.  Degenerate faces are then removed.  This is still a
+// lightweight editor simplifier, not a full quadric-error optimizer, but it is
+// much safer for closed surfaces because it does not intentionally delete random
+// surface patches.
+// -----------------------------------------------------------------------------
+
 using LightingShowcase.Math3D;
 
 namespace LightingShowcase.SceneGraph;
@@ -51,8 +62,6 @@ internal static class MeshSimplifier
 
         for (int pass = 0; pass < 11; pass++)
         {
-            // Cell size is searched geometrically rather than linearly because useful clustering scales can span
-            // orders of magnitude. The search adjusts toward a grid that lands near the requested triangle budget.
             double cellSize = Math.Sqrt(low * high);
             List<Triangle> candidate = SimplifyWithCellSize(triangles, min, cellSize);
             int count = candidate.Count;
@@ -131,8 +140,6 @@ internal static class MeshSimplifier
             ClusterVertex b = vertices[kb];
             ClusterVertex c = vertices[kc];
 
-            // Clustering can leave three distinct cells whose averaged points are nevertheless almost collinear.
-            // Dropping those near-zero-area faces prevents unstable normals and invisible sliver triangles.
             if (TriangleAreaSquared(a.Position, b.Position, c.Position) < MinAreaSquared)
                 continue;
 

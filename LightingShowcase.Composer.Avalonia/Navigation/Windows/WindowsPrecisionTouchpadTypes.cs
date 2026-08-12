@@ -1,15 +1,7 @@
-/*
- * This UI code turns editor state into controls and converts user edits back into validated domain operations.
- * Dialog/window state is intentionally temporary: values should only become authoritative scene changes through
- * the session/controller path, which preserves cancel, undo, and renderer invalidation behavior.
- */
 using System.Runtime.InteropServices;
 
 namespace LightingShowcase.Composer.Navigation.Windows;
 
-// WindowsPointerInputType makes a closed set of choices compiler-visible instead of passing loosely related
-// integers or strings. Code that switches over Pointer, Touch, Pen, Mouse, Touchpad is where the behavioral meaning
-// of each choice is implemented.
 internal enum WindowsPointerInputType : uint
 {
     Pointer = 1,
@@ -19,9 +11,6 @@ internal enum WindowsPointerInputType : uint
     Touchpad = 5
 }
 
-// WindowsPointerFlags makes a closed set of choices compiler-visible instead of passing loosely related integers or
-// strings. Code that switches over None, New, InRange, InContact, FirstButton, SecondButton, ThirdButton,
-// FourthButton, FifthButton, Primary is where the behavioral meaning of each choice is implemented.
 [Flags]
 internal enum WindowsPointerFlags : uint
 {
@@ -46,10 +35,6 @@ internal enum WindowsPointerFlags : uint
     HasTransform = 0x00400000
 }
 
-// WindowsPointerButtonChangeType makes a closed set of choices compiler-visible instead of passing loosely related
-// integers or strings. Code that switches over None, FirstButtonDown, FirstButtonUp, SecondButtonDown,
-// SecondButtonUp, ThirdButtonDown, ThirdButtonUp, FourthButtonDown, FourthButtonUp, FifthButtonDown is where the
-// behavioral meaning of each choice is implemented.
 internal enum WindowsPointerButtonChangeType : uint
 {
     None,

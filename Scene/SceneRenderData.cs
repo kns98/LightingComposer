@@ -1,8 +1,8 @@
-/*
- * This file belongs to the renderer-neutral scene layer, which is the shared source of truth for geometry,
- * transforms, grouping, materials, resources, and serialization-facing state. Higher layers manipulate these
- * abstractions rather than maintaining parallel copies of scene data.
- */
+// -----------------------------------------------------------------------------
+// File: Scene/SceneRenderData.cs
+// Purpose: Shared renderer input built from the canonical scene.
+// -----------------------------------------------------------------------------
+
 using LightingShowcase.Lighting;
 using LightingShowcase.Math3D;
 
@@ -33,8 +33,6 @@ public sealed class SceneRenderData
     }
 }
 
-// SceneRenderDataBuilder accumulates/normalizes lower-level inputs and emits a valid higher-level object only when
-// enough information has been supplied.
 /// <summary>Builds shared render data from the editable scene so renderers do not reinterpret the scene differently.</summary>
 public static class SceneRenderDataBuilder
 {

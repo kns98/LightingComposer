@@ -1,9 +1,3 @@
-/*
- * The Vulkan path makes resource ownership and cache validity explicit. CPU-side scene data is packed into GPU
- * buffers/images, commands are submitted against those resources, and stale resources must be rebuilt when
- * geometry or transforms change; a numerically correct algorithm can still be wrong here if lifetime or
- * synchronization is mishandled.
- */
 using LightingShowcase.Math3D;
 
 namespace LightingShowcase.Rendering;
@@ -14,8 +8,6 @@ namespace LightingShowcase.Rendering;
 /// </summary>
 public readonly record struct VulkanRasterMeshTriangleEdit(int TriangleIndex, byte CornerMask);
 
-// VulkanRasterMeshEditPreview holds transient data used only while an interactive edit is in progress;
-// committing/cancelling must either promote or discard it cleanly.
 /// <summary>
 /// Transient component deformation used by the Vulkan raster editor preview.
 /// The renderer patches only affected triangle vertices in its already allocated

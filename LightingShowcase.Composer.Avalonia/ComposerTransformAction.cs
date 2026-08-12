@@ -1,8 +1,3 @@
-/*
- * This is desktop-editor glue around the scene and rendering layers. The code should be read in terms of how it
- * translates user interaction into domain operations while keeping platform UI state, mutable scene state, and
- * renderer state from becoming entangled.
- */
 using System.Globalization;
 using LightingShowcase.Math3D;
 
@@ -48,8 +43,6 @@ internal sealed record ComposerTransformRequest(Vec3 Position, Vec3 RotationRadi
         return session.UpdateObject(objectId, name, visible, Position, RotationRadians, Scale);
     }
 
-    // ParseFinite converts user/file text into finite and rejects values that violate the numeric/domain
-    // constraints before they can enter scene state.
     private static double ParseFinite(string? text, string label, double blankValue)
     {
         if (string.IsNullOrWhiteSpace(text))
@@ -61,8 +54,6 @@ internal sealed record ComposerTransformRequest(Vec3 Position, Vec3 RotationRadi
         throw new FormatException($"{label} must be a finite number.");
     }
 
-    // ParsePositive converts user/file text into positive and rejects values that violate the numeric/domain
-    // constraints before they can enter scene state.
     private static double ParsePositive(string? text, string label, double blankValue)
     {
         double value = ParseFinite(text, label, blankValue);
