@@ -127,9 +127,9 @@ internal static class ComposerOverlayRenderer
             if (!TryProject(light.Position, camera, image.Width, image.Height, out ProjectedPoint projected))
                 continue;
 
-            bool selected = selectedLightIndex == i;
+            bool selected_ = selectedLightIndex == i;
             uint color = light.Enabled ? PackedLightColor(light.Color) : 0xff777777u;
-            DrawLightMarker(image, camera, light, projected, color, selected);
+            DrawLightMarker(image, camera, light, projected, color, selected_);
         }
 
         if (selectedLightIndex is int selected && selected >= 0 && selected < lights.Count)
