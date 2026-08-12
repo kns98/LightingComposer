@@ -1,78 +1,7 @@
 /*
  * Importing FBX is a translation problem, not a file-copy operation. The code parses the external representation,
- * resolves indices/resources/transforms, and creates Composer triangles, object groups, materials, and textures
- * in the coordinate and ownership conventions expected by the scene layer.
- *
- * `FbxSceneIO` provides shared algorithms/registration behavior without per-instance state.
- *
- * `FbxMeshData` is an immutable packet of related values. Record value semantics make it suitable for snapshots,
- * options, commands, or parsed intermediate data because callers can copy/compare it without sharing mutable
- * state. Its constructor values (`Vertices`, `PolygonVertexIndices`, `PolygonVertexColors`) travel together
- * because consumers need a consistent snapshot rather than reading those values independently from mutable
- * objects.
- *
- * `FbxBinaryNode` is an immutable packet of related values. Record value semantics make it suitable for
- * snapshots, options, commands, or parsed intermediate data because callers can copy/compare it without sharing
- * mutable state. Its constructor values (`Name`, `Properties`, `Children`) travel together because consumers need
- * a consistent snapshot rather than reading those values independently from mutable objects.
- *
- * `SaveAscii` serializes ascii from current internal state, making persistence a snapshot operation rather than
- * allowing the serializer to walk concurrently mutating editor objects.
- *
- * `SaveBinary` serializes binary from current internal state, making persistence a snapshot operation rather than
- * allowing the serializer to walk concurrently mutating editor objects. Binary field order is explicit; changing
- * it requires the corresponding reader/writer to remain symmetrical.
- *
- * `LoadAsciiMesh` loads ascii mesh from persistent/external data and converts it into validated internal scene
- * state rather than exposing parser-specific objects to the rest of the application.
- *
- * `LoadBinaryMesh` loads binary mesh from persistent/external data and converts it into validated internal scene
- * state rather than exposing parser-specific objects to the rest of the application. Binary field order is
- * explicit; changing it requires the corresponding reader/writer to remain symmetrical.
- *
- * `FindMeshArrays` searches for mesh arrays and returns the matching object/value rather than assuming it exists.
- * Callers can therefore distinguish a missing match from the found instance.
- *
- * `ReadBinaryNode` reads binary node from the external stream/document, advancing through the format in the order
- * required to resolve references and produce valid internal data.
- *
- * `ReadBinaryProperty` reads binary property from the external stream/document, advancing through the format in
- * the order required to resolve references and produce valid internal data.
- *
- * `IsNullRecordAhead` tests whether null record ahead is true for the supplied/current value. Keeping the
- * predicate here ensures every caller uses the same definition instead of duplicating a slightly different
- * condition.
- *
- * `ParseAsciiVertices` converts user/file text into ascii vertices and rejects values that violate the
- * numeric/domain constraints before they can enter scene state.
- *
- * `ConvertVertices` changes vertices into a different representation while preserving the information that
- * representation can express; metadata that no longer applies is deliberately dropped at this boundary.
- *
- * `ConvertColors` changes colors into a different representation while preserving the information that
- * representation can express; metadata that no longer applies is deliberately dropped at this boundary.
- *
- * `AddPolygon` adds polygon to the owning collection/model while using this boundary to preserve indexing,
- * ownership, and derived-state invariants.
- *
- * `GetBounds` reads bounds from the authoritative model and returns a value/snapshot suitable for callers,
- * avoiding direct access to mutable internal storage.
- *
- * `WriteNode` writes node to the external stream/document in the format’s required order, using stable
- * indices/references so another reader can reconstruct the same relationships. Binary field order is explicit;
- * changing it requires the corresponding reader/writer to remain symmetrical.
- *
- * `WriteStringProperty` writes string property to the external stream/document in the format’s required order,
- * using stable indices/references so another reader can reconstruct the same relationships.
- *
- * `WriteDoubleArrayProperty` writes double array property to the external stream/document in the format’s
- * required order, using stable indices/references so another reader can reconstruct the same relationships.
- *
- * `WriteIntArrayProperty` writes int array property to the external stream/document in the format’s required
- * order, using stable indices/references so another reader can reconstruct the same relationships.
- *
- * `WriteColorArrayEntry` writes color array entry to the external stream/document in the format’s required order,
- * using stable indices/references so another reader can reconstruct the same relationships.
+ * resolves indices/resources/transforms, and creates Composer triangles, object groups, materials, and textures in
+ * the coordinate and ownership conventions expected by the scene layer.
  */
 using System.Globalization;
 using System.IO;
@@ -119,6 +48,8 @@ public static class FbxSceneIO
             SaveBinary(scene, filePath);
     }
 
+    // SaveAscii serializes ascii from current internal state, making persistence a snapshot operation rather than
+    // allowing the serializer to walk concurrently mutating editor objects.
     public static void SaveAscii(Scene scene, string filePath)
     {
         string fullPath = PrepareSavePath(filePath);
@@ -176,6 +107,9 @@ Objects:  {
         File.WriteAllText(fullPath, content, Encoding.UTF8);
     }
 
+    // SaveBinary serializes binary from current internal state, making persistence a snapshot operation rather than
+    // allowing the serializer to walk concurrently mutating editor objects. Binary field order is explicit;
+    // changing it requires the corresponding reader/writer to remain symmetrical.
     public static void SaveBinary(Scene scene, string filePath)
     {
         string fullPath = PrepareSavePath(filePath);
@@ -343,6 +277,8 @@ Objects:  {
         return new FbxMeshData(vertices, indices, polygonVertexColors);
     }
 
+    // FindMeshArrays searches for mesh arrays and returns the matching object/value rather than assuming it exists.
+    // Callers can therefore distinguish a missing match from the found instance.
     private static void FindMeshArrays(FbxBinaryNode node, ref List<Vec3>? vertices, ref List<int>? indices, ref List<Vec3>? polygonVertexColors)
     {
         if (node.Name.Equals("Vertices", StringComparison.OrdinalIgnoreCase) && node.Properties.FirstOrDefault() is double[] doubleArray)
@@ -363,6 +299,8 @@ Objects:  {
         }
     }
 
+    // ReadBinaryNode reads binary node from the external stream/document, advancing through the format in the order
+    // required to resolve references and produce valid internal data.
     private static FbxBinaryNode? ReadBinaryNode(BinaryReader reader, bool wideOffsets)
     {
         long nodeStart = reader.BaseStream.Position;
@@ -399,6 +337,8 @@ Objects:  {
         return new FbxBinaryNode(name, properties, children);
     }
 
+    // ReadBinaryProperty reads binary property from the external stream/document, advancing through the format in
+    // the order required to resolve references and produce valid internal data.
     private static object ReadBinaryProperty(BinaryReader reader)
     {
         char type = (char)reader.ReadByte();
@@ -444,6 +384,9 @@ Objects:  {
         }
     }
 
+    // IsNullRecordAhead tests whether null record ahead is true for the supplied/current value. Keeping the
+    // predicate here ensures every caller uses the same definition instead of duplicating a slightly different
+    // condition.
     private static bool IsNullRecordAhead(BinaryReader reader, bool wideOffsets)
     {
         int length = wideOffsets ? 25 : 13;
@@ -462,6 +405,8 @@ Objects:  {
         return prefix.SequenceEqual(BinaryHeader);
     }
 
+    // ParseAsciiVertices converts user/file text into ascii vertices and rejects values that violate the
+    // numeric/domain constraints before they can enter scene state.
     private static List<Vec3> ParseAsciiVertices(string text)
     {
         string array = ExtractArray(text, "Vertices");
@@ -482,6 +427,8 @@ Objects:  {
         return ConvertColors(ParseDoubleArray(array));
     }
 
+    // ConvertVertices changes vertices into a different representation while preserving the information that
+    // representation can express; metadata that no longer applies is deliberately dropped at this boundary.
     private static List<Vec3> ConvertVertices(IReadOnlyList<double> values)
     {
         List<Vec3> vertices = new(values.Count / 3);
@@ -490,6 +437,8 @@ Objects:  {
         return vertices;
     }
 
+    // ConvertColors changes colors into a different representation while preserving the information that
+    // representation can express; metadata that no longer applies is deliberately dropped at this boundary.
     private static List<Vec3> ConvertColors(IReadOnlyList<double> values)
     {
         List<Vec3> colors = new(values.Count / 4);
@@ -568,6 +517,9 @@ Objects:  {
         return fullPath;
     }
 
+    // WriteNode writes node to the external stream/document in the format’s required order, using stable
+    // indices/references so another reader can reconstruct the same relationships. Binary field order is explicit;
+    // changing it requires the corresponding reader/writer to remain symmetrical.
     private static void WriteNode(BinaryWriter writer, string name, IReadOnlyList<Action<BinaryWriter>> writeProperties, Action? writeChildren)
     {
         long nodeStart = writer.BaseStream.Position;
@@ -617,6 +569,8 @@ Objects:  {
         writer.Write(value);
     }
 
+    // WriteStringProperty writes string property to the external stream/document in the format’s required order,
+    // using stable indices/references so another reader can reconstruct the same relationships.
     private static void WriteStringProperty(BinaryWriter writer, string value)
     {
         byte[] bytes = Encoding.UTF8.GetBytes(value);
@@ -625,6 +579,8 @@ Objects:  {
         writer.Write(bytes);
     }
 
+    // WriteDoubleArrayProperty writes double array property to the external stream/document in the format’s
+    // required order, using stable indices/references so another reader can reconstruct the same relationships.
     private static void WriteDoubleArrayProperty(BinaryWriter writer, double[] values)
     {
         writer.Write((byte)'d');
@@ -635,6 +591,8 @@ Objects:  {
             writer.Write(value);
     }
 
+    // WriteIntArrayProperty writes int array property to the external stream/document in the format’s required
+    // order, using stable indices/references so another reader can reconstruct the same relationships.
     private static void WriteIntArrayProperty(BinaryWriter writer, int[] values)
     {
         writer.Write((byte)'i');
@@ -651,6 +609,8 @@ Objects:  {
     private static void AppendColor(StringBuilder builder, Vec3 value) =>
         builder.Append(FormattableString.Invariant($"{Math.Clamp(value.X, 0.0, 1.0):G17},{Math.Clamp(value.Y, 0.0, 1.0):G17},{Math.Clamp(value.Z, 0.0, 1.0):G17},1"));
 
+    // WriteColorArrayEntry writes color array entry to the external stream/document in the format’s required order,
+    // using stable indices/references so another reader can reconstruct the same relationships.
     private static void WriteColorArrayEntry(double[] values, int offset, Vec3 color)
     {
         values[offset + 0] = Math.Clamp(color.X, 0.0, 1.0);

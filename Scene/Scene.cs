@@ -2,74 +2,6 @@
  * This file belongs to the renderer-neutral scene layer, which is the shared source of truth for geometry,
  * transforms, grouping, materials, resources, and serialization-facing state. Higher layers manipulate these
  * abstractions rather than maintaining parallel copies of scene data.
- *
- * `SpatialCellKey` is an immutable packet of related values. Record value semantics make it suitable for
- * snapshots, options, commands, or parsed intermediate data because callers can copy/compare it without sharing
- * mutable state. Its constructor values (`X`, `Y`, `Z`) travel together because consumers need a consistent
- * snapshot rather than reading those values independently from mutable objects.
- *
- * `VertexKey` is an immutable packet of related values. Record value semantics make it suitable for snapshots,
- * options, commands, or parsed intermediate data because callers can copy/compare it without sharing mutable
- * state. Its constructor values (`X`, `Y`, `Z`) travel together because consumers need a consistent snapshot
- * rather than reading those values independently from mutable objects.
- *
- * `EdgeKey` is an immutable packet of related values. Record value semantics make it suitable for snapshots,
- * options, commands, or parsed intermediate data because callers can copy/compare it without sharing mutable
- * state.
- *
- * `Revision` is derived rather than separately stored: it evaluates `Interlocked.Read(ref revision)`. Keeping the
- * value computed from its source fields prevents a second cached flag/value from drifting out of sync.
- *
- * `HasAccelerationStructure` is derived rather than separately stored: it evaluates `Volatile.Read(ref bvhRoot)
- * != null`. Keeping the value computed from its source fields prevents a second cached flag/value from drifting
- * out of sync.
- *
- * `OpenModelFile` opens model file using the current selection/session as its initial state. The window/dialog is
- * a temporary editor; durable changes still flow through the session operation it invokes.
- *
- * `InsertModelFromFile` inserts model from file into the live scene/model and returns the resulting
- * identity/value needed by selection or subsequent editing.
- *
- * `LoadPropXmlFile` loads prop xml file from persistent/external data and converts it into validated internal
- * scene state rather than exposing parser-specific objects to the rest of the application.
- *
- * `GetSceneBounds` reads scene bounds from the authoritative model and returns a value/snapshot suitable for
- * callers, avoiding direct access to mutable internal storage.
- *
- * `SetGroupVisibility` sets group visibility through the owning abstraction instead of exposing a mutable field.
- * That gives the method one place to validate the value and perform any history/cache/UI side effects required by
- * the change.
- *
- * `AddImportedGroup` adds imported group to the owning collection/model while using this boundary to preserve
- * indexing, ownership, and derived-state invariants.
- *
- * `DuplicateGroup` creates an independent copy of group with a new scene identity while preserving the source
- * geometry/material/authored metadata that should carry over.
- *
- * `DeleteGroup` deletes group as a logical editor operation, including the bookkeeping needed so
- * selection/history/caches do not retain a dangling object reference.
- *
- * `CanGroupSelectedObjects` evaluates whether group selected objects is currently legal/available from the
- * existing state. It is a side-effect-free guard intended to drive command enablement or reject an edit before
- * mutation.
- *
- * `GroupSelectedObjects` collects selected objects under a common hierarchy node so they can be manipulated as a
- * unit without baking away each child’s own geometry/material state.
- *
- * `CanUngroup` evaluates whether ungroup is currently legal/available from the existing state. It is a
- * side-effect-free guard intended to drive command enablement or reject an edit before mutation.
- *
- * The `EdgeKey` constructor captures `a`, `b`. Those are the dependencies/initial values the instance needs for
- * its lifetime, so callbacks and later operations use the same objects/configuration rather than looking them up
- * globally.
- *
- * The `DisjointSet` constructor captures `count`. Those are the dependencies/initial values the instance needs
- * for its lifetime, so callbacks and later operations use the same objects/configuration rather than looking them
- * up globally.
- *
- * `RebuildWorldGeometry` reconstructs world geometry from authoritative source data after an edit has invalidated
- * the previous derived form. Rebuilding rather than incrementally patching reduces the chance of stale
- * topology/cache entries surviving.
  */
 using LightingShowcase.Math3D;
 using LightingShowcase.Rendering;
@@ -86,6 +18,8 @@ public sealed class Scene
 
     private readonly SceneMaterials materials = new();
     private BvhNode? bvhRoot;
+    // BVH creation is lazy, so multiple rendering threads can discover a missing acceleration structure at the same
+    // time. This gate ensures only one thread builds/publishes the tree for a given geometry revision.
     private readonly object accelerationGate = new();
     private readonly Stack<SceneObjectGroup> activeGroups = new();
     private int nextGroupId = 1;
@@ -115,6 +49,9 @@ public sealed class Scene
     }
 
 
+    // Opening a model selects an importer from the extension, clears the previous scene, supplies fallback viewing
+    // lights when the format does not carry lights, and asks the importer to normalize the asset into the
+    // composer’s standard viewing volume.
     /// <summary>Opens any supported static model file as a replacement scene through a format plugin.</summary>
     public ObjLoadResult OpenModelFile(string filePath, Action<ObjLoadProgress>? progress = null)
     {
@@ -247,6 +184,8 @@ public sealed class Scene
         nextGroupId = 1;
         InvalidateAccelerationStructure();
         Description = "Empty scene";
+        // The revision is a cheap coherence token for renderer/editor caches. Any operation that changes world
+        // geometry increments it so cached buffers or evidence can be rejected without deep-comparing the scene.
         Interlocked.Increment(ref revision);
     }
 
@@ -355,6 +294,8 @@ public sealed class Scene
         nextGroupId = ObjectGroups.SelectMany(g => g.SelfAndDescendants()).Select(g => g.Id).DefaultIfEmpty(0).Max() + 1;
         RebuildWorldGeometry();
     }
+    // DuplicateGroup creates an independent copy of group with a new scene identity while preserving the source
+    // geometry/material/authored metadata that should carry over.
     public SceneObjectGroup DuplicateGroup(int id)
     {
         SceneObjectGroup source = GroupById(id) ?? throw new ArgumentException("Group not found.", nameof(id));
@@ -373,6 +314,8 @@ public sealed class Scene
         RebuildWorldGeometry();
         return duplicate;
     }
+    // DeleteGroup deletes group as a logical editor operation, including the bookkeeping needed so
+    // selection/history/caches do not retain a dangling object reference.
     public void DeleteGroup(int id)
     {
         SceneObjectGroup? group = GroupById(id);
@@ -403,6 +346,8 @@ public sealed class Scene
         return selected.All(group => ReferenceEquals(group.Parent, commonParent));
     }
 
+    // GroupSelectedObjects collects selected objects under a common hierarchy node so they can be manipulated as a
+    // unit without baking away each child’s own geometry/material state.
     /// <summary>Creates a new parent group from selected sibling objects, at any hierarchy depth.</summary>
     public SceneObjectGroup GroupSelectedObjects(IEnumerable<int> ids, string name = "Group")
     {
@@ -706,6 +651,8 @@ public sealed class Scene
         double spanY = Math.Max(1e-9, max.Y - min.Y);
         double spanZ = Math.Max(1e-9, max.Z - min.Z);
         double volume = spanX * spanY * spanZ;
+        // Spatial chunking starts from the cube-root cell size that would divide the object’s bounding volume into
+        // roughly the requested number of chunks; per-axis correction below handles long or flat meshes.
         double cellVolume = volume / Math.Max(1, desiredChunkCount);
         double cellSize = Math.Pow(Math.Max(1e-9, cellVolume), 1.0 / 3.0);
 
@@ -768,6 +715,8 @@ public sealed class Scene
 
     private static List<List<int>> BuildConnectedTriangleComponents(IReadOnlyList<Triangle> triangles)
     {
+        // Connected components are found with union-find: triangles sharing a quantized vertex are unioned, then
+        // triangles with the same root become one component. This avoids an expensive all-pairs adjacency search.
         DisjointSet disjointSet = new(triangles.Count);
         Dictionary<VertexKey, int> firstTriangleAtVertex = new(triangles.Count * 2);
 
@@ -803,6 +752,8 @@ public sealed class Scene
 
     private static List<List<int>> BuildRectangularFacePairs(IReadOnlyList<Triangle> triangles)
     {
+        // An edge-to-triangle adjacency map lets the grouping code identify pairs of triangles that share an edge.
+        // That is the basis for reconstructing logical rectangular faces from triangulated meshes.
         Dictionary<EdgeKey, List<int>> edgeToTriangles = new(triangles.Count * 3);
         for (int i = 0; i < triangles.Count; i++)
         {
@@ -949,6 +900,9 @@ public sealed class Scene
         }
     }
 
+    // Object-local triangles and hierarchy transforms are the editable source of truth. This method flattens them
+    // into the world-space triangle list consumed by renderers and picking, increments the scene revision, and
+    // optionally rebuilds the CPU BVH.
     /// <summary>
     /// Rebuilds visible world geometry. CPU acceleration construction can be
     /// deferred for realtime raster/compute preview and is then created lazily
@@ -969,6 +923,8 @@ public sealed class Scene
                 Triangles.AddRange(group.BuildWorldTriangles());
         }
 
+        // The revision is a cheap coherence token for renderer/editor caches. Any operation that changes world
+        // geometry increments it so cached buffers or evidence can be rejected without deep-comparing the scene.
         Interlocked.Increment(ref revision);
         if (buildAccelerationStructure)
             RebuildAccelerationStructure();
@@ -987,6 +943,9 @@ public sealed class Scene
             bvhRoot = null;
     }
 
+    // The BVH is built lazily so raster/compute-only workflows do not pay CPU acceleration cost. A double-check
+    // under accelerationGate ensures another thread cannot publish a duplicate tree after the initial volatile
+    // read.
     private BvhNode? GetOrBuildAccelerationStructure()
     {
         BvhNode? cached = Volatile.Read(ref bvhRoot);

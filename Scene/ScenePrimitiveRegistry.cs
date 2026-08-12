@@ -1,22 +1,14 @@
 /*
- * This is an extensibility seam. Callers discover capabilities through a registry/interface instead of
- * referencing every concrete format or object-library assembly, allowing plugins to be added while the core
- * scene/editor code remains unchanged.
- *
- * `ScenePrimitiveRegistry` is a discovery table that maps stable names/capabilities to registered
- * implementations, removing the need for central switch statements that know every plugin or primitive at compile
- * time.
- *
- * `LoadPrimitiveAssemblies` loads primitive assemblies from persistent/external data and converts it into
- * validated internal scene state rather than exposing parser-specific objects to the rest of the application.
- *
- * `Normalize` returns a unit-length direction while guarding the degenerate near-zero case so division does not
- * create infinities or unstable directions.
+ * This is an extensibility seam. Callers discover capabilities through a registry/interface instead of referencing
+ * every concrete format or object-library assembly, allowing plugins to be added while the core scene/editor code
+ * remains unchanged.
  */
 using System.Reflection;
 
 namespace LightingShowcase.SceneGraph;
 
+// ScenePrimitiveRegistry is a discovery table that maps stable names/capabilities to registered implementations,
+// removing the need for central switch statements that know every plugin or primitive at compile time.
 /// <summary>Reflection-backed registry for insertable object definitions.</summary>
 public static class ScenePrimitiveRegistry
 {
@@ -101,6 +93,8 @@ public static class ScenePrimitiveRegistry
         string.Equals(a.Kind, b.Kind, StringComparison.OrdinalIgnoreCase) ||
         string.Equals(a.DisplayName, b.DisplayName, StringComparison.OrdinalIgnoreCase);
 
+    // Normalize returns a unit-length direction while guarding the degenerate near-zero case so division does not
+    // create infinities or unstable directions.
     private static string Normalize(string value) =>
         new(value.Where(char.IsLetterOrDigit).Select(char.ToLowerInvariant).ToArray());
 }

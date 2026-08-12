@@ -2,33 +2,6 @@
  * This file belongs to the renderer-neutral scene layer, which is the shared source of truth for geometry,
  * transforms, grouping, materials, resources, and serialization-facing state. Higher layers manipulate these
  * abstractions rather than maintaining parallel copies of scene data.
- *
- * `MeshSimplifier` provides shared algorithms/registration behavior without per-instance state.
- *
- * `CellKey` is an immutable packet of related values. Record value semantics make it suitable for snapshots,
- * options, commands, or parsed intermediate data because callers can copy/compare it without sharing mutable
- * state. Its constructor values (`X`, `Y`, `Z`) travel together because consumers need a consistent snapshot
- * rather than reading those values independently from mutable objects.
- *
- * `ClusterVertex` is an immutable packet of related values. Record value semantics make it suitable for
- * snapshots, options, commands, or parsed intermediate data because callers can copy/compare it without sharing
- * mutable state. Its constructor values (`Position`, `Uv`) travel together because consumers need a consistent
- * snapshot rather than reading those values independently from mutable objects.
- *
- * `ClusterAccumulator` is a value type, so small instances can be copied without heap allocation. Its operations
- * establish shared numerical/data semantics for callers that would otherwise risk implementing subtly different
- * formulas.
- *
- * `TriangleKey` is an immutable packet of related values. Record value semantics make it suitable for snapshots,
- * options, commands, or parsed intermediate data because callers can copy/compare it without sharing mutable
- * state. Its constructor values (`A`, `B`, `C`) travel together because consumers need a consistent snapshot
- * rather than reading those values independently from mutable objects.
- *
- * `AddVertex` adds vertex to the owning collection/model while using this boundary to preserve indexing,
- * ownership, and derived-state invariants.
- *
- * `GetVertexBounds` reads vertex bounds from the authoritative model and returns a value/snapshot suitable for
- * callers, avoiding direct access to mutable internal storage.
  */
 using LightingShowcase.Math3D;
 
@@ -78,6 +51,8 @@ internal static class MeshSimplifier
 
         for (int pass = 0; pass < 11; pass++)
         {
+            // Cell size is searched geometrically rather than linearly because useful clustering scales can span
+            // orders of magnitude. The search adjusts toward a grid that lands near the requested triangle budget.
             double cellSize = Math.Sqrt(low * high);
             List<Triangle> candidate = SimplifyWithCellSize(triangles, min, cellSize);
             int count = candidate.Count;
@@ -156,6 +131,8 @@ internal static class MeshSimplifier
             ClusterVertex b = vertices[kb];
             ClusterVertex c = vertices[kc];
 
+            // Clustering can leave three distinct cells whose averaged points are nevertheless almost collinear.
+            // Dropping those near-zero-area faces prevents unstable normals and invisible sliver triangles.
             if (TriangleAreaSquared(a.Position, b.Position, c.Position) < MinAreaSquared)
                 continue;
 

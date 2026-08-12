@@ -3,22 +3,6 @@
  * rays are generated in world space, intersections produce hit data, and shading evaluates lights/materials from
  * that hit; GPU renderers should agree with these coordinate and material conventions even when they implement
  * them differently.
- *
- * The `RayTracer` constructor captures `scene`, `lighting`. Those are the dependencies/initial values the
- * instance needs for its lifetime, so callbacks and later operations use the same objects/configuration rather
- * than looking them up globally.
- *
- * `TracePath` traces path through scene geometry, finding the nearest valid intersection and using that hit as
- * the basis for shading/visibility decisions.
- *
- * `TraceDebug` traces debug through scene geometry, finding the nearest valid intersection and using that hit as
- * the basis for shading/visibility decisions.
- *
- * `ShadeHit` evaluates hit from hit/material/light information, combining the relevant surface and illumination
- * terms into the color returned to the renderer.
- *
- * `ApplyNormalMap` applies normal map as a single semantic mutation. Validation, scene changes, undo bookkeeping,
- * and cache invalidation are kept inside this boundary rather than exposed as separate caller responsibilities.
  */
 using LightingShowcase.CameraSystem;
 using LightingShowcase.Lighting;
@@ -48,6 +32,8 @@ public sealed class RayTracer
     }
 
 
+    // TracePath traces path through scene geometry, finding the nearest valid intersection and using that hit as
+    // the basis for shading/visibility decisions.
     /// <summary>Traces a ray with optional indirect path bounces. A bounce count of zero is equivalent to the existing direct raytracer.</summary>
     public Vec3 TracePath(Ray ray, int bounceCount, int pixelX, int pixelY, int sampleIndex)
     {
@@ -55,8 +41,12 @@ public sealed class RayTracer
             return Trace(ray, 0);
 
         Vec3 radiance = Vec3.Zero;
+        // Throughput carries the fraction/color of radiance that survives each bounce. Every new surface
+        // interaction multiplies it by that bounce’s BRDF weight before later emission/direct light is accumulated.
         Vec3 throughput = new(1.0, 1.0, 1.0);
         Ray currentRay = ray;
+        // The random stream is seeded from pixel coordinates and sample index, making stochastic bounce choices
+        // reproducible for a given sample while decorrelating neighboring pixels.
         uint rng = Seed(pixelX, pixelY, sampleIndex);
 
         for (int bounce = 0; bounce <= bounceCount; bounce++)
@@ -86,6 +76,8 @@ public sealed class RayTracer
                 normal = normal * -1.0;
 
             (double metallic, double roughness) = hit.Material.SampleMetallicRoughness(hit.TextureU, hit.TextureV);
+            // The continuation ray is chosen stochastically between a specular-like and diffuse lobe. Dividing each
+            // lobe’s weight by its selection probability keeps the estimator approximately unbiased.
             double specularProbability = Math.Clamp(metallic + (1.0 - roughness) * 0.18, 0.05, 0.9);
             double chooseSpecular = Next01(ref rng);
 
@@ -107,9 +99,13 @@ public sealed class RayTracer
 
             throughput = throughput.Multiply(bounceWeight);
             double maxChannel = Math.Max(throughput.X, Math.Max(throughput.Y, throughput.Z));
+            // Terminate paths whose remaining contribution is negligible. This is a deterministic low-energy cutoff
+            // that avoids spending bounce work on radiance too small to affect an 8-bit preview.
             if (maxChannel < 0.002)
                 break;
 
+            // Offset the next ray slightly away from the hit surface. Without this epsilon the same triangle can
+            // immediately self-intersect because of floating-point error.
             currentRay = new Ray(hit.Point + bounceDirection * 0.003, bounceDirection);
         }
 
@@ -134,6 +130,8 @@ public sealed class RayTracer
         // read correctly without turning the editor into a full path tracer.
         if ((hit.Material.AlphaBlend || transmission > 0.0 || alpha < 0.999) && visibleOpacity < 0.995 && depth < MaxTransparencyDepth)
         {
+            // The transmission ray uses the same self-intersection avoidance idea: start just beyond the surface so
+            // the recursive trace continues through the object instead of hitting the entry face again.
             Ray throughRay = new(hit.Point + ray.Direction * 0.004, ray.Direction);
             Vec3 through = Trace(throughRay, depth + 1);
             double tintStrength = Math.Clamp(transmission * 0.55, 0.0, 0.75);
@@ -150,6 +148,9 @@ public sealed class RayTracer
         return direction - normal * (2.0 * direction.Dot(normal));
     }
 
+    // Cosine-weighted hemisphere sampling turns two uniform random numbers into a direction whose probability
+    // density matches diffuse Lambertian reflection. A tangent/bitangent basis rotates that local sample around the
+    // current surface normal.
     private static Vec3 CosineHemisphere(ref uint state, Vec3 normal)
     {
         double r1 = Next01(ref state);
@@ -168,6 +169,9 @@ public sealed class RayTracer
         return (tangent * x + bitangent * y + n * z).Normalize();
     }
 
+    // The FNV-style hash mixes pixel X, pixel Y, and sample index into a nonzero 32-bit state. Keeping this
+    // deterministic makes stochastic previews repeatable while still giving neighboring pixels different random
+    // sequences.
     private static uint Seed(int x, int y, int sampleIndex)
     {
         unchecked
@@ -191,6 +195,8 @@ public sealed class RayTracer
         }
     }
 
+    // TraceDebug traces debug through scene geometry, finding the nearest valid intersection and using that hit as
+    // the basis for shading/visibility decisions.
     private Vec3 TraceDebug(Ray ray, RenderMode mode)
     {
         Hit? hit = scene.Intersect(ray);
@@ -229,6 +235,8 @@ public sealed class RayTracer
         return color;
     }
 
+    // ShadeHit evaluates hit from hit/material/light information, combining the relevant surface and illumination
+    // terms into the color returned to the renderer.
     private Vec3 ShadeHit(Hit hit, Vec3 surfaceColor, Vec3 viewDirection)
     {
         Vec3 normal = ApplyNormalMap(hit);
@@ -269,6 +277,8 @@ public sealed class RayTracer
 
         Vec3 sample = hit.Material.SampleNormalMap(hit.TextureU, hit.TextureV);
         double scale = hit.Material.NormalScale;
+        // Normal-map texels arrive in [0,1]. Remapping X/Y/Z to tangent-space [-1,1], applying the authored normal
+        // scale to X/Y, and then transforming through the TBN basis produces the world-space shading normal.
         Vec3 tangentNormal = new(
             (sample.X * 2.0 - 1.0) * scale,
             (sample.Y * 2.0 - 1.0) * scale,

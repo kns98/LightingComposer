@@ -1,92 +1,17 @@
 /*
- * `ComposerSceneSession` is the synchronization and transaction boundary around the live scene. Code in these
- * partial files takes the session gate before touching shared mutable scene data, records logical edits for
- * undo/redo, preserves procedural metadata when possible, and invalidates renderer caches when geometry/material
- * state changes. UI code should ask the session to perform edits instead of modifying scene objects directly.
- *
- * `ComposerMaterialProperties` carries only direct PBR surface values for a material edit; texture identity and
- * object identity are deliberately excluded so this snapshot can be applied independently of texture/projection
- * changes. Record value semantics make the snapshot easy to compare/copy without sharing mutable state. Its
- * constructor values (`Metallic`, `Roughness`, `Transmission`, `Alpha`, `Emission`, `EmissionColor`, `AlphaMode`,
- * `AlphaCutoff`, `DoubleSided`, `Ior`, `Thickness`, `AttenuationColor`) travel together because consumers need a
- * consistent snapshot rather than reading those values independently from mutable objects.
- *
- * `ComposerTextureSlotModel` is the inspector-facing snapshot of one texture channel. Besides resource identity
- * it carries UV offset/scale/rotation and U/V wrap modes, which means the UI can edit sampling behavior without
- * receiving a live mutable `Material`. Record value semantics make the snapshot easy to compare/copy without
- * sharing mutable state. Its constructor values (`Slot`, `Label`, `Name`, `Path`, `OffsetU`, `OffsetV`, `ScaleU`,
- * `ScaleV`, `RotationDegrees`, `WrapU`, `WrapV`) travel together because consumers need a consistent snapshot
- * rather than reading those values independently from mutable objects.
- *
- * `ComposerMaterialModel` is the complete material-inspector snapshot for one object: object identity, direct PBR
- * values, texture slots, and stored projection/tiling metadata travel together so a refresh sees one internally
- * consistent material state. Record value semantics make the snapshot easy to compare/copy without sharing
- * mutable state. Its constructor values (`ObjectId`, `ObjectName`, `BaseColor`, `Metallic`, `Roughness`,
- * `Transmission`, `Alpha`, `Emission`, `EmissionColor`, `AlphaMode`, `AlphaCutoff`, `DoubleSided`) travel
- * together because consumers need a consistent snapshot rather than reading those values independently from
- * mutable objects.
- *
- * `ComposerSceneSession` is one slice of a partial type whose shared state/invariants continue in sibling files.
- *
- * `HasTexture` returns true when either the texture’s resource name or source path is nonblank. The model
- * therefore treats both embedded/named textures and path-backed textures as populated slots.
- *
- * `GetMaterialModel` takes the session lock, resolves the selected group’s first material, and copies direct PBR
- * values, every texture slot’s sampling settings, and stored projection/tiling metadata into an inspector
- * snapshot. Returning `null` means the id is missing or has no material. It takes `sceneGate` before touching the
- * live scene and releases it in `finally`, so readers/renderers cannot observe a half-completed mutation.
- * Procedural/object-library metadata is accessed through the registry so editable primitive identity survives
- * operations that should preserve it.
- *
- * `ApplyMaterialPreset` applies the preset’s complete material definition through the common material-edit
- * transaction, so the preset change participates in undo and renderer-cache invalidation.
- *
- * `SetObjectBaseColor` validates that all RGB channels are finite values in 0–1, then changes only base color
- * through the common material-edit transaction.
- *
- * `SetObjectMaterialProperties` rebuilds each material in the selected subtree with the new direct PBR values
- * while preserving base color, light id, and every assigned texture map. This keeps scalar property editing
- * independent from preset and texture tools.
- *
- * `SetObjectTexture` is the base-color convenience overload; it delegates to the slot-aware form so validation,
- * projection handling, and undo behavior stay identical.
- *
- * `ClearObjectTexture` is the base-color convenience overload that delegates to the slot-aware form.
- *
- * `ClearObjectTexture` validates the requested texture slot and clears only that slot through the common material
- * transaction, leaving the other PBR texture inputs untouched.
- *
- * `SetObjectTextureProjectionMode` switches the shared geometry UV source between box-projected real-world tiling
- * and existing/authored UVs. Returning a procedural leaf to authored UVs also rebuilds primitive shadow geometry
- * so rendering uses the regenerated mapping.
- *
- * `ApplyMaterialEdit` is the transaction wrapper for every material mutation. It commits a pending
- * procedural-parameter preview for the same object, captures before/after geometry/material state, rebuilds world
- * and selection-derived data, pushes one undo command, marks the scene unsaved, and invalidates renderer
- * material/texture caches. It takes `sceneGate` before touching the live scene and releases it in `finally`, so
- * readers/renderers cannot observe a half-completed mutation. History bookkeeping surrounds the mutation so
- * internal steps collapse into the intended user-level undo transaction.
- *
- * `CreateTextureSlotModel` converts a nullable `TextureMap` into inspector values with neutral defaults—zero
- * offset/rotation, unit scale, repeat wrapping—so empty and populated slots use the same editor model.
- *
- * `TextureSlotLabel` maps each texture-slot enum to the concise editor label users see, with `ToString()` as a
- * fallback for future enum values.
- *
- * `ValidateColor` enforces the normalized finite 0–1 RGB range used by the material/rendering pipeline.
- *
- * `ValidateMaterialProperties` validates the complete direct-PBR edit as one unit so no invalid scalar can leave
- * a partially applied material.
- *
- * `ValidateUnit` checks the invariants required for unit and throws/reports an error for non-finite,
- * out-of-range, or otherwise unsupported values. Keeping validation next to mutation prevents invalid state from
- * propagating into renderers.
+ * The detailed documentation in this file is kept next to the declarations and algorithms it explains.
  */
 using LightingShowcase.Math3D;
 using LightingShowcase.SceneGraph;
 
 namespace LightingShowcase.Composer;
 
+// ComposerMaterialProperties carries only direct PBR surface values for a material edit; texture identity and
+// object identity are deliberately excluded so this snapshot can be applied independently of texture/projection
+// changes. Record value semantics make the snapshot easy to compare/copy without sharing mutable state. Its
+// constructor values (Metallic, Roughness, Transmission, Alpha, Emission, EmissionColor, AlphaMode, AlphaCutoff,
+// DoubleSided, Ior, Thickness, AttenuationColor) travel together because consumers need a consistent snapshot
+// rather than reading those values independently from mutable objects.
 internal sealed record ComposerMaterialProperties(
     double Metallic,
     double Roughness,
@@ -107,6 +32,12 @@ internal sealed record ComposerMaterialProperties(
     double OcclusionStrength);
 
 
+// ComposerTextureSlotModel is the inspector-facing snapshot of one texture channel. Besides resource identity it
+// carries UV offset/scale/rotation and U/V wrap modes, which means the UI can edit sampling behavior without
+// receiving a live mutable Material. Record value semantics make the snapshot easy to compare/copy without sharing
+// mutable state. Its constructor values (Slot, Label, Name, Path, OffsetU, OffsetV, ScaleU, ScaleV,
+// RotationDegrees, WrapU, WrapV) travel together because consumers need a consistent snapshot rather than reading
+// those values independently from mutable objects.
 internal sealed record ComposerTextureSlotModel(
     MaterialTextureSlot Slot,
     string Label,
@@ -120,9 +51,17 @@ internal sealed record ComposerTextureSlotModel(
     TextureAddressMode WrapU,
     TextureAddressMode WrapV)
 {
+    // HasTexture returns true when either the texture’s resource name or source path is nonblank. The model
+    // therefore treats both embedded/named textures and path-backed textures as populated slots.
     public bool HasTexture => !string.IsNullOrWhiteSpace(Name) || !string.IsNullOrWhiteSpace(Path);
 }
 
+// ComposerMaterialModel is the complete material-inspector snapshot for one object: object identity, direct PBR
+// values, texture slots, and stored projection/tiling metadata travel together so a refresh sees one internally
+// consistent material state. Record value semantics make the snapshot easy to compare/copy without sharing mutable
+// state. Its constructor values (ObjectId, ObjectName, BaseColor, Metallic, Roughness, Transmission, Alpha,
+// Emission, EmissionColor, AlphaMode, AlphaCutoff, DoubleSided) travel together because consumers need a consistent
+// snapshot rather than reading those values independently from mutable objects.
 internal sealed record ComposerMaterialModel(
     int ObjectId,
     string ObjectName,
@@ -174,8 +113,19 @@ internal sealed record ComposerMaterialModel(
         TextureSlots.First(entry => entry.Slot == slot);
 }
 
+// ComposerSceneSession is one slice of a partial type whose shared state/invariants continue in sibling files.
+// ComposerSceneSession is the synchronization and transaction boundary around the live scene. Code in these partial
+// files takes the session gate before touching shared mutable scene data, records logical edits for undo/redo,
+// preserves procedural metadata when possible, and invalidates renderer caches when geometry/material state
+// changes. UI code should ask the session to perform edits instead of modifying scene objects directly.
 internal sealed partial class ComposerSceneSession
 {
+    // GetMaterialModel takes the session lock, resolves the selected group’s first material, and copies direct PBR
+    // values, every texture slot’s sampling settings, and stored projection/tiling metadata into an inspector
+    // snapshot. Returning null means the id is missing or has no material. It takes sceneGate before touching the
+    // live scene and releases it in finally, so readers/renderers cannot observe a half-completed mutation.
+    // Procedural/object-library metadata is accessed through the registry so editable primitive identity survives
+    // operations that should preserve it.
     public ComposerMaterialModel? GetMaterialModel(int id)
     {
         sceneGate.Wait();
@@ -225,18 +175,25 @@ internal sealed partial class ComposerSceneSession
         }
     }
 
+    // ApplyMaterialPreset applies the preset’s complete material definition through the common material-edit
+    // transaction, so the preset change participates in undo and renderer-cache invalidation.
     public bool ApplyMaterialPreset(int id, MaterialPreset preset)
     {
         ArgumentNullException.ThrowIfNull(preset);
         return ApplyMaterialEdit(id, $"Apply material: {preset.Name}", group => group.ApplyMaterialPreset(preset.Material));
     }
 
+    // SetObjectBaseColor validates that all RGB channels are finite values in 0–1, then changes only base color
+    // through the common material-edit transaction.
     public bool SetObjectBaseColor(int id, Vec3 color)
     {
         ValidateColor(color);
         return ApplyMaterialEdit(id, "Set base color", group => group.ApplyBaseColor(color));
     }
 
+    // SetObjectMaterialProperties rebuilds each material in the selected subtree with the new direct PBR values
+    // while preserving base color, light id, and every assigned texture map. This keeps scalar property editing
+    // independent from preset and texture tools.
     /// <summary>
     /// Applies explicit PBR/material values to every material in the selected subtree while
     /// preserving each triangle's base color and all assigned texture maps. This keeps
@@ -278,6 +235,8 @@ internal sealed partial class ComposerSceneSession
                 material.ClearcoatUsesTransmissionTexture)));
     }
 
+    // SetObjectTexture is the base-color convenience overload; it delegates to the slot-aware form so validation,
+    // projection handling, and undo behavior stay identical.
     public bool SetObjectTexture(int id, string path, double tileMeters, bool boxProjection) =>
         SetObjectTexture(id, MaterialTextureSlot.BaseColor, path, tileMeters, boxProjection);
 
@@ -314,6 +273,9 @@ internal sealed partial class ComposerSceneSession
             });
     }
 
+    // ClearObjectTexture validates the requested texture slot and clears only that slot through the common material
+    // transaction, leaving the other PBR texture inputs untouched.
+    // ClearObjectTexture is the base-color convenience overload that delegates to the slot-aware form.
     public bool ClearObjectTexture(int id) => ClearObjectTexture(id, MaterialTextureSlot.BaseColor);
 
     public bool ClearObjectTexture(int id, MaterialTextureSlot slot)
@@ -353,6 +315,9 @@ internal sealed partial class ComposerSceneSession
                 wrapV));
     }
 
+    // SetObjectTextureProjectionMode switches the shared geometry UV source between box-projected real-world tiling
+    // and existing/authored UVs. Returning a procedural leaf to authored UVs also rebuilds primitive shadow
+    // geometry so rendering uses the regenerated mapping.
     /// <summary>
     /// Chooses the shared geometry UV source. Box projection generates one UV channel in
     /// real-world meters for all texture slots; authored/current UV mode leaves triangle
@@ -409,6 +374,12 @@ internal sealed partial class ComposerSceneSession
             });
     }
 
+    // ApplyMaterialEdit is the transaction wrapper for every material mutation. It commits a pending
+    // procedural-parameter preview for the same object, captures before/after geometry/material state, rebuilds
+    // world and selection-derived data, pushes one undo command, marks the scene unsaved, and invalidates renderer
+    // material/texture caches. It takes sceneGate before touching the live scene and releases it in finally, so
+    // readers/renderers cannot observe a half-completed mutation. History bookkeeping surrounds the mutation so
+    // internal steps collapse into the intended user-level undo transaction.
     private bool ApplyMaterialEdit(int id, string description, Action<SceneObjectGroup> apply)
     {
         sceneGate.Wait();
@@ -431,6 +402,8 @@ internal sealed partial class ComposerSceneSession
             scene.RebuildWorldGeometry();
             meshTopologyByGroup.Clear();
             RebuildSelectionOverlayCache();
+            // Material edits mutate the live scene first and then store the before/after geometry state as one
+            // applied history command. This makes a multi-field material change undo as a single user action.
             editHistory.PushApplied(new GeometryStateEditCommand(description, id, before, after));
             ScenePath = null;
 
@@ -445,6 +418,8 @@ internal sealed partial class ComposerSceneSession
         }
     }
 
+    // CreateTextureSlotModel converts a nullable TextureMap into inspector values with neutral defaults—zero
+    // offset/rotation, unit scale, repeat wrapping—so empty and populated slots use the same editor model.
     private static ComposerTextureSlotModel CreateTextureSlotModel(MaterialTextureSlot slot, TextureMap? texture) => new(
         slot,
         TextureSlotLabel(slot),
@@ -458,6 +433,8 @@ internal sealed partial class ComposerSceneSession
         texture?.WrapU ?? TextureAddressMode.Repeat,
         texture?.WrapV ?? TextureAddressMode.Repeat);
 
+    // TextureSlotLabel maps each texture-slot enum to the concise editor label users see, with ToString() as a
+    // fallback for future enum values.
     internal static string TextureSlotLabel(MaterialTextureSlot slot) => slot switch
     {
         MaterialTextureSlot.BaseColor => "Base color",
@@ -489,6 +466,7 @@ internal sealed partial class ComposerSceneSession
             throw new ArgumentOutOfRangeException(nameof(wrapU), "Choose a valid texture address mode.");
     }
 
+    // ValidateColor enforces the normalized finite 0–1 RGB range used by the material/rendering pipeline.
     private static void ValidateColor(Vec3 color)
     {
         if (!double.IsFinite(color.X) || !double.IsFinite(color.Y) || !double.IsFinite(color.Z) ||
@@ -500,6 +478,8 @@ internal sealed partial class ComposerSceneSession
         }
     }
 
+    // ValidateMaterialProperties validates the complete direct-PBR edit as one unit so no invalid scalar can leave
+    // a partially applied material.
     private static void ValidateMaterialProperties(ComposerMaterialProperties properties)
     {
         ValidateUnit(properties.Metallic, nameof(properties.Metallic));
@@ -525,6 +505,9 @@ internal sealed partial class ComposerSceneSession
         ValidateUnit(properties.OcclusionStrength, nameof(properties.OcclusionStrength));
     }
 
+    // ValidateUnit checks the invariants required for unit and throws/reports an error for non-finite,
+    // out-of-range, or otherwise unsupported values. Keeping validation next to mutation prevents invalid state
+    // from propagating into renderers.
     private static void ValidateUnit(double value, string name)
     {
         if (!double.IsFinite(value) || value < 0.0 || value > 1.0)

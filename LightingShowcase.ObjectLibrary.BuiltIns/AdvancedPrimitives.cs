@@ -2,113 +2,15 @@
  * Object-library definitions generate scene geometry from named, authored parameters. Keeping those parameters
  * attached to the generated object is important: a cube with width/height/depth is still editable as a cube until
  * a topology edit deliberately converts it into ordinary mesh geometry.
- *
- * `TorusPrimitive` is the procedural definition for a torus. It knows how to turn authored parameters into
- * triangles and, where supported, how to absorb object-scale changes back into those parameters so the object
- * remains editable as a named primitive rather than becoming anonymous mesh data.
- *
- * `TubePrimitive` is the procedural definition for a tube. It knows how to turn authored parameters into
- * triangles and, where supported, how to absorb object-scale changes back into those parameters so the object
- * remains editable as a named primitive rather than becoming anonymous mesh data.
- *
- * `CapsulePrimitive` is the procedural definition for a capsule. It knows how to turn authored parameters into
- * triangles and, where supported, how to absorb object-scale changes back into those parameters so the object
- * remains editable as a named primitive rather than becoming anonymous mesh data.
- *
- * `PyramidPrimitive` is the procedural definition for a pyramid. It knows how to turn authored parameters into
- * triangles and, where supported, how to absorb object-scale changes back into those parameters so the object
- * remains editable as a named primitive rather than becoming anonymous mesh data.
- *
- * `TriangularPrismPrimitive` is the procedural definition for a triangular prism. It knows how to turn authored
- * parameters into triangles and, where supported, how to absorb object-scale changes back into those parameters
- * so the object remains editable as a named primitive rather than becoming anonymous mesh data.
- *
- * `WedgePrimitive` is the procedural definition for a wedge. It knows how to turn authored parameters into
- * triangles and, where supported, how to absorb object-scale changes back into those parameters so the object
- * remains editable as a named primitive rather than becoming anonymous mesh data.
- *
- * `CreateDefaultParameters` returns the canonical starting dimensions/tessellation values for a new torus; these
- * defaults are what the parameter editor shows immediately after insertion.
- *
- * `CreateParametersFromBounds` infers torus parameters from an existing bounding box, giving existing geometry a
- * sensible procedural description derived from its real extents.
- *
- * `Build` generates the triangles for a torus from its authored parameter dictionary. Geometry is regenerated
- * from parameters rather than incrementally deforming old triangles, which keeps a procedural primitive
- * deterministic and editable.
- *
- * `ApplyScaleDelta` absorbs an object-scale change back into the torus parameters when that change can be
- * represented procedurally. This preserves parametric editability instead of baking scale into anonymous mesh
- * vertices.
- *
- * `CreateDefaultParameters` returns the canonical starting dimensions/tessellation values for a new tube; these
- * defaults are what the parameter editor shows immediately after insertion.
- *
- * `CreateParametersFromBounds` infers tube parameters from an existing bounding box, giving existing geometry a
- * sensible procedural description derived from its real extents.
- *
- * `Build` generates the triangles for a tube from its authored parameter dictionary. Geometry is regenerated from
- * parameters rather than incrementally deforming old triangles, which keeps a procedural primitive deterministic
- * and editable.
- *
- * `ApplyScaleDelta` absorbs an object-scale change back into the tube parameters when that change can be
- * represented procedurally. This preserves parametric editability instead of baking scale into anonymous mesh
- * vertices.
- *
- * `CreateDefaultParameters` returns the canonical starting dimensions/tessellation values for a new capsule;
- * these defaults are what the parameter editor shows immediately after insertion.
- *
- * `CreateParametersFromBounds` infers capsule parameters from an existing bounding box, giving existing geometry
- * a sensible procedural description derived from its real extents.
- *
- * `Build` generates the triangles for a capsule from its authored parameter dictionary. Geometry is regenerated
- * from parameters rather than incrementally deforming old triangles, which keeps a procedural primitive
- * deterministic and editable.
- *
- * `ApplyScaleDelta` absorbs an object-scale change back into the capsule parameters when that change can be
- * represented procedurally. This preserves parametric editability instead of baking scale into anonymous mesh
- * vertices.
- *
- * `CreateDefaultParameters` returns the canonical starting dimensions/tessellation values for a new pyramid;
- * these defaults are what the parameter editor shows immediately after insertion.
- *
- * `CreateParametersFromBounds` infers pyramid parameters from an existing bounding box, giving existing geometry
- * a sensible procedural description derived from its real extents.
- *
- * `Build` generates the triangles for a pyramid from its authored parameter dictionary. Geometry is regenerated
- * from parameters rather than incrementally deforming old triangles, which keeps a procedural primitive
- * deterministic and editable.
- *
- * `ApplyScaleDelta` absorbs an object-scale change back into the pyramid parameters when that change can be
- * represented procedurally. This preserves parametric editability instead of baking scale into anonymous mesh
- * vertices.
- *
- * `CreateDefaultParameters` returns the canonical starting dimensions/tessellation values for a new triangular
- * prism; these defaults are what the parameter editor shows immediately after insertion.
- *
- * `CreateParametersFromBounds` infers triangular prism parameters from an existing bounding box, giving existing
- * geometry a sensible procedural description derived from its real extents.
- *
- * `Build` generates the triangles for a triangular prism from its authored parameter dictionary. Geometry is
- * regenerated from parameters rather than incrementally deforming old triangles, which keeps a procedural
- * primitive deterministic and editable.
- *
- * `ApplyScaleDelta` absorbs an object-scale change back into the triangular prism parameters when that change can
- * be represented procedurally. This preserves parametric editability instead of baking scale into anonymous mesh
- * vertices.
- *
- * `CreateParametersFromBounds` infers wedge parameters from an existing bounding box, giving existing geometry a
- * sensible procedural description derived from its real extents.
- *
- * `Build` generates the triangles for a wedge from its authored parameter dictionary. Geometry is regenerated
- * from parameters rather than incrementally deforming old triangles, which keeps a procedural primitive
- * deterministic and editable.
  */
 using LightingShowcase.Math3D;
 using LightingShowcase.SceneGraph;
 
 namespace LightingShowcase.ObjectLibrary.BuiltIns;
 
+// TorusPrimitive is the procedural definition for a torus. It knows how to turn authored parameters into triangles
+// and, where supported, how to absorb object-scale changes back into those parameters so the object remains
+// editable as a named primitive rather than becoming anonymous mesh data.
 public sealed class TorusPrimitive : PrimitiveBase
 {
     public override string Kind => "torus";
@@ -121,7 +23,29 @@ public sealed class TorusPrimitive : PrimitiveBase
         LengthParameter("majorRadius", "Major Radius"),
         LengthParameter("minorRadius", "Minor Radius")
     ];
+    // CreateDefaultParameters returns the canonical starting dimensions/tessellation values for a new triangular
+    // prism; these defaults are what the parameter editor shows immediately after insertion.
+    // CreateDefaultParameters returns the canonical starting dimensions/tessellation values for a new pyramid;
+    // these defaults are what the parameter editor shows immediately after insertion.
+    // CreateDefaultParameters returns the canonical starting dimensions/tessellation values for a new capsule;
+    // these defaults are what the parameter editor shows immediately after insertion.
+    // CreateDefaultParameters returns the canonical starting dimensions/tessellation values for a new tube; these
+    // defaults are what the parameter editor shows immediately after insertion.
+    // CreateDefaultParameters returns the canonical starting dimensions/tessellation values for a new torus; these
+    // defaults are what the parameter editor shows immediately after insertion.
     public override Dictionary<string, double> CreateDefaultParameters() => Parameters(("originX", 0.0), ("originY", -0.58), ("originZ", 3.55), ("majorRadius", 1.0), ("minorRadius", 0.25), ("majorSegments", 48), ("tubeSegments", 16));
+    // CreateParametersFromBounds infers wedge parameters from an existing bounding box, giving existing geometry a
+    // sensible procedural description derived from its real extents.
+    // CreateParametersFromBounds infers triangular prism parameters from an existing bounding box, giving existing
+    // geometry a sensible procedural description derived from its real extents.
+    // CreateParametersFromBounds infers pyramid parameters from an existing bounding box, giving existing geometry
+    // a sensible procedural description derived from its real extents.
+    // CreateParametersFromBounds infers capsule parameters from an existing bounding box, giving existing geometry
+    // a sensible procedural description derived from its real extents.
+    // CreateParametersFromBounds infers tube parameters from an existing bounding box, giving existing geometry a
+    // sensible procedural description derived from its real extents.
+    // CreateParametersFromBounds infers torus parameters from an existing bounding box, giving existing geometry a
+    // sensible procedural description derived from its real extents.
     public override Dictionary<string, double> CreateParametersFromBounds(Aabb bounds)
     {
         Vec3 size = bounds.Max - bounds.Min;
@@ -130,10 +54,46 @@ public sealed class TorusPrimitive : PrimitiveBase
         double minor = Math.Max(1e-6, size.Y) * 0.5;
         return Parameters(("originX", center.X), ("originY", center.Y), ("originZ", center.Z), ("majorRadius", Math.Max(1e-6, outer - minor)), ("minorRadius", minor), ("majorSegments", 48), ("tubeSegments", 16));
     }
+    // Build generates the triangles for a wedge from its authored parameter dictionary. Geometry is regenerated
+    // from parameters rather than incrementally deforming old triangles, which keeps a procedural primitive
+    // deterministic and editable.
+    // Build generates the triangles for a triangular prism from its authored parameter dictionary. Geometry is
+    // regenerated from parameters rather than incrementally deforming old triangles, which keeps a procedural
+    // primitive deterministic and editable.
+    // Build generates the triangles for a pyramid from its authored parameter dictionary. Geometry is regenerated
+    // from parameters rather than incrementally deforming old triangles, which keeps a procedural primitive
+    // deterministic and editable.
+    // Build generates the triangles for a capsule from its authored parameter dictionary. Geometry is regenerated
+    // from parameters rather than incrementally deforming old triangles, which keeps a procedural primitive
+    // deterministic and editable.
+    // Build generates the triangles for a tube from its authored parameter dictionary. Geometry is regenerated from
+    // parameters rather than incrementally deforming old triangles, which keeps a procedural primitive
+    // deterministic and editable.
+    // Build generates the triangles for a torus from its authored parameter dictionary. Geometry is regenerated
+    // from parameters rather than incrementally deforming old triangles, which keeps a procedural primitive
+    // deterministic and editable.
     public override void Build(SceneMaterials materials, IReadOnlyDictionary<string, double> p, Material material, AddTriangleCallback addTriangle) => AddTorus(addTriangle, Origin(p, 0, -0.58, 3.55), Size(p, "majorRadius", 1.0), Size(p, "minorRadius", 0.25), ReadInt(p, "majorSegments", 48, 3, 512), ReadInt(p, "tubeSegments", 16, 3, 256), material);
+    // ApplyScaleDelta absorbs an object-scale change back into the triangular prism parameters when that change can
+    // be represented procedurally. This preserves parametric editability instead of baking scale into anonymous
+    // mesh vertices.
+    // ApplyScaleDelta absorbs an object-scale change back into the pyramid parameters when that change can be
+    // represented procedurally. This preserves parametric editability instead of baking scale into anonymous mesh
+    // vertices.
+    // ApplyScaleDelta absorbs an object-scale change back into the capsule parameters when that change can be
+    // represented procedurally. This preserves parametric editability instead of baking scale into anonymous mesh
+    // vertices.
+    // ApplyScaleDelta absorbs an object-scale change back into the tube parameters when that change can be
+    // represented procedurally. This preserves parametric editability instead of baking scale into anonymous mesh
+    // vertices.
+    // ApplyScaleDelta absorbs an object-scale change back into the torus parameters when that change can be
+    // represented procedurally. This preserves parametric editability instead of baking scale into anonymous mesh
+    // vertices.
     public override bool ApplyScaleDelta(IDictionary<string, double> p, char axis, double factor) => char.ToUpperInvariant(axis) == 'Y' ? Multiply(p, "minorRadius", factor) : Multiply(p, "majorRadius", factor);
 }
 
+// TubePrimitive is the procedural definition for a tube. It knows how to turn authored parameters into triangles
+// and, where supported, how to absorb object-scale changes back into those parameters so the object remains
+// editable as a named primitive rather than becoming anonymous mesh data.
 public sealed class TubePrimitive : PrimitiveBase
 {
     public override string Kind => "tube";
@@ -151,6 +111,9 @@ public sealed class TubePrimitive : PrimitiveBase
     public override bool ApplyScaleDelta(IDictionary<string, double> p, char axis, double factor) => char.ToUpperInvariant(axis) == 'Y' ? Multiply(p, "height", factor) : MultiplyAny(p, factor, "outerRadius", "innerRadius");
 }
 
+// CapsulePrimitive is the procedural definition for a capsule. It knows how to turn authored parameters into
+// triangles and, where supported, how to absorb object-scale changes back into those parameters so the object
+// remains editable as a named primitive rather than becoming anonymous mesh data.
 public sealed class CapsulePrimitive : PrimitiveBase
 {
     public override string Kind => "capsule";
@@ -183,6 +146,9 @@ public sealed class CapsulePrimitive : PrimitiveBase
     public override bool ApplyScaleDelta(IDictionary<string, double> p, char axis, double factor) => char.ToUpperInvariant(axis) == 'Y' ? Multiply(p, "totalHeight", factor) : Multiply(p, "radius", factor);
 }
 
+// PyramidPrimitive is the procedural definition for a pyramid. It knows how to turn authored parameters into
+// triangles and, where supported, how to absorb object-scale changes back into those parameters so the object
+// remains editable as a named primitive rather than becoming anonymous mesh data.
 public sealed class PyramidPrimitive : PrimitiveBase
 {
     public override string Kind => "pyramid";
@@ -206,6 +172,9 @@ public sealed class PyramidPrimitive : PrimitiveBase
     public override bool ApplyScaleDelta(IDictionary<string, double> p, char axis, double factor) => char.ToUpperInvariant(axis) switch { 'X' => Multiply(p, "width", factor), 'Y' => Multiply(p, "height", factor), _ => Multiply(p, "depth", factor) };
 }
 
+// TriangularPrismPrimitive is the procedural definition for a triangular prism. It knows how to turn authored
+// parameters into triangles and, where supported, how to absorb object-scale changes back into those parameters so
+// the object remains editable as a named primitive rather than becoming anonymous mesh data.
 public sealed class TriangularPrismPrimitive : PrimitiveBase
 {
     public override string Kind => "triangularPrism";
@@ -230,6 +199,9 @@ public sealed class TriangularPrismPrimitive : PrimitiveBase
     public override bool ApplyScaleDelta(IDictionary<string, double> p, char axis, double factor) => char.ToUpperInvariant(axis) switch { 'X' => Multiply(p, "width", factor), 'Y' => Multiply(p, "height", factor), _ => Multiply(p, "depth", factor) };
 }
 
+// WedgePrimitive is the procedural definition for a wedge. It knows how to turn authored parameters into triangles
+// and, where supported, how to absorb object-scale changes back into those parameters so the object remains
+// editable as a named primitive rather than becoming anonymous mesh data.
 public sealed class WedgePrimitive : PrimitiveBase
 {
     public override string Kind => "wedge";

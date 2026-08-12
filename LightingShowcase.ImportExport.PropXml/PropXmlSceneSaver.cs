@@ -2,12 +2,6 @@
  * Exporting PROPXML walks the internal scene and rebuilds the format’s object/index/material/resource structures.
  * The implementation must keep indices and references self-consistent and must make deliberate choices about
  * features that do not map one-to-one between Composer and PROPXML.
- *
- * `PropXmlSceneSaver` owns translation from Composer scene state into its external file format, including the
- * indexing/resource relationships required for another program to reconstruct the exported model.
- *
- * `Format` formats a numeric editor value using a stable concise representation so refreshing a text box does not
- * introduce excessive decimal noise.
  */
 using System.IO;
 using System.Globalization;
@@ -17,6 +11,8 @@ using LightingShowcase.Math3D;
 
 namespace LightingShowcase.SceneGraph;
 
+// PropXmlSceneSaver owns translation from Composer scene state into its external file format, including the
+// indexing/resource relationships required for another program to reconstruct the exported model.
 /// <summary>Saves the native .prop.xml scene format.</summary>
 public static class PropXmlSceneSaver
 {
@@ -41,6 +37,8 @@ public static class PropXmlSceneSaver
             new XAttribute("id", light.Id),
             VecAttributes("position", light.Position),
             VecAttributes("color", light.Color),
+            // Format formats a numeric editor value using a stable concise representation so refreshing a text box
+            // does not introduce excessive decimal noise.
             new XAttribute("intensity", Format(light.Intensity)),
             new XAttribute("enabled", light.Enabled),
             new XAttribute("kind", light.Kind.ToString().ToLowerInvariant()),

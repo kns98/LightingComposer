@@ -2,30 +2,6 @@
  * This is desktop-editor glue around the scene and rendering layers. The code should be read in terms of how it
  * translates user interaction into domain operations while keeping platform UI state, mutable scene state, and
  * renderer state from becoming entangled.
- *
- * `OptionNames` is derived rather than separately stored: it evaluates
- * `_values.Keys.Concat(_switches).Distinct(StringComparer.OrdinalIgnoreCase)`. Keeping the value computed from
- * its source fields prevents a second cached flag/value from drifting out of sync.
- *
- * The `CommandLine` constructor captures `values`, `switches`. Those are the dependencies/initial values the
- * instance needs for its lifetime, so callbacks and later operations use the same objects/configuration rather
- * than looking them up globally.
- *
- * `IsSwitch` tests whether switch is true for the supplied/current value. Keeping the predicate here ensures
- * every caller uses the same definition instead of duplicating a slightly different condition.
- *
- * `ValidateKnownOptions` checks the invariants required for known options and throws/reports an error for
- * non-finite, out-of-range, or otherwise unsupported values. Keeping validation next to mutation prevents invalid
- * state from propagating into renderers.
- *
- * `GetInt` reads int from the authoritative model and returns a value/snapshot suitable for callers, avoiding
- * direct access to mutable internal storage.
- *
- * `GetDouble` reads double from the authoritative model and returns a value/snapshot suitable for callers,
- * avoiding direct access to mutable internal storage.
- *
- * `GetBool` reads bool from the authoritative model and returns a value/snapshot suitable for callers, avoiding
- * direct access to mutable internal storage.
  */
 namespace LightingShowcase.CommandLine;
 
@@ -99,8 +75,13 @@ internal sealed class CommandLine
 
     public bool Has(string key) => _switches.Contains(key) || _values.ContainsKey(key);
 
+    // IsSwitch tests whether switch is true for the supplied/current value. Keeping the predicate here ensures
+    // every caller uses the same definition instead of duplicating a slightly different condition.
     public bool IsSwitch(string key) => _switches.Contains(key);
 
+    // ValidateKnownOptions checks the invariants required for known options and throws/reports an error for
+    // non-finite, out-of-range, or otherwise unsupported values. Keeping validation next to mutation prevents
+    // invalid state from propagating into renderers.
     public void ValidateKnownOptions(IEnumerable<string> knownOptions)
     {
         HashSet<string> known = new(knownOptions, StringComparer.OrdinalIgnoreCase);

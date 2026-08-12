@@ -2,14 +2,13 @@
  * This file belongs to the renderer-neutral scene layer, which is the shared source of truth for geometry,
  * transforms, grouping, materials, resources, and serialization-facing state. Higher layers manipulate these
  * abstractions rather than maintaining parallel copies of scene data.
- *
- * `RenderSettings` collects tunable behavior that should be validated/applied together rather than scattered as
- * independent flags throughout the renderer/editor.
  */
 using LightingShowcase.Math3D;
 
 namespace LightingShowcase.SceneGraph;
 
+// RenderSettings collects tunable behavior that should be validated/applied together rather than scattered as
+// independent flags throughout the renderer/editor.
 /// <summary>Neutral render options consumed by preview and final render adapters.</summary>
 public sealed class RenderSettings
 {

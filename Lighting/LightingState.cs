@@ -2,18 +2,11 @@
  * Lights are represented as renderer-neutral scene data. CPU and GPU backends can therefore interpret the same
  * kind, position/direction, color, and intensity values, while backend-specific sampling/shader details remain
  * outside the scene model.
- *
- * `LightingState` is a working/snapshot state object whose fields must move together; callers use it to capture
- * one coherent point in an interaction, render, or undo workflow.
- *
- * `GetLevel` reads level from the authoritative model and returns a value/snapshot suitable for callers, avoiding
- * direct access to mutable internal storage.
- *
- * `SetLevel` sets level through the owning abstraction instead of exposing a mutable field. That gives the method
- * one place to validate the value and perform any history/cache/UI side effects required by the change.
  */
 namespace LightingShowcase.Lighting;
 
+// LightingState is a working/snapshot state object whose fields must move together; callers use it to capture one
+// coherent point in an interaction, render, or undo workflow.
 /// <summary>Compatibility state consumed by the ray tracer pipeline.</summary>
 public sealed class LightingState
 {

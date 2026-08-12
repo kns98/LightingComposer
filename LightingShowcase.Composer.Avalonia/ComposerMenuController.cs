@@ -2,34 +2,6 @@
  * This controller translates Avalonia events and commands into editor operations while keeping the live scene
  * behind `ComposerSceneSession`. Its job is coordination: validate/route input, invoke the appropriate session or
  * renderer operation, and update presentation state without becoming a competing owner of scene data.
- *
- * `ComposerMenuController` coordinates a focused interaction workflow. It holds the transient UI/input state
- * needed for that workflow but delegates authoritative scene mutation to the session/model layer.
- *
- * `BuildMenu` derives menu from lower-level input data, resolving indexing/grouping/derived values once so
- * callers can operate on a coherent higher-level representation.
- *
- * `SyncChecks` updates checks from the authoritative model so UI enable/check state reflects what commands are
- * actually valid right now.
- *
- * `SyncEnabledState` updates enabled state from the authoritative model so UI enable/check state reflects what
- * commands are actually valid right now.
- *
- * `SetRenderSettingsEnabled` sets render settings enabled through the owning abstraction instead of exposing a
- * mutable field. That gives the method one place to validate the value and perform any history/cache/UI side
- * effects required by the change.
- *
- * `UpdateHistory` updates history from the newest input while preserving the identities/metadata/caches that
- * remain valid and invalidating only what the change makes stale.
- *
- * `CreateCommands` constructs commands in the normalized form expected downstream, so allocation plus
- * initialization of its invariants happen together.
- *
- * `CreateRadioItems` constructs radio items in the normalized form expected downstream, so allocation plus
- * initialization of its invariants happen together.
- *
- * `SetChecked` sets checked through the owning abstraction instead of exposing a mutable field. That gives the
- * method one place to validate the value and perform any history/cache/UI side effects required by the change.
  */
 using Avalonia.Controls;
 using Avalonia.Layout;
@@ -230,6 +202,8 @@ internal sealed class ComposerMenuController
         };
     }
 
+    // SyncChecks updates checks from the authoritative model so UI enable/check state reflects what commands are
+    // actually valid right now.
     public void SyncChecks()
     {
         SetChecked(rendererMenuItems, rendererBox.SelectedIndex);
@@ -238,6 +212,8 @@ internal sealed class ComposerMenuController
         SetChecked(moveAxisMenuItems, moveAxisBox.SelectedIndex);
     }
 
+    // SyncEnabledState updates enabled state from the authoritative model so UI enable/check state reflects what
+    // commands are actually valid right now.
     public void SyncEnabledState()
     {
         newMenuItem.IsEnabled = newButton.IsEnabled;
@@ -284,6 +260,8 @@ internal sealed class ComposerMenuController
         redoMenuItem.IsEnabled = canRedo;
     }
 
+    // CreateCommands constructs commands in the normalized form expected downstream, so allocation plus
+    // initialization of its invariants happen together.
     private static MenuItem[] CreateCommands(IReadOnlyList<string> labels, Func<int, Task> action)
     {
         MenuItem[] items = new MenuItem[labels.Count];
@@ -295,6 +273,8 @@ internal sealed class ComposerMenuController
         return items;
     }
 
+    // CreateRadioItems constructs radio items in the normalized form expected downstream, so allocation plus
+    // initialization of its invariants happen together.
     private static MenuItem[] CreateRadioItems(IReadOnlyList<string> labels, string groupName, Action<int> action)
     {
         MenuItem[] items = new MenuItem[labels.Count];

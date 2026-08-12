@@ -3,19 +3,13 @@
  * buffers/images, commands are submitted against those resources, and stale resources must be rebuilt when
  * geometry or transforms change; a numerically correct algorithm can still be wrong here if lifetime or
  * synchronization is mishandled.
- *
- * `VulkanRasterTransformPreview` holds transient data used only while an interactive edit is in progress;
- * committing/cancelling must either promote or discard it cleanly.
- *
- * `IsIdentity` is derived rather than separately stored: it evaluates `Position.Length() <= 1e-12 &&
- * Rotation.Length() <= 1e-12 && Math.Abs(Scale.X - 1.0) <= 1e-12 && Math.Abs(Scale.Y - 1.0) <= 1e-12 &&
- * Math.Abs(Scale.Z - 1.0) <= 1e-12`. Keeping the value computed from its source fields prevents a second cached
- * flag/value from drifting out of sync.
  */
 using LightingShowcase.Math3D;
 
 namespace LightingShowcase.Rendering;
 
+// VulkanRasterTransformPreview holds transient data used only while an interactive edit is in progress;
+// committing/cancelling must either promote or discard it cleanly.
 /// <summary>
 /// Transient transform used by the Vulkan raster editor preview. It never
 /// changes scene geometry or the scene revision; the final pointer release still

@@ -2,20 +2,11 @@
  * This file belongs to the renderer-neutral scene layer, which is the shared source of truth for geometry,
  * transforms, grouping, materials, resources, and serialization-facing state. Higher layers manipulate these
  * abstractions rather than maintaining parallel copies of scene data.
- *
- * `ObjLoadResult` packages the outputs of a completed operation into one value so callers see a consistent result
- * rather than partially updated out parameters.
- *
- * The `ObjLoadResult` constructor captures `filePath`, `vertexCount`, `faceCount`, `triangleCount`, `details`.
- * Those are the dependencies/initial values the instance needs for its lifetime, so callbacks and later
- * operations use the same objects/configuration rather than looking them up globally.
- *
- * The `ObjLoadProgress` constructor captures `stage`, `percent`, `vertexCount`, `faceCount`, `triangleCount`.
- * Those are the dependencies/initial values the instance needs for its lifetime, so callbacks and later
- * operations use the same objects/configuration rather than looking them up globally.
  */
 namespace LightingShowcase.SceneGraph;
 
+// ObjLoadResult packages the outputs of a completed operation into one value so callers see a consistent result
+// rather than partially updated out parameters.
 /// <summary>Result object returned by the OBJ loader.</summary>
 public sealed class ObjLoadResult
 {

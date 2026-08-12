@@ -2,84 +2,6 @@
  * This UI code turns editor state into controls and converts user edits back into validated domain operations.
  * Dialog/window state is intentionally temporary: values should only become authoritative scene changes through
  * the session/controller path, which preserves cancel, undo, and renderer invalidation behavior.
- *
- * `MaterialEditorWindow` owns temporary Avalonia presentation/edit state. Values become durable only when
- * accepted and routed through the relevant session/controller operation, preserving validation and cancellation
- * semantics.
- *
- * `TextureSlotChoice` is an immutable packet of related values. Record value semantics make it suitable for
- * snapshots, options, commands, or parsed intermediate data because callers can copy/compare it without sharing
- * mutable state. Its constructor values (`Slot`, `Label`) travel together because consumers need a consistent
- * snapshot rather than reading those values independently from mutable objects.
- *
- * `ProjectionChoice` is an immutable packet of related values. Record value semantics make it suitable for
- * snapshots, options, commands, or parsed intermediate data because callers can copy/compare it without sharing
- * mutable state. Its constructor values (`BoxProjection`, `Label`) travel together because consumers need a
- * consistent snapshot rather than reading those values independently from mutable objects.
- *
- * `ObjectId` is derived rather than separately stored: it evaluates `objectId`. Keeping the value computed from
- * its source fields prevents a second cached flag/value from drifting out of sync.
- *
- * `SelectedProjectionMode` is derived rather than separately stored: it evaluates `projectionModeBox.SelectedItem
- * is ProjectionChoice choice && choice.BoxProjection`. Keeping the value computed from its source fields prevents
- * a second cached flag/value from drifting out of sync.
- *
- * `ToString` returns the human-facing label/name for this value so Avalonia controls display meaningful text
- * instead of the generated record/type representation.
- *
- * `ToString` returns the human-facing label/name for this value so Avalonia controls display meaningful text
- * instead of the generated record/type representation.
- *
- * `RefreshFromScene` re-reads authoritative state and updates from scene so cached/presented data matches the
- * current scene after an edit or external change.
- *
- * `BuildContent` derives content from lower-level input data, resolving indexing/grouping/derived values once so
- * callers can operate on a coherent higher-level representation.
- *
- * `ApplyPresetAsync` applies preset async as a single semantic mutation. Validation, scene changes, undo
- * bookkeeping, and cache invalidation are kept inside this boundary rather than exposed as separate caller
- * responsibilities.
- *
- * `ApplyColorAsync` applies color async as a single semantic mutation. Validation, scene changes, undo
- * bookkeeping, and cache invalidation are kept inside this boundary rather than exposed as separate caller
- * responsibilities.
- *
- * `ApplyPropertiesAsync` applies properties async as a single semantic mutation. Validation, scene changes, undo
- * bookkeeping, and cache invalidation are kept inside this boundary rather than exposed as separate caller
- * responsibilities.
- *
- * `BrowseTextureAsync` asks the platform picker for texture async and only proceeds when the user returns a valid
- * local selection; cancellation remains a normal no-op path.
- *
- * `ApplyTextureMappingAsync` applies texture mapping async as a single semantic mutation. Validation, scene
- * changes, undo bookkeeping, and cache invalidation are kept inside this boundary rather than exposed as separate
- * caller responsibilities.
- *
- * `RunEditAsync` executes edit async as one coordinated action and centralizes success/failure handling so
- * callers do not each implement inconsistent exception/UI behavior. Potentially blocking/CPU work runs on a
- * worker task rather than Avalonia’s UI thread.
- *
- * `LoadModel` loads model from persistent/external data and converts it into validated internal scene state
- * rather than exposing parser-specific objects to the rest of the application.
- *
- * `LoadSelectedTextureMapping` loads selected texture mapping from persistent/external data and converts it into
- * validated internal scene state rather than exposing parser-specific objects to the rest of the application.
- *
- * `BuildTextureSlotRow` derives texture slot row from lower-level input data, resolving indexing/grouping/derived
- * values once so callers can operate on a coherent higher-level representation.
- *
- * `UpdatePresetSummary` updates preset summary from the newest input while preserving the
- * identities/metadata/caches that remain valid and invalidating only what the change makes stale.
- *
- * `SyncColorFromChannels` updates color from channels from the authoritative model so UI enable/check state
- * reflects what commands are actually valid right now.
- *
- * `SetColorEditors` sets color editors through the owning abstraction instead of exposing a mutable field. That
- * gives the method one place to validate the value and perform any history/cache/UI side effects required by the
- * change.
- *
- * `AddRgb` adds rgb to the owning collection/model while using this boundary to preserve indexing, ownership, and
- * derived-state invariants.
  */
 using System.Globalization;
 using Avalonia;
@@ -93,6 +15,8 @@ using LightingShowcase.SceneGraph;
 
 namespace LightingShowcase.Composer;
 
+// MaterialEditorWindow owns temporary Avalonia presentation/edit state. Values become durable only when accepted
+// and routed through the relevant session/controller operation, preserving validation and cancellation semantics.
 /// <summary>
 /// Modeless material editor for the selected object/subtree. Library presets are
 /// convenient starting points, while every renderer-backed scalar PBR property can
@@ -102,6 +26,10 @@ internal sealed class MaterialEditorWindow : Window
 {
     private sealed record TextureSlotChoice(MaterialTextureSlot Slot, string Label)
     {
+        // ToString returns the human-facing label/name for this value so Avalonia controls display meaningful text
+        // instead of the generated record/type representation.
+        // ToString returns the human-facing label/name for this value so Avalonia controls display meaningful text
+        // instead of the generated record/type representation.
         public override string ToString() => Label;
     }
 
@@ -289,6 +217,8 @@ internal sealed class MaterialEditorWindow : Window
         Closed += (_, _) => this.onClosed();
     }
 
+    // RefreshFromScene re-reads authoritative state and updates from scene so cached/presented data matches the
+    // current scene after an edit or external change.
     public void RefreshFromScene(string message = "Material state refreshed.")
     {
         ComposerMaterialModel? model = session.GetMaterialModel(objectId);
@@ -452,6 +382,8 @@ internal sealed class MaterialEditorWindow : Window
             "Direct material properties applied. Base color and texture maps were preserved.");
     }
 
+    // BrowseTextureAsync asks the platform picker for texture async and only proceeds when the user returns a valid
+    // local selection; cancellation remains a normal no-op path.
     private async Task BrowseTextureAsync(MaterialTextureSlot slot)
     {
         if (!StorageProvider.CanOpen)
@@ -557,6 +489,9 @@ internal sealed class MaterialEditorWindow : Window
         );
     }
 
+    // RunEditAsync executes edit async as one coordinated action and centralizes success/failure handling so
+    // callers do not each implement inconsistent exception/UI behavior. Potentially blocking/CPU work runs on a
+    // worker task rather than Avalonia’s UI thread.
     private async Task RunEditAsync(Func<bool> edit, string successMessage)
     {
         try
@@ -730,6 +665,8 @@ internal sealed class MaterialEditorWindow : Window
         return true;
     }
 
+    // SyncColorFromChannels updates color from channels from the authoritative model so UI enable/check state
+    // reflects what commands are actually valid right now.
     private void SyncColorFromChannels()
     {
         if (synchronizingColor || !TryReadRgb(out Vec3 color))

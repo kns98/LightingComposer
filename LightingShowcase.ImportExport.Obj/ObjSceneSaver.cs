@@ -2,32 +2,14 @@
  * Exporting OBJ walks the internal scene and rebuilds the format’s object/index/material/resource structures. The
  * implementation must keep indices and references self-consistent and must make deliberate choices about features
  * that do not map one-to-one between Composer and OBJ.
- *
- * `ObjSceneSaver` owns translation from Composer scene state into its external file format, including the
- * indexing/resource relationships required for another program to reconstruct the exported model.
- *
- * `MaterialKey` is an immutable packet of related values. Record value semantics make it suitable for snapshots,
- * options, commands, or parsed intermediate data because callers can copy/compare it without sharing mutable
- * state. Its constructor values (`R`, `G`, `B`, `Texture`) travel together because consumers need a consistent
- * snapshot rather than reading those values independently from mutable objects.
- *
- * `BuildMaterialNames` derives material names from lower-level input data, resolving indexing/grouping/derived
- * values once so callers can operate on a coherent higher-level representation.
- *
- * `WriteMaterialFile` writes material file to the external stream/document in the format’s required order, using
- * stable indices/references so another reader can reconstruct the same relationships.
- *
- * `WriteVertex` writes vertex to the external stream/document in the format’s required order, using stable
- * indices/references so another reader can reconstruct the same relationships.
- *
- * `WriteTexCoord` writes tex coord to the external stream/document in the format’s required order, using stable
- * indices/references so another reader can reconstruct the same relationships.
  */
 using LightingShowcase.Math3D;
 using LightingShowcase.SceneGraph;
 
 namespace LightingShowcase.ImportExport.Obj;
 
+// ObjSceneSaver owns translation from Composer scene state into its external file format, including the
+// indexing/resource relationships required for another program to reconstruct the exported model.
 /// <summary>Exports visible scene geometry as Wavefront OBJ with a companion MTL file.</summary>
 public static class ObjSceneSaver
 {
@@ -112,6 +94,8 @@ public static class ObjSceneSaver
         return names;
     }
 
+    // WriteMaterialFile writes material file to the external stream/document in the format’s required order, using
+    // stable indices/references so another reader can reconstruct the same relationships.
     private static void WriteMaterialFile(string mtlPath, Dictionary<MaterialKey, string> materialNames, string objDirectory, Func<TextureMap, string?>? texturePathResolver)
     {
         using StreamWriter writer = new(mtlPath, false, new UTF8Encoding(false));
@@ -145,9 +129,13 @@ public static class ObjSceneSaver
         }
     }
 
+    // WriteVertex writes vertex to the external stream/document in the format’s required order, using stable
+    // indices/references so another reader can reconstruct the same relationships.
     private static void WriteVertex(StreamWriter writer, Vec3 value) =>
         writer.WriteLine(FormattableString.Invariant($"v {value.X:G17} {value.Y:G17} {value.Z:G17}"));
 
+    // WriteTexCoord writes tex coord to the external stream/document in the format’s required order, using stable
+    // indices/references so another reader can reconstruct the same relationships.
     private static void WriteTexCoord(StreamWriter writer, Vec2 value) =>
         writer.WriteLine(FormattableString.Invariant($"vt {value.U:G17} {value.V:G17}"));
 

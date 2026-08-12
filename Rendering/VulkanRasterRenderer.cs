@@ -3,140 +3,6 @@
  * buffers/images, commands are submitted against those resources, and stale resources must be rebuilt when
  * geometry or transforms change; a numerically correct algorithm can still be wrong here if lifetime or
  * synchronization is mishandled.
- *
- * `VulkanRasterRenderer` turns camera/scene state into an image using one rendering backend. Its caches/resources
- * are implementation details of that backend; callers should depend on the common rendered result rather than
- * those internals.
- *
- * `SharedRasterResources` owns resources/subscriptions whose lifetime must be ended explicitly.
- *
- * `PreparedRasterScene` owns resources/subscriptions whose lifetime must be ended explicitly.
- *
- * `RasterTargets` owns resources/subscriptions whose lifetime must be ended explicitly.
- *
- * `RasterVertex` is a value type, so small instances can be copied without heap allocation. Its operations
- * establish shared numerical/data semantics for callers that would otherwise risk implementing subtly different
- * formulas.
- *
- * `RasterCameraConstants` is a value type, so small instances can be copied without heap allocation. Its
- * operations establish shared numerical/data semantics for callers that would otherwise risk implementing subtly
- * different formulas.
- *
- * `RasterTransformConstants` is a value type, so small instances can be copied without heap allocation. Its
- * operations establish shared numerical/data semantics for callers that would otherwise risk implementing subtly
- * different formulas.
- *
- * `VertexRange` is an immutable packet of related values. Record value semantics make it suitable for snapshots,
- * options, commands, or parsed intermediate data because callers can copy/compare it without sharing mutable
- * state. Its constructor values (`Start`, `Count`) travel together because consumers need a consistent snapshot
- * rather than reading those values independently from mutable objects.
- *
- * `PreviewRangeSet` is an immutable packet of related values. Record value semantics make it suitable for
- * snapshots, options, commands, or parsed intermediate data because callers can copy/compare it without sharing
- * mutable state. Its constructor values (`Opaque`, `Transparent`) travel together because consumers need a
- * consistent snapshot rather than reading those values independently from mutable objects.
- *
- * `RasterTrianglePatch` is an immutable packet of related values. Record value semantics make it suitable for
- * snapshots, options, commands, or parsed intermediate data because callers can copy/compare it without sharing
- * mutable state. Its constructor values (`Transparent`, `VertexStart`, `Source`, `CornerMask`,
- * `OriginalVertices`) travel together because consumers need a consistent snapshot rather than reading those
- * values independently from mutable objects.
- *
- * `StageLogPath` is derived rather than separately stored: it evaluates `Path.Combine(Path.GetTempPath(), )`.
- * Keeping the value computed from its source fields prevents a second cached flag/value from drifting out of
- * sync.
- *
- * `None` is derived rather than separately stored: it evaluates `new()`. Keeping the value computed from its
- * source fields prevents a second cached flag/value from drifting out of sync.
- *
- * `OpaqueVertexCount` is derived rather than separately stored: it evaluates `checked(OpaqueTriangleCount * 3)`.
- * Keeping the value computed from its source fields prevents a second cached flag/value from drifting out of
- * sync.
- *
- * `TransparentVertexCount` is derived rather than separately stored: it evaluates
- * `checked(TransparentTriangleCount * 3)`. Keeping the value computed from its source fields prevents a second
- * cached flag/value from drifting out of sync.
- *
- * `MaterialCount` is derived rather than separately stored: it evaluates `Materials.Length`. Keeping the value
- * computed from its source fields prevents a second cached flag/value from drifting out of sync.
- *
- * `TotalTriangles` is derived rather than separately stored: it evaluates `checked(OpaqueTriangleCount +
- * TransparentTriangleCount)`. Keeping the value computed from its source fields prevents a second cached
- * flag/value from drifting out of sync.
- *
- * `StageLoggingEnabled` is derived rather than separately stored: it evaluates `IsVulkanDebugEnabled() ||
- * string.Equals(Environment.GetEnvironmentVariable( ), , StringComparison.OrdinalIgnoreCase)`. Keeping the value
- * computed from its source fields prevents a second cached flag/value from drifting out of sync.
- *
- * `Dispose` ends this object’s active lifetime: owned cancellations/resources/listeners are released so completed
- * windows/renderers do not keep receiving work or retain unmanaged memory.
- *
- * `Dispose` ends this object’s active lifetime: owned cancellations/resources/listeners are released so completed
- * windows/renderers do not keep receiving work or retain unmanaged memory.
- *
- * `Dispose` ends this object’s active lifetime: owned cancellations/resources/listeners are released so completed
- * windows/renderers do not keep receiving work or retain unmanaged memory. GPU resource creation/update is
- * explicit, so correct lifetime and cache invalidation are part of the method’s correctness.
- *
- * The `RasterVertex` constructor captures `position`, `normal`, `uv`, `materialIndex`. Those are the
- * dependencies/initial values the instance needs for its lifetime, so callbacks and later operations use the same
- * objects/configuration rather than looking them up globally.
- *
- * The `RasterCameraConstants` constructor captures `position`, `basis`, `width`, `height`, `lightCount`,
- * `textureCount`, `debugMode`. Those are the dependencies/initial values the instance needs for its lifetime, so
- * callbacks and later operations use the same objects/configuration rather than looking them up globally.
- *
- * The `RasterTransformConstants` constructor captures `preview`. Those are the dependencies/initial values the
- * instance needs for its lifetime, so callbacks and later operations use the same objects/configuration rather
- * than looking them up globally.
- *
- * The `RasterLight` constructor captures `light`. Those are the dependencies/initial values the instance needs
- * for its lifetime, so callbacks and later operations use the same objects/configuration rather than looking them
- * up globally.
- *
- * The `RasterTexturePlacement` constructor captures `offsetX`, `offsetY`, `scaleX`, `scaleY`, `pageIndex`,
- * `texture`. Those are the dependencies/initial values the instance needs for its lifetime, so callbacks and
- * later operations use the same objects/configuration rather than looking them up globally.
- *
- * `ReleasePreparedScene` releases prepared scene and its owned resources, used when cached/native objects are no
- * longer valid or the owning scene/session is shutting down. GPU resource creation/update is explicit, so correct
- * lifetime and cache invalidation are part of the method’s correctness.
- *
- * `BuildGroupVertexRanges` derives group vertex ranges from lower-level input data, resolving
- * indexing/grouping/derived values once so callers can operate on a coherent higher-level representation.
- *
- * `GetOrCreatePreparedScene` reads or create prepared scene from the authoritative model and returns a
- * value/snapshot suitable for callers, avoiding direct access to mutable internal storage. Cancellation is
- * propagated so shutdown or a newer request can make obsolete work stop early. Native interop is localized here
- * so handle/pointer lifetime and platform failure handling do not spread through editor code. GPU resource
- * creation/update is explicit, so correct lifetime and cache invalidation are part of the method’s correctness.
- *
- * `GetOrCreateTargets` reads or create targets from the authoritative model and returns a value/snapshot suitable
- * for callers, avoiding direct access to mutable internal storage. GPU resource creation/update is explicit, so
- * correct lifetime and cache invalidation are part of the method’s correctness.
- *
- * `ComputeSceneBounds` calculates scene bounds deterministically from its inputs; callers can use the result as
- * derived data/cache evidence without mutating the underlying scene.
- *
- * `GetOrCreateSharedDevice` reads or create shared device from the authoritative model and returns a
- * value/snapshot suitable for callers, avoiding direct access to mutable internal storage. GPU resource
- * creation/update is explicit, so correct lifetime and cache invalidation are part of the method’s correctness.
- *
- * `GetOrCreateSharedRasterResources` reads or create shared raster resources from the authoritative model and
- * returns a value/snapshot suitable for callers, avoiding direct access to mutable internal storage.
- *
- * `CreateRasterShaders` constructs raster shaders in the normalized form expected downstream, so allocation plus
- * initialization of its invariants happen together.
- *
- * `ComputeCameraFarPlane` calculates camera far plane deterministically from its inputs; callers can use the
- * result as derived data/cache evidence without mutating the underlying scene.
- *
- * `BuildTextureAtlas` derives texture atlas from lower-level input data, resolving indexing/grouping/derived
- * values once so callers can operate on a coherent higher-level representation. GPU resource creation/update is
- * explicit, so correct lifetime and cache invalidation are part of the method’s correctness.
- *
- * `BuildDimensionCandidates` derives dimension candidates from lower-level input data, resolving
- * indexing/grouping/derived values once so callers can operate on a coherent higher-level representation.
  */
 using System.Diagnostics;
 using System.Numerics;
@@ -152,6 +18,9 @@ using Veldrid.SPIRV;
 
 namespace LightingShowcase.Rendering;
 
+// VulkanRasterRenderer turns camera/scene state into an image using one rendering backend. Its caches/resources are
+// implementation details of that backend; callers should depend on the common rendered result rather than those
+// internals.
 /// <summary>Vulkan hardware rasterizer for the Render tab preview.</summary>
 public static class VulkanRasterRenderer
 {
@@ -205,6 +74,7 @@ public static class VulkanRasterRenderer
     private static long targetUseSerial;
     private static bool preflightCompleted;
 
+    // SharedRasterResources owns resources/subscriptions whose lifetime must be ended explicitly.
     private sealed class SharedRasterResources : IDisposable
     {
         public required ResourceLayout Layout { get; init; }
@@ -212,6 +82,14 @@ public static class VulkanRasterRenderer
         public required Pipeline OpaquePipeline { get; init; }
         public required Pipeline TransparentPipeline { get; init; }
 
+        // Dispose ends this object’s active lifetime: owned cancellations/resources/listeners are released so
+        // completed windows/renderers do not keep receiving work or retain unmanaged memory. GPU resource
+        // creation/update is explicit, so correct lifetime and cache invalidation are part of the method’s
+        // correctness.
+        // Dispose ends this object’s active lifetime: owned cancellations/resources/listeners are released so
+        // completed windows/renderers do not keep receiving work or retain unmanaged memory.
+        // Dispose ends this object’s active lifetime: owned cancellations/resources/listeners are released so
+        // completed windows/renderers do not keep receiving work or retain unmanaged memory.
         public void Dispose()
         {
             try { OpaquePipeline.Dispose(); } catch { }
@@ -228,6 +106,7 @@ public static class VulkanRasterRenderer
     }
 
 
+    // PreparedRasterScene owns resources/subscriptions whose lifetime must be ended explicitly.
     private sealed class PreparedRasterScene : IDisposable
     {
         public required Scene Scene { get; init; }
@@ -278,6 +157,7 @@ public static class VulkanRasterRenderer
         }
     }
 
+    // RasterTargets owns resources/subscriptions whose lifetime must be ended explicitly.
     private sealed class RasterTargets : IDisposable
     {
         public required int Width { get; init; }
@@ -600,6 +480,9 @@ public static class VulkanRasterRenderer
 
                 if (device != null)
                 {
+                    // Shared Vulkan resources cannot be disposed while commands may still reference them. Waiting
+                    // here is a shutdown/rebuild safety boundary, not something the steady-state frame loop should
+                    // do.
                     try { Stage("Dispose shared Vulkan raster GraphicsDevice: WaitForIdle"); device.WaitForIdle(); } catch { }
                 }
 
@@ -617,6 +500,9 @@ public static class VulkanRasterRenderer
         }
     }
 
+    // ReleasePreparedScene releases prepared scene and its owned resources, used when cached/native objects are no
+    // longer valid or the owning scene/session is shutting down. GPU resource creation/update is explicit, so
+    // correct lifetime and cache invalidation are part of the method’s correctness.
     /// <summary>
     /// Releases scene-sized Vulkan buffers while keeping the device, pipelines,
     /// and small render-target cache alive. Call this before replacing a large
@@ -1137,6 +1023,10 @@ public static class VulkanRasterRenderer
         ranges.Add(new VertexRange(start, count));
     }
 
+    // GetOrCreatePreparedScene reads or create prepared scene. Cancellation is propagated so shutdown or a newer
+    // request can make obsolete work stop early. Native interop is localized here so handle/pointer lifetime and
+    // platform failure handling do not spread through editor code. GPU resource creation/update is explicit, so
+    // correct lifetime and cache invalidation are part of the method’s correctness.
     private static PreparedRasterScene GetOrCreatePreparedScene(GraphicsDevice gd, SharedRasterResources resources, Scene scene, CancellationToken cancellationToken)
     {
         bool gpuTextureSamplingRequested = UseGpuTextureSampling;
@@ -1184,6 +1074,9 @@ public static class VulkanRasterRenderer
         ResourceSet? previewSet = null;
         try
         {
+            // These buffers have distinct usage flags because Veldrid/Vulkan uses them differently: vertex buffers
+            // feed geometry, uniform buffers hold per-frame transforms/camera data, and structured buffers expose
+            // arrays such as lights/materials to shaders.
             opaque = factory.CreateBuffer(new BufferDescription(opaqueBytes, BufferUsage.VertexBuffer));
             transparent = factory.CreateBuffer(new BufferDescription(transparentBytes, BufferUsage.VertexBuffer));
             camera = factory.CreateBuffer(new BufferDescription((uint)Marshal.SizeOf<RasterCameraConstants>(), BufferUsage.UniformBuffer));
@@ -1396,6 +1289,8 @@ public static class VulkanRasterRenderer
         return checked((uint)bytes);
     }
 
+    // GetOrCreateTargets reads or create targets. GPU resource creation/update is explicit, so correct lifetime and
+    // cache invalidation are part of the method’s correctness.
     private static RasterTargets GetOrCreateTargets(GraphicsDevice gd, int width, int height)
     {
         (int Width, int Height) key = (width, height);
@@ -1435,6 +1330,8 @@ public static class VulkanRasterRenderer
         return created;
     }
 
+    // ComputeSceneBounds calculates scene bounds deterministically from its inputs; callers can use the result as
+    // derived data/cache evidence without mutating the underlying scene.
     private static void ComputeSceneBounds(Scene scene, out Vec3 center, out double radius)
     {
         if (scene.Triangles.Count == 0) { center = Vec3.Zero; radius = 10; return; }
@@ -1458,6 +1355,8 @@ public static class VulkanRasterRenderer
     private static double ComputeCachedCameraFarPlane(PreparedRasterScene scene, Vec3 cameraPosition) =>
         Math.Clamp((scene.BoundingCenter - cameraPosition).Length() + scene.BoundingRadius * 1.1 + 1.0, 10.0, CameraFar);
 
+    // GetOrCreateSharedDevice reads or create shared device. GPU resource creation/update is explicit, so correct
+    // lifetime and cache invalidation are part of the method’s correctness.
     private static GraphicsDevice GetOrCreateSharedDevice()
     {
         lock (DeviceSync)
@@ -1602,6 +1501,8 @@ public static class VulkanRasterRenderer
         }
     }
 
+    // CreateRasterShaders constructs raster shaders in the normalized form expected downstream, so allocation plus
+    // initialization of its invariants happen together.
     private static Shader[] CreateRasterShaders(ResourceFactory factory)
     {
         ShaderDescription vertex = new(
@@ -1799,6 +1700,8 @@ public static class VulkanRasterRenderer
         return lights.ToArray();
     }
 
+    // ComputeCameraFarPlane calculates camera far plane deterministically from its inputs; callers can use the
+    // result as derived data/cache evidence without mutating the underlying scene.
     private static double ComputeCameraFarPlane(Scene scene, Vec3 cameraPosition, CameraBasis basis)
     {
         // The CPU shadow rasterizer stores camera-space depth directly in a
@@ -2104,6 +2007,8 @@ public static class VulkanRasterRenderer
         }
         finally
         {
+            // The staging texture is mapped only long enough to copy the rendered pixels into managed memory;
+            // unmapping promptly avoids holding a driver mapping across later render work.
             gd.Unmap(stagingTexture);
         }
         return new RenderImage(width, height, pixels);

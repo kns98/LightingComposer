@@ -2,43 +2,6 @@
  * The tests in this file are executable statements of editor behavior. They intentionally use real scene/session
  * objects and inspect externally meaningful results—geometry, hierarchy, material state, serialized output, cache
  * stamps, or timing—so refactors can change implementation details without weakening the contract being tested.
- *
- * `Standard3DViewportStylePrimitivesExposeEditableParametersInMeters` initializes the built-in library, resolves
- * each standard viewport-style primitive through `ScenePrimitiveRegistry`, requires it to implement
- * `IEditablePrimitiveDefinition`, and then checks every length-valued parameter advertises `m` as its unit. The
- * final negative assertion also keeps nonstandard demo meshes such as Monkey/Suzanne out of the standard
- * primitive palette.
- *
- * `ParameterPreviewRegeneratesGeometryAndCommitsAsOneUndoableEdit` verifies that parameter preview regenerates
- * geometry and commits as one undoable edit. It uses a real `ComposerSceneSession`, so registration, locking,
- * history, and scene mutation follow production paths rather than mocks. Preview and commit are asserted
- * separately because interactive previews are transient, whereas commit must create the one durable edit the user
- * can undo. Undo is exercised to prove the previous state was actually captured, not merely that the forward edit
- * looked correct. Redo then proves the stored “after” state can be reapplied without replaying the UI gesture.
- * The assertions establish that the operation must explicitly report success; the resulting value/state must
- * exactly match the expected result. Representative cases include `Cube`, `width`, `height`, `depth`.
- *
- * `ObjectTransformsPreserveProceduralParametersUntilTopologyIsEdited` verifies that object transforms preserve
- * procedural parameters until topology is edited. It uses a real `ComposerSceneSession`, so registration,
- * locking, history, and scene mutation follow production paths rather than mocks. Preview and commit are asserted
- * separately because interactive previews are transient, whereas commit must create the one durable edit the user
- * can undo. Undo is exercised to prove the previous state was actually captured, not merely that the forward edit
- * looked correct. Geometry hashes are compared so the test observes actual world-space mesh changes/restoration
- * instead of only transform fields. The assertions establish that required objects/resources must resolve; the
- * operation must explicitly report success; the resulting value/state must exactly match the expected result; the
- * operation must produce an observable change. Representative cases include `Cube`, `width`, `height`, `depth`.
- *
- * `ConvertToMeshRemovesParametersAndUndoRestoresThem` verifies that convert to mesh removes parameters and undo
- * restores them. It uses a real `ComposerSceneSession`, so registration, locking, history, and scene mutation
- * follow production paths rather than mocks. Undo is exercised to prove the previous state was actually captured,
- * not merely that the forward edit looked correct. The assertions establish that the operation must explicitly
- * report success; the disallowed path must be rejected; the resulting value/state must exactly match the expected
- * result. Representative cases include `Cylinder`.
- *
- * `StandardPrimitiveCanBeInsertedAndEdited` verifies that standard primitive can be inserted and edited. It uses
- * a real `ComposerSceneSession`, so registration, locking, history, and scene mutation follow production paths
- * rather than mocks. The assertions establish that the resulting value/state must exactly match the expected
- * result.
  */
 using LightingShowcase.Composer;
 using LightingShowcase.SceneGraph;
@@ -60,6 +23,11 @@ public sealed class ParameterizedPrimitiveTests
         "Grid"
     ];
 
+    // Standard3DViewportStylePrimitivesExposeEditableParametersInMeters initializes the built-in library, resolves
+    // each standard viewport-style primitive through ScenePrimitiveRegistry, requires it to implement
+    // IEditablePrimitiveDefinition, and then checks every length-valued parameter advertises m as its unit. The
+    // final negative assertion also keeps nonstandard demo meshes such as Monkey/Suzanne out of the standard
+    // primitive palette.
     [Fact]
     public void Standard3DViewportStylePrimitivesExposeEditableParametersInMeters()
     {
@@ -81,6 +49,14 @@ public sealed class ParameterizedPrimitiveTests
             string.Equals(name, "Suzanne", StringComparison.OrdinalIgnoreCase));
     }
 
+    // ParameterPreviewRegeneratesGeometryAndCommitsAsOneUndoableEdit verifies that parameter preview regenerates
+    // geometry and commits as one undoable edit. It uses a real ComposerSceneSession, so registration, locking,
+    // history, and scene mutation follow production paths rather than mocks. Preview and commit are asserted
+    // separately because interactive previews are transient, whereas commit must create the one durable edit the
+    // user can undo. Undo is exercised to prove the previous state was actually captured, not merely that the
+    // forward edit looked correct. Redo then proves the stored “after” state can be reapplied without replaying the
+    // UI gesture. The assertions establish that the operation must explicitly report success; the resulting
+    // value/state must exactly match the expected result. Representative cases include Cube, width, height, depth.
     [Fact]
     public void ParameterPreviewRegeneratesGeometryAndCommitsAsOneUndoableEdit()
     {
@@ -113,6 +89,16 @@ public sealed class ParameterizedPrimitiveTests
         Assert.Equal(2.5, redone.Values["width"], 8);
     }
 
+    // ObjectTransformsPreserveProceduralParametersUntilTopologyIsEdited verifies that object transforms preserve
+    // procedural parameters until topology is edited. It uses a real ComposerSceneSession, so registration,
+    // locking, history, and scene mutation follow production paths rather than mocks. Preview and commit are
+    // asserted separately because interactive previews are transient, whereas commit must create the one durable
+    // edit the user can undo. Undo is exercised to prove the previous state was actually captured, not merely that
+    // the forward edit looked correct. Geometry hashes are compared so the test observes actual world-space mesh
+    // changes/restoration instead of only transform fields. The assertions establish that required
+    // objects/resources must resolve; the operation must explicitly report success; the resulting value/state must
+    // exactly match the expected result; the operation must produce an observable change. Representative cases
+    // include Cube, width, height, depth.
     [Fact]
     public void ObjectTransformsPreserveProceduralParametersUntilTopologyIsEdited()
     {
@@ -163,6 +149,12 @@ public sealed class ParameterizedPrimitiveTests
         Assert.Equal(before.WorldGeometryHash, Assert.IsType<ComposerModelEvidence>(session.GetModelEvidence(id)).WorldGeometryHash);
     }
 
+    // ConvertToMeshRemovesParametersAndUndoRestoresThem verifies that convert to mesh removes parameters and undo
+    // restores them. It uses a real ComposerSceneSession, so registration, locking, history, and scene mutation
+    // follow production paths rather than mocks. Undo is exercised to prove the previous state was actually
+    // captured, not merely that the forward edit looked correct. The assertions establish that the operation must
+    // explicitly report success; the disallowed path must be rejected; the resulting value/state must exactly match
+    // the expected result. Representative cases include Cylinder.
     [Fact]
     public void ConvertToMeshRemovesParametersAndUndoRestoresThem()
     {
@@ -177,6 +169,10 @@ public sealed class ParameterizedPrimitiveTests
         Assert.True(session.CanEditPrimitiveParameters(id));
     }
 
+    // StandardPrimitiveCanBeInsertedAndEdited verifies that standard primitive can be inserted and edited. It uses
+    // a real ComposerSceneSession, so registration, locking, history, and scene mutation follow production paths
+    // rather than mocks. The assertions establish that the resulting value/state must exactly match the expected
+    // result.
     [Theory]
     [InlineData("Circle")]
     [InlineData("UV Sphere")]

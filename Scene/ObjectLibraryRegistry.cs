@@ -1,50 +1,14 @@
 /*
- * This is an extensibility seam. Callers discover capabilities through a registry/interface instead of
- * referencing every concrete format or object-library assembly, allowing plugins to be added while the core
- * scene/editor code remains unchanged.
- *
- * `ObjectLibraryRegistry` is a discovery table that maps stable names/capabilities to registered implementations,
- * removing the need for central switch statements that know every plugin or primitive at compile time.
- *
- * `AuthoredAffine` is an immutable packet of related values. Record value semantics make it suitable for
- * snapshots, options, commands, or parsed intermediate data because callers can copy/compare it without sharing
- * mutable state. Its constructor values (`M11`, `M12`, `M13`, `TX`, `M21`, `M22`, `M23`, `TY`, `M31`, `M32`,
- * `M33`, `TZ`) travel together because consumers need a consistent snapshot rather than reading those values
- * independently from mutable objects.
- *
- * `IsIdentity` is a read-only predicate over the object’s existing state; it exists so callers share one exact
- * condition when enabling commands or deciding whether an operation is applicable.
- *
- * `ReadyMadeNameForPrimitiveKind` reads y made name for primitive kind from the external stream/document,
- * advancing through the format in the order required to resolve references and produce valid internal data.
- * Primitive definitions are resolved through the registry, allowing plugin-provided primitives to follow the same
- * path as built-ins.
- *
- * `RebuildPrimitiveShadowGeometry` reconstructs primitive shadow geometry from authoritative source data after an
- * edit has invalidated the previous derived form. Rebuilding rather than incrementally patching reduces the
- * chance of stale topology/cache entries surviving. Primitive definitions are resolved through the registry,
- * allowing plugin-provided primitives to follow the same path as built-ins.
- *
- * `ClearParametricTextureProjection` removes/resets parametric texture projection to its empty/default state.
- * This is an explicit state transition rather than leaving old values around for later code to accidentally
- * reuse.
- *
- * `IsIdentitySrt` tests whether identity srt is true for the supplied/current value. Keeping the predicate here
- * ensures every caller uses the same definition instead of duplicating a slightly different condition.
- *
- * `ReadAuthoredAffine` reads authored affine from the external stream/document, advancing through the format in
- * the order required to resolve references and produce valid internal data.
- *
- * `WriteAuthoredAffine` writes authored affine to the external stream/document in the format’s required order,
- * using stable indices/references so another reader can reconstruct the same relationships.
- *
- * `TransformPoint` applies the relevant coordinate transform to point, making explicit whether data is being
- * moved between local, world, view, or preview space.
+ * This is an extensibility seam. Callers discover capabilities through a registry/interface instead of referencing
+ * every concrete format or object-library assembly, allowing plugins to be added while the core scene/editor code
+ * remains unchanged.
  */
 using LightingShowcase.Math3D;
 
 namespace LightingShowcase.SceneGraph;
 
+// ObjectLibraryRegistry is a discovery table that maps stable names/capabilities to registered implementations,
+// removing the need for central switch statements that know every plugin or primitive at compile time.
 public static class ObjectLibraryRegistry
 {
     private const string TextureProjectionModeKey = "__composerTextureBoxProjection";
@@ -79,6 +43,10 @@ public static class ObjectLibraryRegistry
         return group;
     }
 
+    // ReadyMadeNameForPrimitiveKind reads y made name for primitive kind from the external stream/document,
+    // advancing through the format in the order required to resolve references and produce valid internal data.
+    // Primitive definitions are resolved through the registry, allowing plugin-provided primitives to follow the
+    // same path as built-ins.
     public static string ReadyMadeNameForPrimitiveKind(string? primitiveKind, string? sourceName)
     {
         EnsureInitialized();
@@ -112,6 +80,9 @@ public static class ObjectLibraryRegistry
             group.PrimitiveParameters[parameter.Key] = parameter.Value;
     }
 
+    // Parameterized objects are rebuilt through the registered primitive definition rather than hard-coded shape
+    // logic. That lets built-ins and plugins share the same edit path while preserving the group’s procedural
+    // identity and authored transform parameters.
     public static bool RebuildPrimitiveShadowGeometry(SceneObjectGroup group, SceneMaterials materials)
     {
         if (group == null) throw new ArgumentNullException(nameof(group));
@@ -168,6 +139,9 @@ public static class ObjectLibraryRegistry
             group.PrimitiveParameters.Remove(TextureTileMetersKey);
     }
 
+    // ClearParametricTextureProjection removes/resets parametric texture projection to its empty/default state.
+    // This is an explicit state transition rather than leaving old values around for later code to accidentally
+    // reuse.
     public static void ClearParametricTextureProjection(SceneObjectGroup group)
     {
         if (group == null) throw new ArgumentNullException(nameof(group));
@@ -224,6 +198,8 @@ public static class ObjectLibraryRegistry
 
     private const string AffinePrefix = "__composerAffine";
 
+    // IsIdentitySrt tests whether identity srt is true for the supplied/current value. Keeping the predicate here
+    // ensures every caller uses the same definition instead of duplicating a slightly different condition.
     private static bool IsIdentitySrt(Vec3 position, Vec3 rotation, Vec3 scale) =>
         position.Length() <= 1e-12 && rotation.Length() <= 1e-12 &&
         Math.Abs(scale.X - 1.0) <= 1e-12 && Math.Abs(scale.Y - 1.0) <= 1e-12 && Math.Abs(scale.Z - 1.0) <= 1e-12;
@@ -244,6 +220,8 @@ public static class ObjectLibraryRegistry
                 uvA, uvB, uvC, material);
     }
 
+    // ReadAuthoredAffine reads authored affine from the external stream/document, advancing through the format in
+    // the order required to resolve references and produce valid internal data.
     private static AuthoredAffine ReadAuthoredAffine(IReadOnlyDictionary<string, double> parameters)
     {
         double Read(string suffix, double fallback) =>
@@ -257,6 +235,8 @@ public static class ObjectLibraryRegistry
             Read("M31", 0.0), Read("M32", 0.0), Read("M33", 1.0), Read("TZ", 0.0));
     }
 
+    // WriteAuthoredAffine writes authored affine to the external stream/document in the format’s required order,
+    // using stable indices/references so another reader can reconstruct the same relationships.
     private static void WriteAuthoredAffine(IDictionary<string, double> parameters, AuthoredAffine value)
     {
         parameters[AffinePrefix + "M11"] = value.M11;
@@ -278,6 +258,8 @@ public static class ObjectLibraryRegistry
         double M21, double M22, double M23, double TY,
         double M31, double M32, double M33, double TZ)
     {
+        // IsIdentity is a read-only predicate over the object’s existing state; it exists so callers share one
+        // exact condition when enabling commands or deciding whether an operation is applicable.
         public bool IsIdentity =>
             Math.Abs(M11 - 1.0) <= 1e-12 && Math.Abs(M22 - 1.0) <= 1e-12 && Math.Abs(M33 - 1.0) <= 1e-12 &&
             Math.Abs(M12) <= 1e-12 && Math.Abs(M13) <= 1e-12 &&
@@ -285,6 +267,8 @@ public static class ObjectLibraryRegistry
             Math.Abs(M31) <= 1e-12 && Math.Abs(M32) <= 1e-12 &&
             Math.Abs(TX) <= 1e-12 && Math.Abs(TY) <= 1e-12 && Math.Abs(TZ) <= 1e-12;
 
+        // TransformPoint applies the relevant coordinate transform to point, making explicit whether data is being
+        // moved between local, world, view, or preview space.
         public Vec3 TransformPoint(Vec3 point) => new(
             M11 * point.X + M12 * point.Y + M13 * point.Z + TX,
             M21 * point.X + M22 * point.Y + M23 * point.Z + TY,

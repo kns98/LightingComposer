@@ -2,28 +2,6 @@
  * This UI code turns editor state into controls and converts user edits back into validated domain operations.
  * Dialog/window state is intentionally temporary: values should only become authoritative scene changes through
  * the session/controller path, which preserves cancel, undo, and renderer invalidation behavior.
- *
- * `PrimitiveParametersWindow` owns temporary Avalonia presentation/edit state. Values become durable only when
- * accepted and routed through the relevant session/controller operation, preserving validation and cancellation
- * semantics.
- *
- * `ObjectId` is derived rather than separately stored: it evaluates `objectId`. Keeping the value computed from
- * its source fields prevents a second cached flag/value from drifting out of sync.
- *
- * `BuildContent` derives content from lower-level input data, resolving indexing/grouping/derived values once so
- * callers can operate on a coherent higher-level representation.
- *
- * `BuildParameterRow` derives parameter row from lower-level input data, resolving indexing/grouping/derived
- * values once so callers can operate on a coherent higher-level representation.
- *
- * `PreviewNow` applies a temporary now update for interactive feedback. The preview may run many times during one
- * gesture, but it deliberately does not create a separate history entry for every intermediate value.
- *
- * `FormatNumber` converts number to a human-readable string intended for status/editor presentation rather than
- * persistence.
- *
- * `NewButton` creates a consistently configured button UI/domain object so repeated controls/objects share
- * sizing, alignment, or default behavior.
  */
 using System.Globalization;
 using Avalonia;
@@ -35,6 +13,9 @@ using LightingShowcase.SceneGraph;
 
 namespace LightingShowcase.Composer;
 
+// PrimitiveParametersWindow owns temporary Avalonia presentation/edit state. Values become durable only when
+// accepted and routed through the relevant session/controller operation, preserving validation and cancellation
+// semantics.
 /// <summary>
 /// Modeless parameter editor for procedural mesh primitives. Values are previewed
 /// live, while Apply/Close records one undo step for the current edit batch.
@@ -299,6 +280,8 @@ internal sealed class PrimitiveParametersWindow : Window
         previewTimer.Start();
     }
 
+    // PreviewNow applies a temporary now update for interactive feedback. The preview may run many times during one
+    // gesture, but it deliberately does not create a separate history entry for every intermediate value.
     private bool PreviewNow()
     {
         if (!previewDirty)
@@ -349,11 +332,15 @@ internal sealed class PrimitiveParametersWindow : Window
         return true;
     }
 
+    // FormatNumber converts number to a human-readable string intended for status/editor presentation rather than
+    // persistence.
     private static string FormatNumber(double value, PrimitiveParameterKind kind) =>
         kind == PrimitiveParameterKind.Integer
             ? Math.Round(value).ToString("0", CultureInfo.InvariantCulture)
             : value.ToString("0.######", CultureInfo.InvariantCulture);
 
+    // NewButton creates a consistently configured button UI/domain object so repeated controls/objects share
+    // sizing, alignment, or default behavior.
     private static Button NewButton(string text) => new()
     {
         Content = text,

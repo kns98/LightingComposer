@@ -2,87 +2,6 @@
  * Object-library definitions generate scene geometry from named, authored parameters. Keeping those parameters
  * attached to the generated object is important: a cube with width/height/depth is still editable as a cube until
  * a topology edit deliberately converts it into ordinary mesh geometry.
- *
- * `BoxPart` is an immutable packet of related values. Record value semantics make it suitable for snapshots,
- * options, commands, or parsed intermediate data because callers can copy/compare it without sharing mutable
- * state. Its constructor values (`Min`, `Max`, `Material`) travel together because consumers need a consistent
- * snapshot rather than reading those values independently from mutable objects.
- *
- * `EmittedTriangle` is an immutable packet of related values. Record value semantics make it suitable for
- * snapshots, options, commands, or parsed intermediate data because callers can copy/compare it without sharing
- * mutable state. Its constructor values (`A`, `B`, `C`, `UvA`, `UvB`, `UvC`, `Material`) travel together because
- * consumers need a consistent snapshot rather than reading those values independently from mutable objects.
- *
- * `DiningTableObject` defines/builds a ready-made scene object from simpler geometry so the palette can insert a
- * semantically named object rather than a hard-coded triangle blob.
- *
- * `CoffeeTableObject` defines/builds a ready-made scene object from simpler geometry so the palette can insert a
- * semantically named object rather than a hard-coded triangle blob.
- *
- * `ChairObject` defines/builds a ready-made scene object from simpler geometry so the palette can insert a
- * semantically named object rather than a hard-coded triangle blob.
- *
- * `SofaObject` defines/builds a ready-made scene object from simpler geometry so the palette can insert a
- * semantically named object rather than a hard-coded triangle blob.
- *
- * `BedObject` defines/builds a ready-made scene object from simpler geometry so the palette can insert a
- * semantically named object rather than a hard-coded triangle blob.
- *
- * `BookshelfObject` defines/builds a ready-made scene object from simpler geometry so the palette can insert a
- * semantically named object rather than a hard-coded triangle blob.
- *
- * `StorageCabinetObject` defines/builds a ready-made scene object from simpler geometry so the palette can insert
- * a semantically named object rather than a hard-coded triangle blob.
- *
- * `CreateDefaultParameters` constructs default parameters in the normalized form expected downstream, so
- * allocation plus initialization of its invariants happen together.
- *
- * `CreateParametersFromBounds` constructs parameters from bounds in the normalized form expected downstream, so
- * allocation plus initialization of its invariants happen together.
- *
- * `ApplyMoveDelta` applies move delta as a single semantic mutation. Validation, scene changes, undo bookkeeping,
- * and cache invalidation are kept inside this boundary rather than exposed as separate caller responsibilities.
- *
- * `ApplyScaleDelta` applies scale delta as a single semantic mutation. Validation, scene changes, undo
- * bookkeeping, and cache invalidation are kept inside this boundary rather than exposed as separate caller
- * responsibilities.
- *
- * `ApplyPendingTransform` applies pending transform as a single semantic mutation. Validation, scene changes,
- * undo bookkeeping, and cache invalidation are kept inside this boundary rather than exposed as separate caller
- * responsibilities.
- *
- * `CreateParameters` constructs parameters in the normalized form expected downstream, so allocation plus
- * initialization of its invariants happen together.
- *
- * `CaptureSource` copies source into an independent snapshot so later mutation cannot change the saved baseline.
- * This is typically the “before” side of undo, preview, caching, or thread isolation.
- *
- * `Multiply` performs component-wise multiplication, preserving independent axes/color channels instead of
- * reducing them to a scalar.
- *
- * `CreateParts` constructs parts in the normalized form expected downstream, so allocation plus initialization of
- * its invariants happen together.
- *
- * `CreateParts` constructs parts in the normalized form expected downstream, so allocation plus initialization of
- * its invariants happen together.
- *
- * `CreateParts` constructs parts in the normalized form expected downstream, so allocation plus initialization of
- * its invariants happen together.
- *
- * `CreateParts` constructs parts in the normalized form expected downstream, so allocation plus initialization of
- * its invariants happen together.
- *
- * `CreateParts` constructs parts in the normalized form expected downstream, so allocation plus initialization of
- * its invariants happen together.
- *
- * `CreateParts` constructs parts in the normalized form expected downstream, so allocation plus initialization of
- * its invariants happen together.
- *
- * `CreateParts` constructs parts in the normalized form expected downstream, so allocation plus initialization of
- * its invariants happen together.
- *
- * `CreateParts` constructs parts in the normalized form expected downstream, so allocation plus initialization of
- * its invariants happen together.
  */
 using LightingShowcase.Math3D;
 
@@ -109,6 +28,8 @@ public abstract class ReadyMadeObjectDefinitionBase : ISceneObjectDefinition
         "X/Y/Z scale updates width/height/depth while preserving the authored multi-part geometry",
         "stored as object rotation");
 
+    // CreateDefaultParameters constructs default parameters in the normalized form expected downstream, so
+    // allocation plus initialization of its invariants happen together.
     public Dictionary<string, double> CreateDefaultParameters()
     {
         List<EmittedTriangle> source = CaptureSource(new SceneMaterials());
@@ -120,6 +41,8 @@ public abstract class ReadyMadeObjectDefinitionBase : ISceneObjectDefinition
         return CreateParameters((min + max) * 0.5, Math.Max(1e-6, size.X), Math.Max(1e-6, size.Y), Math.Max(1e-6, size.Z));
     }
 
+    // CreateParametersFromBounds constructs parameters from bounds in the normalized form expected downstream, so
+    // allocation plus initialization of its invariants happen together.
     public Dictionary<string, double> CreateParametersFromBounds(Aabb bounds)
     {
         Vec3 size = bounds.Max - bounds.Min;
@@ -191,12 +114,30 @@ public abstract class ReadyMadeObjectDefinitionBase : ISceneObjectDefinition
         return changed;
     }
 
+    // CreateParts constructs parts in the normalized form expected downstream, so allocation plus initialization of
+    // its invariants happen together.
+    // CreateParts constructs parts in the normalized form expected downstream, so allocation plus initialization of
+    // its invariants happen together.
+    // CreateParts constructs parts in the normalized form expected downstream, so allocation plus initialization of
+    // its invariants happen together.
+    // CreateParts constructs parts in the normalized form expected downstream, so allocation plus initialization of
+    // its invariants happen together.
+    // CreateParts constructs parts in the normalized form expected downstream, so allocation plus initialization of
+    // its invariants happen together.
+    // CreateParts constructs parts in the normalized form expected downstream, so allocation plus initialization of
+    // its invariants happen together.
+    // CreateParts constructs parts in the normalized form expected downstream, so allocation plus initialization of
+    // its invariants happen together.
+    // CreateParts constructs parts in the normalized form expected downstream, so allocation plus initialization of
+    // its invariants happen together.
     protected abstract IReadOnlyList<BoxPart> CreateParts(SceneMaterials materials);
 
     protected virtual string YSizeParameter => "height";
 
     protected static BoxPart Box(Vec3 min, Vec3 max, Material material) => new(min, max, material);
 
+    // CreateParameters constructs parameters in the normalized form expected downstream, so allocation plus
+    // initialization of its invariants happen together.
     private Dictionary<string, double> CreateParameters(Vec3 origin, double width, double height, double depth) =>
         new(StringComparer.OrdinalIgnoreCase)
         {
@@ -208,6 +149,8 @@ public abstract class ReadyMadeObjectDefinitionBase : ISceneObjectDefinition
             ["depth"] = depth
         };
 
+    // CaptureSource copies source into an independent snapshot so later mutation cannot change the saved baseline.
+    // This is typically the “before” side of undo, preview, caching, or thread isolation.
     private List<EmittedTriangle> CaptureSource(SceneMaterials materials)
     {
         List<EmittedTriangle> triangles = new();
@@ -264,6 +207,8 @@ public abstract class ReadyMadeObjectDefinitionBase : ISceneObjectDefinition
         return true;
     }
 
+    // Multiply performs component-wise multiplication, preserving independent axes/color channels instead of
+    // reducing them to a scalar.
     protected static bool Multiply(IDictionary<string, double> parameters, string key, double factor)
     {
         factor = SanitizeScale(factor);
@@ -305,6 +250,8 @@ public abstract class ReadyMadeObjectDefinitionBase : ISceneObjectDefinition
     }
 }
 
+// DiningTableObject defines/builds a ready-made scene object from simpler geometry so the palette can insert a
+// semantically named object rather than a hard-coded triangle blob.
 public sealed class DiningTableObject : ReadyMadeObjectDefinitionBase
 {
     public override string Kind => "diningTable";
@@ -319,6 +266,8 @@ public sealed class DiningTableObject : ReadyMadeObjectDefinitionBase
     };
 }
 
+// CoffeeTableObject defines/builds a ready-made scene object from simpler geometry so the palette can insert a
+// semantically named object rather than a hard-coded triangle blob.
 public sealed class CoffeeTableObject : ReadyMadeObjectDefinitionBase
 {
     public override string Kind => "coffeeTable";
@@ -333,6 +282,8 @@ public sealed class CoffeeTableObject : ReadyMadeObjectDefinitionBase
     };
 }
 
+// ChairObject defines/builds a ready-made scene object from simpler geometry so the palette can insert a
+// semantically named object rather than a hard-coded triangle blob.
 public sealed class ChairObject : ReadyMadeObjectDefinitionBase
 {
     public override string Kind => "chair";
@@ -348,6 +299,8 @@ public sealed class ChairObject : ReadyMadeObjectDefinitionBase
     };
 }
 
+// SofaObject defines/builds a ready-made scene object from simpler geometry so the palette can insert a
+// semantically named object rather than a hard-coded triangle blob.
 public sealed class SofaObject : ReadyMadeObjectDefinitionBase
 {
     public override string Kind => "sofa";
@@ -363,6 +316,8 @@ public sealed class SofaObject : ReadyMadeObjectDefinitionBase
     };
 }
 
+// BedObject defines/builds a ready-made scene object from simpler geometry so the palette can insert a semantically
+// named object rather than a hard-coded triangle blob.
 public sealed class BedObject : ReadyMadeObjectDefinitionBase
 {
     public override string Kind => "bed";
@@ -376,6 +331,8 @@ public sealed class BedObject : ReadyMadeObjectDefinitionBase
     };
 }
 
+// BookshelfObject defines/builds a ready-made scene object from simpler geometry so the palette can insert a
+// semantically named object rather than a hard-coded triangle blob.
 public sealed class BookshelfObject : ReadyMadeObjectDefinitionBase
 {
     public override string Kind => "bookshelf";
@@ -394,6 +351,8 @@ public sealed class BookshelfObject : ReadyMadeObjectDefinitionBase
     };
 }
 
+// StorageCabinetObject defines/builds a ready-made scene object from simpler geometry so the palette can insert a
+// semantically named object rather than a hard-coded triangle blob.
 public sealed class StorageCabinetObject : ReadyMadeObjectDefinitionBase
 {
     public override string Kind => "storageCabinet";

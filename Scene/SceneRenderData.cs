@@ -2,30 +2,6 @@
  * This file belongs to the renderer-neutral scene layer, which is the shared source of truth for geometry,
  * transforms, grouping, materials, resources, and serialization-facing state. Higher layers manipulate these
  * abstractions rather than maintaining parallel copies of scene data.
- *
- * `RenderMeshInstance` is an immutable packet of related values. Record value semantics make it suitable for
- * snapshots, options, commands, or parsed intermediate data because callers can copy/compare it without sharing
- * mutable state. Its constructor values (`ObjectId`, `ObjectName`, `Triangles`, `Visible`, `Bounds`) travel
- * together because consumers need a consistent snapshot rather than reading those values independently from
- * mutable objects.
- *
- * `RenderLight` is an immutable packet of related values. Record value semantics make it suitable for snapshots,
- * options, commands, or parsed intermediate data because callers can copy/compare it without sharing mutable
- * state. Its constructor values (`Id`, `Kind`, `Position`, `Direction`, `Color`, `Intensity`, `Range`,
- * `InnerConeAngle`, `OuterConeAngle`, `Enabled`, `CastsShadow`, `IsImported`) travel together because consumers
- * need a consistent snapshot rather than reading those values independently from mutable objects.
- *
- * `RenderMaterial` is an immutable packet of related values. Record value semantics make it suitable for
- * snapshots, options, commands, or parsed intermediate data because callers can copy/compare it without sharing
- * mutable state. Its constructor values (`Id`, `Definition`) travel together because consumers need a consistent
- * snapshot rather than reading those values independently from mutable objects.
- *
- * `SceneRenderDataBuilder` accumulates/normalizes lower-level inputs and emits a valid higher-level object only
- * when enough information has been supplied.
- *
- * The `SceneRenderData` constructor captures `meshes`, `lights`, `materials`, `assets`, `settings`, `bounds`.
- * Those are the dependencies/initial values the instance needs for its lifetime, so callbacks and later
- * operations use the same objects/configuration rather than looking them up globally.
  */
 using LightingShowcase.Lighting;
 using LightingShowcase.Math3D;
@@ -57,6 +33,8 @@ public sealed class SceneRenderData
     }
 }
 
+// SceneRenderDataBuilder accumulates/normalizes lower-level inputs and emits a valid higher-level object only when
+// enough information has been supplied.
 /// <summary>Builds shared render data from the editable scene so renderers do not reinterpret the scene differently.</summary>
 public static class SceneRenderDataBuilder
 {

@@ -1,13 +1,7 @@
 /*
  * This representation separates durable or isolated scene state from the mutable live editor graph. Save/load,
- * undo, background rendering, and tests need snapshots/documents that can be copied or serialized without
- * exposing shared mutable objects across threads.
- *
- * `SceneCloner` provides shared algorithms/registration behavior without per-instance state.
- *
- * The `SceneSnapshot` constructor captures `description`, `objectGroups`, `lights`. Those are the
- * dependencies/initial values the instance needs for its lifetime, so callbacks and later operations use the same
- * objects/configuration rather than looking them up globally.
+ * undo, background rendering, and tests need snapshots/documents that can be copied or serialized without exposing
+ * shared mutable objects across threads.
  */
 using LightingShowcase.Lighting;
 

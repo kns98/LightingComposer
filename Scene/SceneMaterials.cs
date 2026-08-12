@@ -1,7 +1,7 @@
 /*
- * Surface appearance is normalized here so importers, editor controls, and every renderer use the same meaning
- * for colors, PBR values, alpha behavior, texture slots, UV transforms, and resource identity. That shared model
- * is what makes a material edited in the UI render consistently across backends.
+ * Surface appearance is normalized here so importers, editor controls, and every renderer use the same meaning for
+ * colors, PBR values, alpha behavior, texture slots, UV transforms, and resource identity. That shared model is
+ * what makes a material edited in the UI render consistently across backends.
  */
 using LightingShowcase.Math3D;
 

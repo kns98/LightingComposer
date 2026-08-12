@@ -3,12 +3,6 @@
  * buffers/images, commands are submitted against those resources, and stale resources must be rebuilt when
  * geometry or transforms change; a numerically correct algorithm can still be wrong here if lifetime or
  * synchronization is mishandled.
- *
- * `VeldridVulkanDevicePreflight` provides shared algorithms/registration behavior without per-instance state.
- *
- * `RunChildDeviceCreationTest` executes child device creation test as one coordinated action and centralizes
- * success/failure handling so callers do not each implement inconsistent exception/UI behavior. GPU resource
- * creation/update is explicit, so correct lifetime and cache invalidation are part of the method’s correctness.
  */
 using System.Diagnostics;
 using Veldrid;
@@ -19,6 +13,9 @@ public static class VeldridVulkanDevicePreflight
 {
     public const string ChildArgument = "--lighting-showcase-vulkan-device-test";
 
+    // RunChildDeviceCreationTest executes child device creation test as one coordinated action and centralizes
+    // success/failure handling so callers do not each implement inconsistent exception/UI behavior. GPU resource
+    // creation/update is explicit, so correct lifetime and cache invalidation are part of the method’s correctness.
     public static int RunChildDeviceCreationTest()
     {
         try

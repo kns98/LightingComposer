@@ -2,26 +2,13 @@
  * Camera state is kept independent of Avalonia and renderer-specific code. That lets interactive navigation,
  * scripted paths, tests, and multiple render backends use the same definitions for position, orientation,
  * projection, and interpolation.
- *
- * `DemoCameraPath` represents an ordered path/keyframe sequence and the interpolation rules needed to sample it
- * at arbitrary times/positions.
- *
- * `Keys` is derived rather than separately stored: it evaluates `keys`. Keeping the value computed from its
- * source fields prevents a second cached flag/value from drifting out of sync.
- *
- * `UpdateKey` updates key from the newest input while preserving the identities/metadata/caches that remain valid
- * and invalidating only what the change makes stale.
- *
- * `AddKey` adds key to the owning collection/model while using this boundary to preserve indexing, ownership, and
- * derived-state invariants.
- *
- * `RemoveKey` removes key from the owning structure and updates the relationships/derived state that would
- * otherwise still reference it.
  */
 using LightingShowcase.Math3D;
 
 namespace LightingShowcase.CameraSystem;
 
+// DemoCameraPath represents an ordered path/keyframe sequence and the interpolation rules needed to sample it at
+// arbitrary times/positions.
 /// <summary>Editable camera animation path with time-based interpolation.</summary>
 public sealed class DemoCameraPath
 {
@@ -46,6 +33,8 @@ public sealed class DemoCameraPath
         if (keys.Count == 1)
             return new CameraSample(keys[0].Position, keys[0].Target);
 
+        // The double-modulo form wraps both positive and negative times into [0,1), allowing the camera path to
+        // loop continuously even when callers scrub backward.
         double t = ((normalizedTime % 1.0) + 1.0) % 1.0;
         SortKeys();
         for (int i = 0; i < keys.Count - 1; i++)
@@ -54,6 +43,8 @@ public sealed class DemoCameraPath
             if (t >= a.Time && t <= b.Time)
             {
                 double span = System.Math.Max(0.000001, b.Time - a.Time);
+                // Interpolation is performed inside the two surrounding keyframes, then passed through smoothstep
+                // so velocity eases at each key instead of changing abruptly.
                 double local = Smooth((t - a.Time) / span);
                 return new CameraSample(Vec3.Lerp(a.Position, b.Position, local), Vec3.Lerp(a.Target, b.Target, local));
             }

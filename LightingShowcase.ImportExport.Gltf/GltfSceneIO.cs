@@ -1,88 +1,7 @@
 /*
- * Importing GLTF is a translation problem, not a file-copy operation. The code parses the external
- * representation, resolves indices/resources/transforms, and creates Composer triangles, object groups,
- * materials, and textures in the coordinate and ownership conventions expected by the scene layer.
- *
- * `GltfSceneIO` provides shared algorithms/registration behavior without per-instance state.
- *
- * `GltfDocument` is an immutable packet of related values. Record value semantics make it suitable for snapshots,
- * options, commands, or parsed intermediate data because callers can copy/compare it without sharing mutable
- * state. Its constructor values (`JsonUtf8`, `BinaryChunk`) travel together because consumers need a consistent
- * snapshot rather than reading those values independently from mutable objects.
- *
- * `GltfMaterial` is an immutable packet of related values. Record value semantics make it suitable for snapshots,
- * options, commands, or parsed intermediate data because callers can copy/compare it without sharing mutable
- * state. Its constructor values (`Material`, `BaseColorTexCoord`) travel together because consumers need a
- * consistent snapshot rather than reading those values independently from mutable objects.
- *
- * `ImportedLight` is an immutable packet of related values. Record value semantics make it suitable for
- * snapshots, options, commands, or parsed intermediate data because callers can copy/compare it without sharing
- * mutable state. Its constructor values (`Id`, `Kind`, `Position`, `Direction`, `Color`, `Intensity`, `Range`,
- * `InnerConeAngle`, `OuterConeAngle`, `Enabled`) travel together because consumers need a consistent snapshot
- * rather than reading those values independently from mutable objects.
- *
- * `AccessorInfo` is an immutable packet of related values. Record value semantics make it suitable for snapshots,
- * options, commands, or parsed intermediate data because callers can copy/compare it without sharing mutable
- * state. Its constructor values (`Buffer`, `Offset`, `Stride`, `Count`, `ComponentType`, `Type`) travel together
- * because consumers need a consistent snapshot rather than reading those values independently from mutable
- * objects.
- *
- * `ExportVertex` is an immutable packet of related values. Record value semantics make it suitable for snapshots,
- * options, commands, or parsed intermediate data because callers can copy/compare it without sharing mutable
- * state. Its constructor values (`Px`, `Py`, `Pz`, `Nx`, `Ny`, `Nz`, `U`, `V`) travel together because consumers
- * need a consistent snapshot rather than reading those values independently from mutable objects.
- *
- * `ExportBuild` is an immutable packet of related values. Record value semantics make it suitable for snapshots,
- * options, commands, or parsed intermediate data because callers can copy/compare it without sharing mutable
- * state. Its constructor values (`Root`, `Bin`, `CompactJson`) travel together because consumers need a
- * consistent snapshot rather than reading those values independently from mutable objects.
- *
- * `ImportMesh` imports mesh by translating external geometry/resources into Composer conventions and ownership
- * structures.
- *
- * `BuildExport` derives export from lower-level input data, resolving indexing/grouping/derived values once so
- * callers can operate on a coherent higher-level representation.
- *
- * `GetMaterialId` reads material id from the authoritative model and returns a value/snapshot suitable for
- * callers, avoiding direct access to mutable internal storage.
- *
- * `BuildPrimitive` derives primitive from lower-level input data, resolving indexing/grouping/derived values once
- * so callers can operate on a coherent higher-level representation.
- *
- * `AddVertex` adds vertex to the owning collection/model while using this boundary to preserve indexing,
- * ownership, and derived-state invariants.
- *
- * `WriteGltf` writes gltf to the external stream/document in the format’s required order, using stable
- * indices/references so another reader can reconstruct the same relationships. Serializer-specific handling stays
- * at this boundary rather than leaking into the live scene model.
- *
- * `WriteGlb` writes glb to the external stream/document in the format’s required order, using stable
- * indices/references so another reader can reconstruct the same relationships. Binary field order is explicit;
- * changing it requires the corresponding reader/writer to remain symmetrical. Serializer-specific handling stays
- * at this boundary rather than leaking into the live scene model.
- *
- * `ReadDocument` reads document from the external stream/document, advancing through the format in the order
- * required to resolve references and produce valid internal data. Binary field order is explicit; changing it
- * requires the corresponding reader/writer to remain symmetrical.
- *
- * `LoadBuffers` loads buffers from persistent/external data and converts it into validated internal scene state
- * rather than exposing parser-specific objects to the rest of the application.
- *
- * `ReadMaterials` reads materials from the external stream/document, advancing through the format in the order
- * required to resolve references and produce valid internal data.
- *
- * `ApplyTextureTransform` applies texture transform as a single semantic mutation. Validation, scene changes,
- * undo bookkeeping, and cache invalidation are kept inside this boundary rather than exposed as separate caller
- * responsibilities.
- *
- * `ReadTextureCoordSet` reads texture coord set from the external stream/document, advancing through the format
- * in the order required to resolve references and produce valid internal data.
- *
- * `ReadLights` reads lights from the external stream/document, advancing through the format in the order required
- * to resolve references and produce valid internal data.
- *
- * `ReadVec3Accessor` reads vec3 accessor from the external stream/document, advancing through the format in the
- * order required to resolve references and produce valid internal data.
+ * Importing GLTF is a translation problem, not a file-copy operation. The code parses the external representation,
+ * resolves indices/resources/transforms, and creates Composer triangles, object groups, materials, and textures in
+ * the coordinate and ownership conventions expected by the scene layer.
  */
 using System.IO;
 using System.Diagnostics;
@@ -365,6 +284,8 @@ public static class GltfSceneIO
             }
         }
 
+        // ImportMesh imports mesh by translating external geometry/resources into Composer conventions and
+        // ownership structures.
         void ImportMesh(JsonElement mesh, string nodeName, Matrix4x4 world)
         {
             if (!mesh.TryGetProperty("primitives", out JsonElement primitives))
@@ -807,6 +728,9 @@ public static class GltfSceneIO
         return new ExportBuild(root, bin.ToArray(), optimizeGeometry);
     }
 
+    // WriteGltf writes gltf to the external stream/document in the format’s required order, using stable
+    // indices/references so another reader can reconstruct the same relationships. Serializer-specific handling
+    // stays at this boundary rather than leaking into the live scene model.
     private static void WriteGltf(ExportBuild build, string filePath, string? bufferFileName)
     {
         string binName = string.IsNullOrWhiteSpace(bufferFileName)
@@ -822,6 +746,10 @@ public static class GltfSceneIO
         File.WriteAllBytes(Path.Combine(Path.GetDirectoryName(filePath) ?? string.Empty, binName), bin);
     }
 
+    // WriteGlb writes glb to the external stream/document in the format’s required order, using stable
+    // indices/references so another reader can reconstruct the same relationships. Binary field order is explicit;
+    // changing it requires the corresponding reader/writer to remain symmetrical. Serializer-specific handling
+    // stays at this boundary rather than leaking into the live scene model.
     private static void WriteGlb(ExportBuild build, string filePath, string? bufferFileName)
     {
         bool useExternalBuffer = !string.IsNullOrWhiteSpace(bufferFileName);
@@ -865,6 +793,9 @@ public static class GltfSceneIO
         }
     }
 
+    // ReadDocument reads document from the external stream/document, advancing through the format in the order
+    // required to resolve references and produce valid internal data. Binary field order is explicit; changing it
+    // requires the corresponding reader/writer to remain symmetrical.
     private static GltfDocument ReadDocument(string filePath)
     {
         string extension = Path.GetExtension(filePath).ToLowerInvariant();
@@ -940,6 +871,8 @@ public static class GltfSceneIO
         return File.ReadAllBytes(Path.Combine(baseDirectory, Uri.UnescapeDataString(uri)));
     }
 
+    // ReadMaterials reads materials from the external stream/document, advancing through the format in the order
+    // required to resolve references and produce valid internal data.
     private static List<GltfMaterial> ReadMaterials(JsonElement root, List<byte[]> buffers, string sceneFilePath, Material fallback)
     {
         List<GltfMaterial> result = new();
@@ -1201,6 +1134,8 @@ public static class GltfSceneIO
                     return null;
 
                 if (uri.StartsWith("data:", StringComparison.OrdinalIgnoreCase))
+                    // A glTF buffer/image URI may embed bytes directly as a data URI. Decoding that path locally
+                    // avoids treating the base64 payload as a filesystem path.
                     return TextureMap.FromBytes(name, ReadDataUriBytes(uri), null).WithAddressing(wrapS, wrapT);
 
                 string imagePath = Path.Combine(baseDirectory, Uri.UnescapeDataString(uri));
@@ -1249,6 +1184,8 @@ public static class GltfSceneIO
         return texture.WithTextureTransform(offsetU, offsetV, scaleU, scaleV, rotation);
     }
 
+    // ReadTextureCoordSet reads texture coord set from the external stream/document, advancing through the format
+    // in the order required to resolve references and produce valid internal data.
     private static int ReadTextureCoordSet(JsonElement textureInfo)
     {
         int texCoord = textureInfo.TryGetProperty("texCoord", out JsonElement texCoordEl)
@@ -1294,6 +1231,8 @@ public static class GltfSceneIO
             throw new InvalidDataException("Invalid glTF image bufferView index.");
         JsonElement view = bufferViews[bufferViewIndex];
         int buffer = view.TryGetProperty("buffer", out JsonElement bufferEl) ? bufferEl.GetInt32() : 0;
+        // glTF accessor data can start at both a buffer-view offset and an accessor offset, with an optional byte
+        // stride between elements. Combining those values correctly is essential for interleaved vertex buffers.
         int offset = view.TryGetProperty("byteOffset", out JsonElement offsetEl) ? offsetEl.GetInt32() : 0;
         int length = view.GetProperty("byteLength").GetInt32();
         byte[] bytes = new byte[length];
@@ -1301,6 +1240,8 @@ public static class GltfSceneIO
         return bytes;
     }
 
+    // ReadLights reads lights from the external stream/document, advancing through the format in the order required
+    // to resolve references and produce valid internal data.
     private static List<ImportedLight> ReadLights(JsonElement root)
     {
         List<ImportedLight> result = new();
@@ -1367,6 +1308,8 @@ public static class GltfSceneIO
                min.X <= max.X && min.Y <= max.Y && min.Z <= max.Z;
     }
 
+    // ReadVec3Accessor reads vec3 accessor from the external stream/document, advancing through the format in the
+    // order required to resolve references and produce valid internal data.
     private static List<Vec3> ReadVec3Accessor(JsonElement root, List<byte[]> buffers, int accessorIndex, Matrix4x4 transform)
     {
         AccessorInfo info = GetAccessorInfo(root, accessorIndex);
@@ -1418,6 +1361,8 @@ public static class GltfSceneIO
 
         if (!Matrix4x4.Invert(transform, out Matrix4x4 inverse))
             inverse = Matrix4x4.Identity;
+        // Normals use the inverse-transpose of the node transform rather than the position transform, which is
+        // required to keep them perpendicular to surfaces under non-uniform scaling.
         Matrix4x4 normalTransform = Matrix4x4.Transpose(inverse);
 
         int componentSize = ComponentByteSize(info.ComponentType);
@@ -1488,6 +1433,9 @@ public static class GltfSceneIO
         return values;
     }
 
+    // A glTF accessor is not a raw array pointer: its byte address combines the selected buffer, buffer-view
+    // offset, accessor offset, component size, element width, and optional stride. Centralizing that calculation
+    // keeps every attribute reader consistent.
     private static AccessorInfo GetAccessorInfo(JsonElement root, int accessorIndex)
     {
         JsonElement accessors = GetArray(root, "accessors");
@@ -1500,6 +1448,8 @@ public static class GltfSceneIO
         int componentCount = type switch { "VEC2" => 2, "VEC3" => 3, "VEC4" => 4, _ => 1 };
         int componentSize = componentType switch { 5120 or 5121 => 1, 5122 or 5123 => 2, 5125 or 5126 => 4, _ => throw new NotSupportedException($"Unsupported glTF component type {componentType}.") };
         int stride = view.TryGetProperty("byteStride", out JsonElement strideEl) ? strideEl.GetInt32() : componentSize * componentCount;
+        // glTF accessor data can start at both a buffer-view offset and an accessor offset, with an optional byte
+        // stride between elements. Combining those values correctly is essential for interleaved vertex buffers.
         int offset = (view.TryGetProperty("byteOffset", out JsonElement viewOffset) ? viewOffset.GetInt32() : 0) + (accessor.TryGetProperty("byteOffset", out JsonElement accessorOffset) ? accessorOffset.GetInt32() : 0);
         int buffer = view.TryGetProperty("buffer", out JsonElement bufferEl) ? bufferEl.GetInt32() : 0;
         return new AccessorInfo(buffer, offset, stride, accessor.GetProperty("count").GetInt32(), componentType, type);
@@ -1527,6 +1477,8 @@ public static class GltfSceneIO
 
     private static int AddFloatAccessor(List<byte> bin, List<object> views, List<object> accessors, float[] values, string type, Vec3? min, Vec3? max)
     {
+        // glTF buffer views are aligned to 4-byte boundaries. Padding before appending a new attribute keeps
+        // offsets valid for readers and GPU-friendly binary layouts.
         Align(bin, 4);
         int offset = bin.Count;
         foreach (float value in values)
@@ -1557,6 +1509,8 @@ public static class GltfSceneIO
         IReadOnlyList<uint> values,
         int vertexCount)
     {
+        // glTF buffer views are aligned to 4-byte boundaries. Padding before appending a new attribute keeps
+        // offsets valid for readers and GPU-friendly binary layouts.
         Align(bin, 4);
         int offset = bin.Count;
         int componentType;

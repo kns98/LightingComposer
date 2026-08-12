@@ -1,58 +1,7 @@
 /*
  * Importing THREEDS is a translation problem, not a file-copy operation. The code parses the external
- * representation, resolves indices/resources/transforms, and creates Composer triangles, object groups,
- * materials, and textures in the coordinate and ownership conventions expected by the scene layer.
- *
- * `ThreeDsSceneLoader` owns parsing and translation from its external file format into Composer scene objects;
- * parser-specific intermediate state stays here instead of leaking into the renderer-neutral scene model.
- *
- * The `ThreeDsMesh` constructor captures `name`. Those are the dependencies/initial values the instance needs for
- * its lifetime, so callbacks and later operations use the same objects/configuration rather than looking them up
- * globally.
- *
- * The `ThreeDsFace` constructor captures `a`, `b`, `c`. Those are the dependencies/initial values the instance
- * needs for its lifetime, so callbacks and later operations use the same objects/configuration rather than
- * looking them up globally.
- *
- * `ReadDocument` reads document from the external stream/document, advancing through the format in the order
- * required to resolve references and produce valid internal data. Binary field order is explicit; changing it
- * requires the corresponding reader/writer to remain symmetrical.
- *
- * `ReadVertexList` reads vertex list from the external stream/document, advancing through the format in the order
- * required to resolve references and produce valid internal data.
- *
- * `ReadMappingCoords` reads mapping coords from the external stream/document, advancing through the format in the
- * order required to resolve references and produce valid internal data.
- *
- * `ReadFaceList` reads face list from the external stream/document, advancing through the format in the order
- * required to resolve references and produce valid internal data.
- *
- * `ReadFaceMaterial` reads face material from the external stream/document, advancing through the format in the
- * order required to resolve references and produce valid internal data.
- *
- * `ReadMaterial` reads material from the external stream/document, advancing through the format in the order
- * required to resolve references and produce valid internal data.
- *
- * `ReadColorContainer` reads color container from the external stream/document, advancing through the format in
- * the order required to resolve references and produce valid internal data.
- *
- * `ReadTextureMap` reads texture map from the external stream/document, advancing through the format in the order
- * required to resolve references and produce valid internal data.
- *
- * `ResolveTexturePath` turns texture path into the canonical value/path/object the rest of the code expects,
- * handling aliases/relative forms/registry lookup at one boundary instead of throughout the caller.
- *
- * `IsValidFace` tests whether valid face is true for the supplied/current value. Keeping the predicate here
- * ensures every caller uses the same definition instead of duplicating a slightly different condition.
- *
- * `GetUv` reads uv from the authoritative model and returns a value/snapshot suitable for callers, avoiding
- * direct access to mutable internal storage.
- *
- * `GetBounds` reads bounds from the authoritative model and returns a value/snapshot suitable for callers,
- * avoiding direct access to mutable internal storage.
- *
- * `ReadNullTerminatedString` reads null terminated string from the external stream/document, advancing through
- * the format in the order required to resolve references and produce valid internal data.
+ * representation, resolves indices/resources/transforms, and creates Composer triangles, object groups, materials,
+ * and textures in the coordinate and ownership conventions expected by the scene layer.
  */
 using System;
 using System.Collections.Generic;
@@ -63,6 +12,8 @@ using LightingShowcase.Math3D;
 
 namespace LightingShowcase.SceneGraph;
 
+// ThreeDsSceneLoader owns parsing and translation from its external file format into Composer scene objects;
+// parser-specific intermediate state stays here instead of leaking into the renderer-neutral scene model.
 /// <summary>Imports common legacy Autodesk 3DS static mesh files into the internal scene graph.</summary>
 public static class ThreeDsSceneLoader
 {
@@ -177,6 +128,9 @@ public static class ThreeDsSceneLoader
         return new ObjLoadResult(filePath, vertexCount, faceCount, triangleCount);
     }
 
+    // ReadDocument reads document from the external stream/document, advancing through the format in the order
+    // required to resolve references and produce valid internal data. Binary field order is explicit; changing it
+    // requires the corresponding reader/writer to remain symmetrical.
     private static ThreeDsDocument ReadDocument(string filePath, Action<ObjLoadProgress>? progress)
     {
         using BinaryReader reader = new(File.OpenRead(filePath), Encoding.ASCII);
@@ -185,6 +139,9 @@ public static class ThreeDsSceneLoader
         return document;
     }
 
+    // 3DS parsing is recursive because containers hold nested chunks. Each child is processed only up to its
+    // declared end offset, allowing unknown chunk IDs to be skipped without losing synchronization with the
+    // surrounding file.
     private static void ReadChunks(
         BinaryReader reader,
         long endPosition,
@@ -200,6 +157,9 @@ public static class ThreeDsSceneLoader
             if (length < 6)
                 throw new InvalidDataException($"Invalid 3DS chunk length {length} at byte {chunkStart}.");
 
+            // 3DS is a nested chunk format. Every chunk declares its total byte length, so computing chunkEnd lets
+            // the parser skip unknown chunks safely and prevents a child reader from consuming bytes belonging to
+            // its parent.
             long chunkEnd = chunkStart + length;
             if (chunkEnd > reader.BaseStream.Length)
                 throw new InvalidDataException("3DS chunk extends beyond the end of the file.");
@@ -253,6 +213,8 @@ public static class ThreeDsSceneLoader
         }
     }
 
+    // ReadVertexList reads vertex list from the external stream/document, advancing through the format in the order
+    // required to resolve references and produce valid internal data.
     private static void ReadVertexList(BinaryReader reader, long chunkEnd, ThreeDsMesh mesh)
     {
         if (reader.BaseStream.Position + 2 > chunkEnd) return;
@@ -263,6 +225,8 @@ public static class ThreeDsSceneLoader
             mesh.Vertices.Add(new Vec3(reader.ReadSingle(), reader.ReadSingle(), reader.ReadSingle()));
     }
 
+    // ReadMappingCoords reads mapping coords from the external stream/document, advancing through the format in the
+    // order required to resolve references and produce valid internal data.
     private static void ReadMappingCoords(BinaryReader reader, long chunkEnd, ThreeDsMesh mesh)
     {
         if (reader.BaseStream.Position + 2 > chunkEnd) return;
@@ -273,6 +237,8 @@ public static class ThreeDsSceneLoader
             mesh.Uvs.Add(new Vec2(reader.ReadSingle(), reader.ReadSingle()));
     }
 
+    // ReadFaceList reads face list from the external stream/document, advancing through the format in the order
+    // required to resolve references and produce valid internal data.
     private static void ReadFaceList(BinaryReader reader, long chunkEnd, ThreeDsMesh mesh)
     {
         if (reader.BaseStream.Position + 2 > chunkEnd) return;
@@ -304,6 +270,8 @@ public static class ThreeDsSceneLoader
         }
     }
 
+    // ReadFaceMaterial reads face material from the external stream/document, advancing through the format in the
+    // order required to resolve references and produce valid internal data.
     private static void ReadFaceMaterial(BinaryReader reader, long chunkEnd, ThreeDsMesh mesh)
     {
         string materialName = ReadNullTerminatedString(reader, chunkEnd);
@@ -317,6 +285,8 @@ public static class ThreeDsSceneLoader
         }
     }
 
+    // ReadMaterial reads material from the external stream/document, advancing through the format in the order
+    // required to resolve references and produce valid internal data.
     private static ThreeDsMaterialInfo ReadMaterial(BinaryReader reader, long chunkEnd)
     {
         ThreeDsMaterialInfo material = new();
@@ -348,6 +318,8 @@ public static class ThreeDsSceneLoader
         return material;
     }
 
+    // ReadColorContainer reads color container from the external stream/document, advancing through the format in
+    // the order required to resolve references and produce valid internal data.
     private static Vec3 ReadColorContainer(BinaryReader reader, long chunkEnd, Vec3 fallback)
     {
         Vec3 color = fallback;
@@ -371,6 +343,8 @@ public static class ThreeDsSceneLoader
         return color;
     }
 
+    // ReadTextureMap reads texture map from the external stream/document, advancing through the format in the order
+    // required to resolve references and produce valid internal data.
     private static string? ReadTextureMap(BinaryReader reader, long chunkEnd)
     {
         string? fileName = null;
@@ -414,6 +388,8 @@ public static class ThreeDsSceneLoader
         return materials;
     }
 
+    // ResolveTexturePath turns texture path into the canonical value/path/object the rest of the code expects,
+    // handling aliases/relative forms/registry lookup at one boundary instead of throughout the caller.
     private static string? ResolveTexturePath(string modelPath, string? textureFileName)
     {
         if (string.IsNullOrWhiteSpace(textureFileName)) return null;
@@ -502,6 +478,8 @@ public static class ThreeDsSceneLoader
         return triangleCount;
     }
 
+    // IsValidFace tests whether valid face is true for the supplied/current value. Keeping the predicate here
+    // ensures every caller uses the same definition instead of duplicating a slightly different condition.
     private static bool IsValidFace(ThreeDsFace face, int vertexCount) =>
         (uint)face.A < (uint)vertexCount &&
         (uint)face.B < (uint)vertexCount &&
@@ -561,6 +539,8 @@ public static class ThreeDsSceneLoader
         (value - origin) / TextureRepeatWorldUnits;
     private static double Clamp01(double value) => Math.Max(0.0, Math.Min(1.0, value));
 
+    // ReadNullTerminatedString reads null terminated string from the external stream/document, advancing through
+    // the format in the order required to resolve references and produce valid internal data.
     private static string ReadNullTerminatedString(BinaryReader reader, long endPosition)
     {
         List<byte> bytes = new();

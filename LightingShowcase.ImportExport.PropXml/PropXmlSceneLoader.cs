@@ -1,52 +1,7 @@
 /*
  * Importing PROPXML is a translation problem, not a file-copy operation. The code parses the external
- * representation, resolves indices/resources/transforms, and creates Composer triangles, object groups,
- * materials, and textures in the coordinate and ownership conventions expected by the scene layer.
- *
- * `PropXmlSceneLoader` owns parsing and translation from its external file format into Composer scene objects;
- * parser-specific intermediate state stays here instead of leaking into the renderer-neutral scene model.
- *
- * `LoadIntoScene` loads into scene from persistent/external data and converts it into validated internal scene
- * state rather than exposing parser-specific objects to the rest of the application.
- *
- * `ReadLight` reads light from the external stream/document, advancing through the format in the order required
- * to resolve references and produce valid internal data.
- *
- * `ReadLightKind` reads light kind from the external stream/document, advancing through the format in the order
- * required to resolve references and produce valid internal data.
- *
- * `ReadObject` reads object from the external stream/document, advancing through the format in the order required
- * to resolve references and produce valid internal data.
- *
- * `ReadPrimitiveParameters` reads primitive parameters from the external stream/document, advancing through the
- * format in the order required to resolve references and produce valid internal data.
- *
- * `ReadMaterial` reads material from the external stream/document, advancing through the format in the order
- * required to resolve references and produce valid internal data.
- *
- * `ReadOptionalMaterial` reads optional material from the external stream/document, advancing through the format
- * in the order required to resolve references and produce valid internal data.
- *
- * `ReadMaterialAttributes` reads material attributes from the external stream/document, advancing through the
- * format in the order required to resolve references and produce valid internal data.
- *
- * `ReadTexture` reads texture from the external stream/document, advancing through the format in the order
- * required to resolve references and produce valid internal data.
- *
- * `ReadVec` reads vec from the external stream/document, advancing through the format in the order required to
- * resolve references and produce valid internal data.
- *
- * `ReadVec2` reads vec2 from the external stream/document, advancing through the format in the order required to
- * resolve references and produce valid internal data.
- *
- * `ReadDouble` reads double from the external stream/document, advancing through the format in the order required
- * to resolve references and produce valid internal data.
- *
- * `ReadInt` reads int from the external stream/document, advancing through the format in the order required to
- * resolve references and produce valid internal data.
- *
- * `ReadBool` reads bool from the external stream/document, advancing through the format in the order required to
- * resolve references and produce valid internal data.
+ * representation, resolves indices/resources/transforms, and creates Composer triangles, object groups, materials,
+ * and textures in the coordinate and ownership conventions expected by the scene layer.
  */
 using System.IO;
 using System.Globalization;
@@ -56,6 +11,8 @@ using LightingShowcase.Math3D;
 
 namespace LightingShowcase.SceneGraph;
 
+// PropXmlSceneLoader owns parsing and translation from its external file format into Composer scene objects;
+// parser-specific intermediate state stays here instead of leaking into the renderer-neutral scene model.
 /// <summary>Loads the native .prop.xml scene format.</summary>
 public static class PropXmlSceneLoader
 {
@@ -89,6 +46,8 @@ public static class PropXmlSceneLoader
         scene.RebuildWorldGeometry();
     }
 
+    // ReadLight reads light from the external stream/document, advancing through the format in the order required
+    // to resolve references and produce valid internal data.
     /// <summary>Reads light from user input or serialized data.</summary>
     private static SceneLight ReadLight(XElement element)
     {
@@ -106,6 +65,8 @@ public static class PropXmlSceneLoader
     }
 
 
+    // ReadLightKind reads light kind from the external stream/document, advancing through the format in the order
+    // required to resolve references and produce valid internal data.
     private static SceneLightKind ReadLightKind(XAttribute? attribute)
     {
         string value = ((string?)attribute ?? "point").Trim();
@@ -116,6 +77,8 @@ public static class PropXmlSceneLoader
                 : SceneLightKind.Point;
     }
 
+    // ReadObject reads object from the external stream/document, advancing through the format in the order required
+    // to resolve references and produce valid internal data.
     /// <summary>Reads object from user input or serialized data.</summary>
     private static SceneObjectGroup ReadObject(Scene scene, XElement element, SceneObjectGroup? parent, string sceneFilePath)
     {
@@ -178,6 +141,8 @@ public static class PropXmlSceneLoader
     }
 
 
+    // ReadPrimitiveParameters reads primitive parameters from the external stream/document, advancing through the
+    // format in the order required to resolve references and produce valid internal data.
     private static void ReadPrimitiveParameters(XElement? element, SceneObjectGroup group)
     {
         if (element == null) return;
@@ -190,6 +155,8 @@ public static class PropXmlSceneLoader
         }
     }
 
+    // ReadMaterial reads material from the external stream/document, advancing through the format in the order
+    // required to resolve references and produce valid internal data.
     /// <summary>Reads material from user input or serialized data.</summary>
     private static Material ReadMaterial(XElement? element, string sceneFilePath)
     {
@@ -197,10 +164,14 @@ public static class PropXmlSceneLoader
         return ReadMaterialAttributes(element, sceneFilePath);
     }
 
+    // ReadOptionalMaterial reads optional material from the external stream/document, advancing through the format
+    // in the order required to resolve references and produce valid internal data.
     /// <summary>Reads optional material from user input or serialized data.</summary>
     private static Material? ReadOptionalMaterial(XElement? element, string sceneFilePath) =>
         element == null ? null : ReadMaterialAttributes(element, sceneFilePath);
 
+    // ReadMaterialAttributes reads material attributes from the external stream/document, advancing through the
+    // format in the order required to resolve references and produce valid internal data.
     /// <summary>Reads material attributes from user input or serialized data.</summary>
     private static Material ReadMaterialAttributes(XElement element, string sceneFilePath)
     {
@@ -215,6 +186,8 @@ public static class PropXmlSceneLoader
         return new Material(color, emission, lightId, texture);
     }
 
+    // ReadTexture reads texture from the external stream/document, advancing through the format in the order
+    // required to resolve references and produce valid internal data.
     private static TextureMap? ReadTexture(XElement element, string sceneFilePath)
     {
         string? kind = (string?)element.Attribute("textureKind");
@@ -243,6 +216,8 @@ public static class PropXmlSceneLoader
         }
     }
 
+    // ReadVec reads vec from the external stream/document, advancing through the format in the order required to
+    // resolve references and produce valid internal data.
     /// <summary>Reads vec from user input or serialized data.</summary>
     private static Vec3 ReadVec(XElement element, string prefix, Vec3 fallback) => new(
         ReadDouble(element.Attribute(prefix + "X"), fallback.X),
@@ -250,25 +225,37 @@ public static class PropXmlSceneLoader
         ReadDouble(element.Attribute(prefix + "Z"), fallback.Z));
 
 
+    // ReadVec2 reads vec2 from the external stream/document, advancing through the format in the order required to
+    // resolve references and produce valid internal data.
     /// <summary>Reads UV texture coordinates from serialized triangle attributes.</summary>
     private static Vec2 ReadVec2(XElement element, string prefix, Vec2 fallback) => new(
         ReadDouble(element.Attribute(prefix + "U"), fallback.U),
         ReadDouble(element.Attribute(prefix + "V"), fallback.V));
 
+    // ReadDouble reads double from the external stream/document, advancing through the format in the order required
+    // to resolve references and produce valid internal data.
     /// <summary>Reads double from user input or serialized data.</summary>
     private static double ReadDouble(XAttribute? attribute, double fallback)
     {
         if (attribute == null) return fallback;
+        // Native scene XML is deliberately locale-independent: numbers are parsed with invariant culture so a saved
+        // file means the same thing on systems with different decimal separators.
         return double.TryParse(attribute.Value, NumberStyles.Float, CultureInfo.InvariantCulture, out double value) ? value : fallback;
     }
 
 
+    // ReadInt reads int from the external stream/document, advancing through the format in the order required to
+    // resolve references and produce valid internal data.
     private static int ReadInt(XAttribute? attribute, int fallback)
     {
         if (attribute == null) return fallback;
+        // Native scene XML is deliberately locale-independent: numbers are parsed with invariant culture so a saved
+        // file means the same thing on systems with different decimal separators.
         return int.TryParse(attribute.Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out int value) ? value : fallback;
     }
 
+    // ReadBool reads bool from the external stream/document, advancing through the format in the order required to
+    // resolve references and produce valid internal data.
     /// <summary>Reads bool from user input or serialized data.</summary>
     private static bool ReadBool(XAttribute? attribute, bool fallback)
     {

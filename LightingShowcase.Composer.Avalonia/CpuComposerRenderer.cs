@@ -2,16 +2,6 @@
  * This is desktop-editor glue around the scene and rendering layers. The code should be read in terms of how it
  * translates user interaction into domain operations while keeping platform UI state, mutable scene state, and
  * renderer state from becoming entangled.
- *
- * `CpuComposerRenderer` turns camera/scene state into an image using one rendering backend. Its caches/resources
- * are implementation details of that backend; callers should depend on the common rendered result rather than
- * those internals.
- *
- * `PackDisplayColor` packs display color into the compact binary/pixel representation expected by the downstream
- * renderer or file format, including clamping/bit placement rather than exposing raw doubles.
- *
- * `ToByte` converts a normalized numeric channel to an 8-bit channel after clamping/rounding, preventing negative
- * or over-range values from wrapping when packed into a pixel/color.
  */
 using LightingShowcase.CameraSystem;
 using LightingShowcase.Lighting;
@@ -21,6 +11,9 @@ using LightingShowcase.SceneGraph;
 
 namespace LightingShowcase.Composer;
 
+// CpuComposerRenderer turns camera/scene state into an image using one rendering backend. Its caches/resources are
+// implementation details of that backend; callers should depend on the common rendered result rather than those
+// internals.
 internal static class CpuComposerRenderer
 {
     public static RenderImage Render(
@@ -82,6 +75,8 @@ internal static class CpuComposerRenderer
         return new RenderImage(width, height, pixels);
     }
 
+    // PackDisplayColor packs display color into the compact binary/pixel representation expected by the downstream
+    // renderer or file format, including clamping/bit placement rather than exposing raw doubles.
     private static uint PackDisplayColor(Vec3 display)
     {
         byte red = ToByte(display.X);
@@ -90,6 +85,8 @@ internal static class CpuComposerRenderer
         return red | ((uint)green << 8) | ((uint)blue << 16) | 0xff000000u;
     }
 
+    // ToByte converts a normalized numeric channel to an 8-bit channel after clamping/rounding, preventing negative
+    // or over-range values from wrapping when packed into a pixel/color.
     private static byte ToByte(double value)
     {
         if (!double.IsFinite(value)) return 0;

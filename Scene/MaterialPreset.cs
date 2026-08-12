@@ -1,16 +1,7 @@
 /*
- * Surface appearance is normalized here so importers, editor controls, and every renderer use the same meaning
- * for colors, PBR values, alpha behavior, texture slots, UV transforms, and resource identity. That shared model
- * is what makes a material edited in the UI render consistently across backends.
- *
- * `MaterialPresetLibrary` provides shared algorithms/registration behavior without per-instance state.
- *
- * The `MaterialPreset` constructor captures `category`, `name`, `material`, `summary`. Those are the
- * dependencies/initial values the instance needs for its lifetime, so callbacks and later operations use the same
- * objects/configuration rather than looking them up globally.
- *
- * `ToString` returns the human-facing label/name for this value so Avalonia controls display meaningful text
- * instead of the generated record/type representation.
+ * Surface appearance is normalized here so importers, editor controls, and every renderer use the same meaning for
+ * colors, PBR values, alpha behavior, texture slots, UV transforms, and resource identity. That shared model is
+ * what makes a material edited in the UI render consistently across backends.
  */
 using LightingShowcase.Math3D;
 
@@ -32,6 +23,8 @@ public sealed class MaterialPreset
         Summary = summary;
     }
 
+    // ToString returns the human-facing label/name for this value so Avalonia controls display meaningful text
+    // instead of the generated record/type representation.
     public override string ToString() => $"{Category} - {Name}";
 }
 

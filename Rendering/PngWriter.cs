@@ -2,42 +2,6 @@
  * The code here converts renderer-neutral scene/camera data into pixels or backend-ready state. Dimensions, cache
  * identity, data packing, and deterministic conversion are treated as part of the rendering contract so
  * interactive UI code does not need to know backend details.
- *
- * `PngWriter` provides shared algorithms/registration behavior without per-instance state.
- *
- * `CanRead` is derived rather than separately stored: it evaluates `false`. Keeping the value computed from its
- * source fields prevents a second cached flag/value from drifting out of sync.
- *
- * `CanSeek` is derived rather than separately stored: it evaluates `false`. Keeping the value computed from its
- * source fields prevents a second cached flag/value from drifting out of sync.
- *
- * `CanWrite` is derived rather than separately stored: it evaluates `true`. Keeping the value computed from its
- * source fields prevents a second cached flag/value from drifting out of sync.
- *
- * `Length` is derived rather than separately stored: it evaluates `throw new NotSupportedException()`. Keeping
- * the value computed from its source fields prevents a second cached flag/value from drifting out of sync.
- *
- * `WriteRgba` writes rgba to the external stream/document in the format’s required order, using stable
- * indices/references so another reader can reconstruct the same relationships.
- *
- * `WriteChunk` writes chunk to the external stream/document in the format’s required order, using stable
- * indices/references so another reader can reconstruct the same relationships.
- *
- * `UpdateCrc` updates crc from the newest input while preserving the identities/metadata/caches that remain valid
- * and invalidating only what the change makes stale.
- *
- * `BuildCrcTable` derives crc table from lower-level input data, resolving indexing/grouping/derived values once
- * so callers can operate on a coherent higher-level representation.
- *
- * The `ChunkedIdatStream` constructor captures `destination`, `chunkSize`. Those are the dependencies/initial
- * values the instance needs for its lifetime, so callbacks and later operations use the same
- * objects/configuration rather than looking them up globally.
- *
- * `Dispose` ends this object’s active lifetime: owned cancellations/resources/listeners are released so completed
- * windows/renderers do not keep receiving work or retain unmanaged memory.
- *
- * `SetLength` sets length through the owning abstraction instead of exposing a mutable field. That gives the
- * method one place to validate the value and perform any history/cache/UI side effects required by the change.
  */
 using System.Buffers.Binary;
 using System.IO.Compression;
@@ -99,6 +63,8 @@ public static class PngWriter
     }
 
 
+    // WriteRgba writes rgba to the external stream/document in the format’s required order, using stable
+    // indices/references so another reader can reconstruct the same relationships.
     /// <summary>Writes an 8-bit RGBA pixel buffer to a PNG file.</summary>
     public static void WriteRgba(string path, int width, int height, byte[] rgba)
     {
@@ -145,6 +111,8 @@ public static class PngWriter
         WriteChunk(output, "IEND"u8, ReadOnlySpan<byte>.Empty);
     }
 
+    // WriteChunk writes chunk to the external stream/document in the format’s required order, using stable
+    // indices/references so another reader can reconstruct the same relationships.
     private static void WriteChunk(Stream output, ReadOnlySpan<byte> type, ReadOnlySpan<byte> data)
     {
         Span<byte> number = stackalloc byte[4];
@@ -224,6 +192,8 @@ public static class PngWriter
             completed = true;
         }
 
+        // Dispose ends this object’s active lifetime: owned cancellations/resources/listeners are released so
+        // completed windows/renderers do not keep receiving work or retain unmanaged memory.
         protected override void Dispose(bool disposing)
         {
             if (disposing) Complete();

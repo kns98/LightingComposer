@@ -2,20 +2,6 @@
  * The tests in this file are executable statements of editor behavior. They intentionally use real scene/session
  * objects and inspect externally meaningful results—geometry, hierarchy, material state, serialized output, cache
  * stamps, or timing—so refactors can change implementation details without weakening the contract being tested.
- *
- * `Optimized_export_merges_chunks_and_welds_shared_vertices` verifies that optimized export merges chunks and
- * welds shared vertices. Temporary filesystem output is inspected/cleaned so persistence behavior is tested
- * end-to-end. The assertions establish that the operation must explicitly report success; the resulting
- * value/state must exactly match the expected result. Representative cases include `optimized`, `gltf`,
- * `preserved`, `gltf-hierarchy`, `meshes`, `primitives`, `attributes`.
- *
- * `Optimized_catalog_entries_are_default_gltf_and_glb_choices` verifies that optimized catalog entries are
- * default gltf and glb choices. The assertions establish that the operation must explicitly report success; the
- * disallowed path must be rejected. Representative cases include `gltf`, `glb`, `gltf-hierarchy`,
- * `glb-hierarchy`.
- *
- * `CreateChunkedQuadScene` constructs chunked quad scene in the normalized form expected downstream, so
- * allocation plus initialization of its invariants happen together.
  */
 using System.Text.Json;
 using LightingShowcase.CommandLine;
@@ -26,6 +12,11 @@ namespace LightingShowcase.Composer.Tests;
 
 public sealed class OptimizedGltfExportTests
 {
+    // Optimized_export_merges_chunks_and_welds_shared_vertices verifies that optimized export merges chunks and
+    // welds shared vertices. Temporary filesystem output is inspected/cleaned so persistence behavior is tested
+    // end-to-end. The assertions establish that the operation must explicitly report success; the resulting
+    // value/state must exactly match the expected result. Representative cases include optimized, gltf, preserved,
+    // gltf-hierarchy, meshes, primitives, attributes.
     [Fact]
     public void Optimized_export_merges_chunks_and_welds_shared_vertices()
     {
@@ -70,6 +61,9 @@ public sealed class OptimizedGltfExportTests
         }
     }
 
+    // Optimized_catalog_entries_are_default_gltf_and_glb_choices verifies that optimized catalog entries are
+    // default gltf and glb choices. The assertions establish that the operation must explicitly report success; the
+    // disallowed path must be rejected. Representative cases include gltf, glb, gltf-hierarchy, glb-hierarchy.
     [Fact]
     public void Optimized_catalog_entries_are_default_gltf_and_glb_choices()
     {
@@ -79,6 +73,8 @@ public sealed class OptimizedGltfExportTests
         Assert.False(SceneExportFormats.Find("glb-hierarchy").OptimizeGeometry);
     }
 
+    // CreateChunkedQuadScene constructs chunked quad scene in the normalized form expected downstream, so
+    // allocation plus initialization of its invariants happen together.
     private static Scene CreateChunkedQuadScene()
     {
         Scene scene = new();

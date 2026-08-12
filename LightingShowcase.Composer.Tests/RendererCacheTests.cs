@@ -2,34 +2,6 @@
  * The tests in this file are executable statements of editor behavior. They intentionally use real scene/session
  * objects and inspect externally meaningful results—geometry, hierarchy, material state, serialized output, cache
  * stamps, or timing—so refactors can change implementation details without weakening the contract being tested.
- *
- * `Selection_overlay_does_not_mutate_scene_or_invalidate_geometry_cache_stamp` verifies that selection overlay
- * does not mutate scene or invalidate geometry cache stamp. It uses a real `ComposerSceneSession`, so
- * registration, locking, history, and scene mutation follow production paths rather than mocks. The assertions
- * establish that the operation must explicitly report success; the resulting value/state must exactly match the
- * expected result.
- *
- * `Virtual_triangle_selection_does_not_add_nodes_or_change_scene_revision` verifies that virtual triangle
- * selection does not add nodes or change scene revision. It uses a real `ComposerSceneSession`, so registration,
- * locking, history, and scene mutation follow production paths rather than mocks. The assertions establish that
- * the operation must explicitly report success; the resulting value/state must exactly match the expected result.
- *
- * `Gizmo_pointer_moves_do_not_rebuild_or_reupload_scene_until_commit` verifies that gizmo pointer moves do not
- * rebuild or reupload scene until commit. It uses a real `ComposerSceneSession`, so registration, locking,
- * history, and scene mutation follow production paths rather than mocks. The assertions establish that the
- * operation must explicitly report success; the resulting value/state must exactly match the expected result.
- *
- * `Scene_revision_invalidates_a_cache_stamp_after_transform` verifies that scene revision invalidates a cache
- * stamp after transform. It uses a real `ComposerSceneSession`, so registration, locking, history, and scene
- * mutation follow production paths rather than mocks. The assertions establish that the operation must explicitly
- * report success; the disallowed path must be rejected.
- *
- * `Software_preview_pixels_change_after_transform_using_same_scene_instance` verifies that software preview
- * pixels change after transform using same scene instance. It uses a real `ComposerSceneSession`, so
- * registration, locking, history, and scene mutation follow production paths rather than mocks. The assertions
- * establish that the operation must explicitly report success; the operation must produce an observable change.
- *
- * `HashPixels` reports whether h pixels is present/usable in the current state, without changing that state.
  */
 using LightingShowcase.Composer;
 using LightingShowcase.Math3D;
@@ -39,6 +11,11 @@ namespace LightingShowcase.Composer.Tests;
 
 public sealed class RendererCacheTests
 {
+    // Selection_overlay_does_not_mutate_scene_or_invalidate_geometry_cache_stamp verifies that selection overlay
+    // does not mutate scene or invalidate geometry cache stamp. It uses a real ComposerSceneSession, so
+    // registration, locking, history, and scene mutation follow production paths rather than mocks. The assertions
+    // establish that the operation must explicitly report success; the resulting value/state must exactly match the
+    // expected result.
     [Fact]
     public void Selection_overlay_does_not_mutate_scene_or_invalidate_geometry_cache_stamp()
     {
@@ -55,6 +32,11 @@ public sealed class RendererCacheTests
     }
 
 
+    // Virtual_triangle_selection_does_not_add_nodes_or_change_scene_revision verifies that virtual triangle
+    // selection does not add nodes or change scene revision. It uses a real ComposerSceneSession, so registration,
+    // locking, history, and scene mutation follow production paths rather than mocks. The assertions establish that
+    // the operation must explicitly report success; the resulting value/state must exactly match the expected
+    // result.
     [Fact]
     public void Virtual_triangle_selection_does_not_add_nodes_or_change_scene_revision()
     {
@@ -74,6 +56,10 @@ public sealed class RendererCacheTests
         Assert.Equal(rootId, session.GetObjectInfos().First(info => info.Id == rootId).Id);
     }
 
+    // Gizmo_pointer_moves_do_not_rebuild_or_reupload_scene_until_commit verifies that gizmo pointer moves do not
+    // rebuild or reupload scene until commit. It uses a real ComposerSceneSession, so registration, locking,
+    // history, and scene mutation follow production paths rather than mocks. The assertions establish that the
+    // operation must explicitly report success; the resulting value/state must exactly match the expected result.
     [Fact]
     public void Gizmo_pointer_moves_do_not_rebuild_or_reupload_scene_until_commit()
     {
@@ -102,6 +88,10 @@ public sealed class RendererCacheTests
         AssertVec3(new Vec3(1, 1, 1), committedState.Scale);
     }
 
+    // Scene_revision_invalidates_a_cache_stamp_after_transform verifies that scene revision invalidates a cache
+    // stamp after transform. It uses a real ComposerSceneSession, so registration, locking, history, and scene
+    // mutation follow production paths rather than mocks. The assertions establish that the operation must
+    // explicitly report success; the disallowed path must be rejected.
     [Fact]
     public void Scene_revision_invalidates_a_cache_stamp_after_transform()
     {
@@ -128,6 +118,10 @@ public sealed class RendererCacheTests
         Assert.True(after.Revision > before.Revision);
     }
 
+    // Software_preview_pixels_change_after_transform_using_same_scene_instance verifies that software preview
+    // pixels change after transform using same scene instance. It uses a real ComposerSceneSession, so
+    // registration, locking, history, and scene mutation follow production paths rather than mocks. The assertions
+    // establish that the operation must explicitly report success; the operation must produce an observable change.
     [Fact]
     public void Software_preview_pixels_change_after_transform_using_same_scene_instance()
     {
@@ -172,6 +166,7 @@ public sealed class RendererCacheTests
         Assert.InRange(Math.Abs(expected.Z - actual.Z), 0, tolerance);
     }
 
+    // HashPixels reports whether h pixels is present/usable in the current state, without changing that state.
     private static ulong HashPixels(RenderImage image)
     {
         const ulong offset = 14695981039346656037UL;

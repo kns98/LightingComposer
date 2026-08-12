@@ -1,62 +1,7 @@
 /*
- * Surface appearance is normalized here so importers, editor controls, and every renderer use the same meaning
- * for colors, PBR values, alpha behavior, texture slots, UV transforms, and resource identity. That shared model
- * is what makes a material edited in the UI render consistently across backends.
- *
- * `TextureMap` represents sampled/mapped data together with the addressing/transform rules needed to look values
- * up consistently.
- *
- * `TextureAddressMode` makes a closed set of choices compiler-visible instead of passing loosely related integers
- * or strings. Code that switches over `Repeat`, `ClampToEdge`, `MirroredRepeat` is where the behavioral meaning
- * of each choice is implemented.
- *
- * `IsBuiltInChecker` is a read-only predicate over the object’s existing state; it exists so callers share one
- * exact condition when enabling commands or deciding whether an operation is applicable.
- *
- * `WrapU` is derived rather than separately stored: it evaluates `wrapU`. Keeping the value computed from its
- * source fields prevents a second cached flag/value from drifting out of sync.
- *
- * `WrapV` is derived rather than separately stored: it evaluates `wrapV`. Keeping the value computed from its
- * source fields prevents a second cached flag/value from drifting out of sync.
- *
- * `OffsetU` is derived rather than separately stored: it evaluates `offsetU`. Keeping the value computed from its
- * source fields prevents a second cached flag/value from drifting out of sync.
- *
- * `OffsetV` is derived rather than separately stored: it evaluates `offsetV`. Keeping the value computed from its
- * source fields prevents a second cached flag/value from drifting out of sync.
- *
- * `ScaleU` is derived rather than separately stored: it evaluates `scaleU`. Keeping the value computed from its
- * source fields prevents a second cached flag/value from drifting out of sync.
- *
- * `ScaleV` is derived rather than separately stored: it evaluates `scaleV`. Keeping the value computed from its
- * source fields prevents a second cached flag/value from drifting out of sync.
- *
- * `Rotation` is derived rather than separately stored: it evaluates `rotation`. Keeping the value computed from
- * its source fields prevents a second cached flag/value from drifting out of sync.
- *
- * `ResolveFilePath` turns file path into the canonical value/path/object the rest of the code expects, handling
- * aliases/relative forms/registry lookup at one boundary instead of throughout the caller.
- *
- * `SavePng` serializes png from current internal state, making persistence a snapshot operation rather than
- * allowing the serializer to walk concurrently mutating editor objects.
- *
- * `ComputeContentHash` calculates content hash deterministically from its inputs; callers can use the result as
- * derived data/cache evidence without mutating the underlying scene.
- *
- * `CreateChecker` constructs checker in the normalized form expected downstream, so allocation plus
- * initialization of its invariants happen together.
- *
- * `SampleAlpha` samples alpha at the requested coordinate/direction, applying the interpolation/addressing rules
- * owned by this subsystem.
- *
- * `ToByte` converts a normalized numeric channel to an 8-bit channel after clamping/rounding, preventing negative
- * or over-range values from wrapping when packed into a pixel/color.
- *
- * `Address` adds ress to the owning collection/model while using this boundary to preserve indexing, ownership,
- * and derived-state invariants.
- *
- * `ApplyTransform` applies transform as a single semantic mutation. Validation, scene changes, undo bookkeeping,
- * and cache invalidation are kept inside this boundary rather than exposed as separate caller responsibilities.
+ * Surface appearance is normalized here so importers, editor controls, and every renderer use the same meaning for
+ * colors, PBR values, alpha behavior, texture slots, UV transforms, and resource identity. That shared model is
+ * what makes a material edited in the UI render consistently across backends.
  */
 // -----------------------------------------------------------------------------
 // Headless, cross-platform texture storage for LightingShowcase.RenderWorker.
@@ -69,6 +14,8 @@ using StbImageSharp;
 
 namespace LightingShowcase.SceneGraph;
 
+// TextureMap represents sampled/mapped data together with the addressing/transform rules needed to look values up
+// consistently.
 public sealed partial class TextureMap
 {
     private static readonly object AssetIndexGate = new();
@@ -96,6 +43,8 @@ public sealed partial class TextureMap
             assetIndex = index;
     }
 
+    // ResolveFilePath turns file path into the canonical value/path/object the rest of the code expects, handling
+    // aliases/relative forms/registry lookup at one boundary instead of throughout the caller.
     /// <summary>Resolves an existing path, a path relative to the scene directory, or a local file with the same leaf name.</summary>
     public static string? ResolveFilePath(string? path, params string[] relativeRoots)
     {
@@ -137,6 +86,8 @@ public sealed partial class TextureMap
     public int Height { get; }
     public string Name { get; }
     public string? SourcePath { get; }
+    // IsBuiltInChecker is a read-only predicate over the object’s existing state; it exists so callers share one
+    // exact condition when enabling commands or deciding whether an operation is applicable.
     public bool IsBuiltInChecker { get; }
     public TextureAddressMode WrapU => wrapU;
     public TextureAddressMode WrapV => wrapV;
@@ -237,9 +188,13 @@ public sealed partial class TextureMap
         return new TextureMap(name, width, height, decodedPixels, decodedAlpha, sourcePath, isBuiltInChecker);
     }
 
+    // SavePng serializes png from current internal state, making persistence a snapshot operation rather than
+    // allowing the serializer to walk concurrently mutating editor objects.
     /// <summary>Writes this texture as a self-contained PNG file.</summary>
     public void SavePng(string path) => PngWriter.WriteRgba(path, Width, Height, ToRgbaBytes());
 
+    // ComputeContentHash calculates content hash deterministically from its inputs; callers can use the result as
+    // derived data/cache evidence without mutating the underlying scene.
     /// <summary>Computes a stable content hash over decoded RGBA pixels.</summary>
     public ulong ComputeContentHash()
     {
@@ -301,6 +256,8 @@ public sealed partial class TextureMap
         return new TextureMap(name, width, height, pixels, alpha, sourcePath);
     }
 
+    // CreateChecker constructs checker in the normalized form expected downstream, so allocation plus
+    // initialization of its invariants happen together.
     /// <summary>Creates checker for use by the renderer or editor.</summary>
     public static TextureMap CreateChecker(string name = "Built-in checker", int width = 160, int height = 96, int cellsX = 10, int cellsY = 6)
     {
@@ -363,6 +320,8 @@ public sealed partial class TextureMap
         return Vec3.Lerp(top, bottom, ty);
     }
 
+    // SampleAlpha samples alpha at the requested coordinate/direction, applying the interpolation/addressing rules
+    // owned by this subsystem.
     /// <summary>Samples alpha by UV coordinate using the same filtering as Sample().</summary>
     public double SampleAlpha(double u, double v)
     {
@@ -405,6 +364,8 @@ public sealed partial class TextureMap
         return packed;
     }
 
+    // ToByte converts a normalized numeric channel to an 8-bit channel after clamping/rounding, preventing negative
+    // or over-range values from wrapping when packed into a pixel/color.
     private static byte ToByte(double value) =>
         (byte)Math.Clamp((int)Math.Round(Math.Clamp(value, 0.0, 1.0) * 255.0, MidpointRounding.AwayFromZero), 0, 255);
     private static double Address(double value, TextureAddressMode mode)
@@ -450,6 +411,9 @@ public sealed partial class TextureMap
     }
 }
 
+// TextureAddressMode makes a closed set of choices compiler-visible instead of passing loosely related integers or
+// strings. Code that switches over Repeat, ClampToEdge, MirroredRepeat is where the behavioral meaning of each
+// choice is implemented.
 public enum TextureAddressMode
 {
     Repeat,

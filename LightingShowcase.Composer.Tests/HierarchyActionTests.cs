@@ -2,18 +2,6 @@
  * The tests in this file are executable statements of editor behavior. They intentionally use real scene/session
  * objects and inspect externally meaningful results—geometry, hierarchy, material state, serialized output, cache
  * stamps, or timing—so refactors can change implementation details without weakening the contract being tested.
- *
- * `Inserted_model_is_a_parent_node_with_expandable_children` verifies that inserted model is a parent node with
- * expandable children. It uses a real `ComposerSceneSession`, so registration, locking, history, and scene
- * mutation follow production paths rather than mocks. The assertions establish that the operation must explicitly
- * report success; the resulting value/state must exactly match the expected result; the expected entry must
- * remain discoverable.
- *
- * `Expand_and_collapse_change_the_visible_tree_rows` verifies that expand and collapse change the visible tree
- * rows. It uses a real `ComposerSceneSession`, so registration, locking, history, and scene mutation follow
- * production paths rather than mocks. The assertions establish that the operation must explicitly report success;
- * the disallowed path must be rejected; the resulting value/state must exactly match the expected result; the
- * expected entry must remain discoverable; forbidden/unwanted entries must not be exposed.
  */
 using LightingShowcase.Composer;
 using LightingShowcase.SceneGraph;
@@ -22,6 +10,11 @@ namespace LightingShowcase.Composer.Tests;
 
 public sealed class HierarchyActionTests
 {
+    // Inserted_model_is_a_parent_node_with_expandable_children verifies that inserted model is a parent node with
+    // expandable children. It uses a real ComposerSceneSession, so registration, locking, history, and scene
+    // mutation follow production paths rather than mocks. The assertions establish that the operation must
+    // explicitly report success; the resulting value/state must exactly match the expected result; the expected
+    // entry must remain discoverable.
     [Fact]
     public void Inserted_model_is_a_parent_node_with_expandable_children()
     {
@@ -40,6 +33,11 @@ public sealed class HierarchyActionTests
         Assert.NotEmpty(root.Children);
     }
 
+    // Expand_and_collapse_change_the_visible_tree_rows verifies that expand and collapse change the visible tree
+    // rows. It uses a real ComposerSceneSession, so registration, locking, history, and scene mutation follow
+    // production paths rather than mocks. The assertions establish that the operation must explicitly report
+    // success; the disallowed path must be rejected; the resulting value/state must exactly match the expected
+    // result; the expected entry must remain discoverable; forbidden/unwanted entries must not be exposed.
     [Fact]
     public void Expand_and_collapse_change_the_visible_tree_rows()
     {

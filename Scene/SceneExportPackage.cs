@@ -2,26 +2,6 @@
  * This file belongs to the renderer-neutral scene layer, which is the shared source of truth for geometry,
  * transforms, grouping, materials, resources, and serialization-facing state. Higher layers manipulate these
  * abstractions rather than maintaining parallel copies of scene data.
- *
- * `SceneExportFormat` is an immutable packet of related values. Record value semantics make it suitable for
- * snapshots, options, commands, or parsed intermediate data because callers can copy/compare it without sharing
- * mutable state. Its constructor values (`Id`, `DisplayName`, `Extension`, `Variant`, `IsNativeScene`,
- * `OptimizeGeometry`) travel together because consumers need a consistent snapshot rather than reading those
- * values independently from mutable objects.
- *
- * `SceneExportFormats` provides shared algorithms/registration behavior without per-instance state.
- *
- * `SceneExportPackageResult` is an immutable packet of related values. Record value semantics make it suitable
- * for snapshots, options, commands, or parsed intermediate data because callers can copy/compare it without
- * sharing mutable state. Its constructor values (`DirectoryPath`, `PrimaryFilePath`, `Files`, `TextureFiles`)
- * travel together because consumers need a consistent snapshot rather than reading those values independently
- * from mutable objects.
- *
- * `ToString` returns the human-facing label/name for this value so Avalonia controls display meaningful text
- * instead of the generated record/type representation.
- *
- * `CreateUniqueDirectory` constructs unique directory in the normalized form expected downstream, so allocation
- * plus initialization of its invariants happen together.
  */
 namespace LightingShowcase.SceneGraph;
 
@@ -34,6 +14,8 @@ public sealed record SceneExportFormat(
     bool IsNativeScene = false,
     bool OptimizeGeometry = false)
 {
+    // ToString returns the human-facing label/name for this value so Avalonia controls display meaningful text
+    // instead of the generated record/type representation.
     public override string ToString() => DisplayName;
 }
 
@@ -159,6 +141,8 @@ public sealed class SceneExportPackageService
         return ".png";
     }
 
+    // CreateUniqueDirectory constructs unique directory in the normalized form expected downstream, so allocation
+    // plus initialization of its invariants happen together.
     private static string CreateUniqueDirectory(string parent, string preferredName)
     {
         string candidate = Path.Combine(parent, preferredName);

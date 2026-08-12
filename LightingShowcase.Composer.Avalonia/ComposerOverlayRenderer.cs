@@ -2,74 +2,6 @@
  * This is desktop-editor glue around the scene and rendering layers. The code should be read in terms of how it
  * translates user interaction into domain operations while keeping platform UI state, mutable scene state, and
  * renderer state from becoming entangled.
- *
- * `ComposerGizmoMode` makes a closed set of choices compiler-visible instead of passing loosely related integers
- * or strings. Code that switches over `Translate`, `Rotate`, `Scale` is where the behavioral meaning of each
- * choice is implemented.
- *
- * `ComposerGizmoAxis` makes a closed set of choices compiler-visible instead of passing loosely related integers
- * or strings. Code that switches over `None`, `X`, `Y`, `Z`, `Uniform` is where the behavioral meaning of each
- * choice is implemented.
- *
- * `ComposerGizmoHit` is an immutable packet of related values. Record value semantics make it suitable for
- * snapshots, options, commands, or parsed intermediate data because callers can copy/compare it without sharing
- * mutable state. Its constructor values (`Axis`, `ScreenDirectionX`, `ScreenDirectionY`, `WorldUnitsPerPixel`,
- * `CenterX`, `CenterY`, `GestureSign`, `WorldCenter`, `RotationStartVector`) travel together because consumers
- * need a consistent snapshot rather than reading those values independently from mutable objects.
- *
- * `ComposerOverlayRenderer` turns camera/scene state into an image using one rendering backend. Its
- * caches/resources are implementation details of that backend; callers should depend on the common rendered
- * result rather than those internals.
- *
- * `ProjectedPoint` is an immutable packet of related values. Record value semantics make it suitable for
- * snapshots, options, commands, or parsed intermediate data because callers can copy/compare it without sharing
- * mutable state. Its constructor values (`X`, `Y`, `Depth`) travel together because consumers need a consistent
- * snapshot rather than reading those values independently from mutable objects.
- *
- * `AxisGeometry` is an immutable packet of related values. Record value semantics make it suitable for snapshots,
- * options, commands, or parsed intermediate data because callers can copy/compare it without sharing mutable
- * state. Its constructor values (`WorldCenter`, `AxisWorldLength`, `Center`, `XEnd`, `YEnd`, `ZEnd`) travel
- * together because consumers need a consistent snapshot rather than reading those values independently from
- * mutable objects.
- *
- * `TestAxis` evaluates axis against the current hit-test conditions and updates the best candidate only when this
- * candidate is within tolerance/closer than the previous one.
- *
- * `TestAxis` evaluates axis against the current hit-test conditions and updates the best candidate only when this
- * candidate is within tolerance/closer than the previous one.
- *
- * `TestRing` evaluates ring against the current hit-test conditions and updates the best candidate only when this
- * candidate is within tolerance/closer than the previous one.
- *
- * `DrawBounds` rasterizes bounds into the target image/overlay using projected geometry. Drawing is kept separate
- * from scene mutation so gizmos/highlights remain presentation-only.
- *
- * `DrawScaleGizmo` rasterizes scale gizmo into the target image/overlay using projected geometry. Drawing is kept
- * separate from scene mutation so gizmos/highlights remain presentation-only.
- *
- * `DrawRotationGizmo` rasterizes rotation gizmo into the target image/overlay using projected geometry. Drawing
- * is kept separate from scene mutation so gizmos/highlights remain presentation-only.
- *
- * `DrawRing` rasterizes ring into the target image/overlay using projected geometry. Drawing is kept separate
- * from scene mutation so gizmos/highlights remain presentation-only.
- *
- * `Distance` computes Euclidean distance between the supplied points/components. In hit-testing code this
- * converts geometric proximity into a scalar that can be compared with a pixel/selection tolerance.
- *
- * `DrawHandle` rasterizes handle into the target image/overlay using projected geometry. Drawing is kept separate
- * from scene mutation so gizmos/highlights remain presentation-only.
- *
- * `DrawSquareHandle` rasterizes square handle into the target image/overlay using projected geometry. Drawing is
- * kept separate from scene mutation so gizmos/highlights remain presentation-only.
- *
- * `DrawDisc` rasterizes disc into the target image/overlay using projected geometry. Drawing is kept separate
- * from scene mutation so gizmos/highlights remain presentation-only.
- *
- * `BlendPixel` combines pixel with the destination pixel using alpha/color composition rather than overwriting it
- * outright, allowing translucent overlays to remain readable over the rendered scene.
- *
- * `IsFinite` rejects NaN and infinity so geometry/projection code does not feed non-finite coordinates into
- * clipping, rasterization, bounds, or scene transforms.
  */
 using LightingShowcase.CameraSystem;
 using LightingShowcase.Math3D;
@@ -78,6 +10,9 @@ using LightingShowcase.SceneGraph;
 
 namespace LightingShowcase.Composer;
 
+// ComposerGizmoMode makes a closed set of choices compiler-visible instead of passing loosely related integers or
+// strings. Code that switches over Translate, Rotate, Scale is where the behavioral meaning of each choice is
+// implemented.
 /// <summary>
 /// Transform tool displayed in the editor viewport. The keyboard shortcuts match
 /// 3D viewport's primary transform commands: G=move, R=rotate, S=scale.
@@ -89,6 +24,9 @@ internal enum ComposerGizmoMode
     Scale
 }
 
+// ComposerGizmoAxis makes a closed set of choices compiler-visible instead of passing loosely related integers or
+// strings. Code that switches over None, X, Y, Z, Uniform is where the behavioral meaning of each choice is
+// implemented.
 internal enum ComposerGizmoAxis
 {
     None,
@@ -109,6 +47,9 @@ internal readonly record struct ComposerGizmoHit(
     Vec3 WorldCenter,
     Vec3 RotationStartVector);
 
+// ComposerOverlayRenderer turns camera/scene state into an image using one rendering backend. Its caches/resources
+// are implementation details of that backend; callers should depend on the common rendered result rather than those
+// internals.
 /// <summary>
 /// Draws editor-only selection bounds and transform controls directly over any
 /// renderer output. Keeping this as a post-process makes the overlay identical
@@ -316,6 +257,10 @@ internal static class ComposerOverlayRenderer
         hit = best;
         return true;
 
+        // TestAxis evaluates axis against the current hit-test conditions and updates the best candidate only when
+        // this candidate is within tolerance/closer than the previous one.
+        // TestAxis evaluates axis against the current hit-test conditions and updates the best candidate only when
+        // this candidate is within tolerance/closer than the previous one.
         void TestAxis(ComposerGizmoAxis axis, ProjectedPoint start, ProjectedPoint end)
         {
             double dx = end.X - start.X;
@@ -457,6 +402,8 @@ internal static class ComposerOverlayRenderer
             startVector);
         return true;
 
+        // TestRing evaluates ring against the current hit-test conditions and updates the best candidate only when
+        // this candidate is within tolerance/closer than the previous one.
         void TestRing(ComposerGizmoAxis axis)
         {
             ProjectedPoint? previous = null;
@@ -543,6 +490,8 @@ internal static class ComposerOverlayRenderer
         return true;
     }
 
+    // DrawBounds rasterizes bounds into the target image/overlay using projected geometry. Drawing is kept separate
+    // from scene mutation so gizmos/highlights remain presentation-only.
     private static void DrawBounds(RenderImage image, CameraDefinition camera, Aabb bounds)
     {
         Vec3[] corners =
@@ -588,6 +537,8 @@ internal static class ComposerOverlayRenderer
         DrawHandle(image, geometry.Center.X, geometry.Center.Y, OriginColor, radius: 4);
     }
 
+    // DrawScaleGizmo rasterizes scale gizmo into the target image/overlay using projected geometry. Drawing is kept
+    // separate from scene mutation so gizmos/highlights remain presentation-only.
     private static void DrawScaleGizmo(RenderImage image, AxisGeometry geometry)
     {
         DrawAxis(image, geometry.Center, geometry.XEnd, XAxisColor, squareHandle: true);
@@ -596,6 +547,8 @@ internal static class ComposerOverlayRenderer
         DrawSquareHandle(image, geometry.Center.X, geometry.Center.Y, OriginColor, halfSize: 6);
     }
 
+    // DrawRotationGizmo rasterizes rotation gizmo into the target image/overlay using projected geometry. Drawing
+    // is kept separate from scene mutation so gizmos/highlights remain presentation-only.
     private static void DrawRotationGizmo(RenderImage image, CameraDefinition camera, AxisGeometry geometry)
     {
         DrawRing(ComposerGizmoAxis.X, XAxisColor);
@@ -603,6 +556,8 @@ internal static class ComposerOverlayRenderer
         DrawRing(ComposerGizmoAxis.Z, ZAxisColor);
         DrawHandle(image, geometry.Center.X, geometry.Center.Y, OriginColor, radius: 3);
 
+        // DrawRing rasterizes ring into the target image/overlay using projected geometry. Drawing is kept separate
+        // from scene mutation so gizmos/highlights remain presentation-only.
         void DrawRing(ComposerGizmoAxis axis, uint color)
         {
             ProjectedPoint? previous = null;
@@ -734,6 +689,8 @@ internal static class ComposerOverlayRenderer
         return Distance(px, py, x0 + t * (x1 - x0), y0 + t * (y1 - y0));
     }
 
+    // Distance computes Euclidean distance between the supplied points/components. In hit-testing code this
+    // converts geometric proximity into a scalar that can be compared with a pixel/selection tolerance.
     private static double Distance(double x0, double y0, double x1, double y1)
     {
         double dx = x0 - x1;
@@ -831,6 +788,8 @@ internal static class ComposerOverlayRenderer
         }
     }
 
+    // DrawHandle rasterizes handle into the target image/overlay using projected geometry. Drawing is kept separate
+    // from scene mutation so gizmos/highlights remain presentation-only.
     private static void DrawHandle(RenderImage image, double x, double y, uint color, int radius)
     {
         int centerX = (int)Math.Round(x);
@@ -839,6 +798,8 @@ internal static class ComposerOverlayRenderer
         DrawDisc(image, centerX, centerY, Math.Max(1, radius - 3), 0xffffffffu);
     }
 
+    // DrawSquareHandle rasterizes square handle into the target image/overlay using projected geometry. Drawing is
+    // kept separate from scene mutation so gizmos/highlights remain presentation-only.
     private static void DrawSquareHandle(RenderImage image, double x, double y, uint color, int halfSize)
     {
         int centerX = (int)Math.Round(x);
@@ -853,6 +814,8 @@ internal static class ComposerOverlayRenderer
         }
     }
 
+    // DrawDisc rasterizes disc into the target image/overlay using projected geometry. Drawing is kept separate
+    // from scene mutation so gizmos/highlights remain presentation-only.
     private static void DrawDisc(RenderImage image, int centerX, int centerY, int radius, uint color)
     {
         int squaredRadius = radius * radius;
@@ -867,6 +830,8 @@ internal static class ComposerOverlayRenderer
         }
     }
 
+    // BlendPixel combines pixel with the destination pixel using alpha/color composition rather than overwriting it
+    // outright, allowing translucent overlays to remain readable over the rendered scene.
     private static void BlendPixel(RenderImage image, int x, int y, uint source)
     {
         if ((uint)x >= (uint)image.Width || (uint)y >= (uint)image.Height)
@@ -932,6 +897,8 @@ internal static class ComposerOverlayRenderer
         return true;
     }
 
+    // IsFinite rejects NaN and infinity so geometry/projection code does not feed non-finite coordinates into
+    // clipping, rasterization, bounds, or scene transforms.
     private static bool IsFinite(Vec3 value) =>
         double.IsFinite(value.X) && double.IsFinite(value.Y) && double.IsFinite(value.Z);
 }

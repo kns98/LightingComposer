@@ -2,49 +2,6 @@
  * This controller translates Avalonia events and commands into editor operations while keeping the live scene
  * behind `ComposerSceneSession`. Its job is coordination: validate/route input, invoke the appropriate session or
  * renderer operation, and update presentation state without becoming a competing owner of scene data.
- *
- * `ComposerTransformController` coordinates a focused interaction workflow. It holds the transient UI/input state
- * needed for that workflow but delegates authoritative scene mutation to the session/model layer.
- *
- * `GizmoDragState` is a working/snapshot state object whose fields must move together; callers use it to capture
- * one coherent point in an interaction, render, or undo workflow.
- *
- * `HasActiveDrag` is derived rather than separately stored: it evaluates `drag != null`. Keeping the value
- * computed from its source fields prevents a second cached flag/value from drifting out of sync.
- *
- * `ObjectGizmoOnly` is derived rather than separately stored: it evaluates `drag is { MeshComponent: false }`.
- * Keeping the value computed from its source fields prevents a second cached flag/value from drifting out of
- * sync.
- *
- * `TransformTextBoxes` applies the relevant coordinate transform to text boxes, making explicit whether data is
- * being moved between local, world, view, or preview space.
- *
- * `ApplyInspectorAsync` applies inspector async as a single semantic mutation. Validation, scene changes, undo
- * bookkeeping, and cache invalidation are kept inside this boundary rather than exposed as separate caller
- * responsibilities. Potentially blocking/CPU work runs on a worker task rather than Avalonia’s UI thread.
- * Cancellation is propagated so shutdown or a newer request can make obsolete work stop early.
- *
- * `ResetSelectedTransformAsync` returns selected transform async to its canonical default/identity state while
- * preserving the surrounding object/session identity. Potentially blocking/CPU work runs on a worker task rather
- * than Avalonia’s UI thread. Cancellation is propagated so shutdown or a newer request can make obsolete work
- * stop early.
- *
- * `UpdateGizmoDrag` updates gizmo drag from the newest input while preserving the identities/metadata/caches that
- * remain valid and invalidating only what the change makes stale.
- *
- * `CommitActiveDragAsync` finalizes active drag async: the current preview becomes authoritative and the
- * before/after state is recorded as one logical undoable edit. Potentially blocking/CPU work runs on a worker
- * task rather than Avalonia’s UI thread. Cancellation is propagated so shutdown or a newer request can make
- * obsolete work stop early.
- *
- * `CancelActiveDrag` evaluates whether cel active drag is currently legal/available from the existing state. It
- * is a side-effect-free guard intended to drive command enablement or reject an edit before mutation.
- *
- * `ClearTransformTextBoxes` removes/resets transform text boxes to its empty/default state. This is an explicit
- * state transition rather than leaving old values around for later code to accidentally reuse.
- *
- * `AddAxisComponent` adds axis component to the owning collection/model while using this boundary to preserve
- * indexing, ownership, and derived-state invariants.
  */
 using Avalonia;
 using Avalonia.Controls;
@@ -61,6 +18,8 @@ namespace LightingShowcase.Composer;
 /// </summary>
 internal sealed class ComposerTransformController
 {
+    // GizmoDragState is a working/snapshot state object whose fields must move together; callers use it to capture
+    // one coherent point in an interaction, render, or undo workflow.
     private sealed class GizmoDragState
     {
         public GizmoDragState(
@@ -204,6 +163,8 @@ internal sealed class ComposerTransformController
     public bool HasActiveDrag => drag != null;
     public bool ObjectGizmoOnly => drag is { MeshComponent: false };
 
+    // TransformTextBoxes applies the relevant coordinate transform to text boxes, making explicit whether data is
+    // being moved between local, world, view, or preview space.
     public IEnumerable<TextBox> TransformTextBoxes()
     {
         yield return positionX;
@@ -285,6 +246,10 @@ internal sealed class ComposerTransformController
         }
     }
 
+    // ResetSelectedTransformAsync returns selected transform async to its canonical default/identity state while
+    // preserving the surrounding object/session identity. Potentially blocking/CPU work runs on a worker task
+    // rather than Avalonia’s UI thread. Cancellation is propagated so shutdown or a newer request can make obsolete
+    // work stop early.
     public async Task ResetSelectedTransformAsync()
     {
         if (selection.ActiveObjectId is not int id)
@@ -482,6 +447,10 @@ internal sealed class ComposerTransformController
         }
     }
 
+    // CommitActiveDragAsync finalizes active drag async: the current preview becomes authoritative and the
+    // before/after state is recorded as one logical undoable edit. Potentially blocking/CPU work runs on a worker
+    // task rather than Avalonia’s UI thread. Cancellation is propagated so shutdown or a newer request can make
+    // obsolete work stop early.
     public async Task<bool> CommitActiveDragAsync(Point releasePoint, KeyModifiers modifiers)
     {
         if (drag == null)
@@ -573,6 +542,8 @@ internal sealed class ComposerTransformController
         return true;
     }
 
+    // ClearTransformTextBoxes removes/resets transform text boxes to its empty/default state. This is an explicit
+    // state transition rather than leaving old values around for later code to accidentally reuse.
     public void ClearTransformTextBoxes()
     {
         foreach (TextBox box in TransformTextBoxes())

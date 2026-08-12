@@ -2,48 +2,6 @@
  * This is desktop-editor glue around the scene and rendering layers. The code should be read in terms of how it
  * translates user interaction into domain operations while keeping platform UI state, mutable scene state, and
  * renderer state from becoming entangled.
- *
- * `NewSceneAsync` creates a consistently configured scene async UI/domain object so repeated controls/objects
- * share sizing, alignment, or default behavior.
- *
- * `BrowseAndOpenAsync` asks the platform picker for and open async and only proceeds when the user returns a
- * valid local selection; cancellation remains a normal no-op path.
- *
- * `BrowseAndInsertAsync` asks the platform picker for and insert async and only proceeds when the user returns a
- * valid local selection; cancellation remains a normal no-op path.
- *
- * `LoadSceneAsync` loads scene async from persistent/external data and converts it into validated internal scene
- * state rather than exposing parser-specific objects to the rest of the application. Cancellation is propagated
- * so shutdown or a newer request can make obsolete work stop early.
- *
- * `InsertModelAsync` inserts model async into the live scene/model and returns the resulting identity/value
- * needed by selection or subsequent editing.
- *
- * `AddPrimitiveAsync` adds primitive async to the owning collection/model while using this boundary to preserve
- * indexing, ownership, and derived-state invariants.
- *
- * `SaveSceneAsync` serializes scene async from current internal state, making persistence a snapshot operation
- * rather than allowing the serializer to walk concurrently mutating editor objects. Cancellation is propagated so
- * shutdown or a newer request can make obsolete work stop early.
- *
- * `ExportPackageAsync` exports package async by translating Composer scene state into the target format while
- * preserving the relationships that format can represent. Cancellation is propagated so shutdown or a newer
- * request can make obsolete work stop early.
- *
- * `GroupSelectedAsync` collects selected async under a common hierarchy node so they can be manipulated as a unit
- * without baking away each child’s own geometry/material state.
- *
- * `UngroupSelectedAsync` removes the grouping relationship around selected async while preserving children and
- * their world-space meaning, then returns/updates the identities needed for selection.
- *
- * `DuplicateSelectedAsync` creates an independent copy of selected async with a new scene identity while
- * preserving the source geometry/material/authored metadata that should carry over.
- *
- * `DeleteSelectedAsync` deletes selected async as a logical editor operation, including the bookkeeping needed so
- * selection/history/caches do not retain a dangling object reference.
- *
- * `FormatImportDetails` converts import details to a human-readable string intended for status/editor
- * presentation rather than persistence.
  */
 using Avalonia.Controls;
 using LightingShowcase.SceneGraph;
@@ -118,6 +76,8 @@ internal sealed class ComposerCommandCoordinator
         this.lifetimeToken = lifetimeToken;
     }
 
+    // NewSceneAsync creates a consistently configured scene async UI/domain object so repeated controls/objects
+    // share sizing, alignment, or default behavior.
     public async Task NewSceneAsync()
     {
         dialogs.CloseEditors();
@@ -145,6 +105,8 @@ internal sealed class ComposerCommandCoordinator
         }
     }
 
+    // BrowseAndOpenAsync asks the platform picker for and open async and only proceeds when the user returns a
+    // valid local selection; cancellation remains a normal no-op path.
     public async Task BrowseAndOpenAsync()
     {
         try
@@ -159,6 +121,8 @@ internal sealed class ComposerCommandCoordinator
         }
     }
 
+    // BrowseAndInsertAsync asks the platform picker for and insert async and only proceeds when the user returns a
+    // valid local selection; cancellation remains a normal no-op path.
     public async Task BrowseAndInsertAsync()
     {
         try
@@ -256,6 +220,9 @@ internal sealed class ComposerCommandCoordinator
             openPrimitiveParameters();
     }
 
+    // SaveSceneAsync serializes scene async from current internal state, making persistence a snapshot operation
+    // rather than allowing the serializer to walk concurrently mutating editor objects. Cancellation is propagated
+    // so shutdown or a newer request can make obsolete work stop early.
     public async Task SaveSceneAsync()
     {
         try
@@ -284,6 +251,9 @@ internal sealed class ComposerCommandCoordinator
         }
     }
 
+    // ExportPackageAsync exports package async by translating Composer scene state into the target format while
+    // preserving the relationships that format can represent. Cancellation is propagated so shutdown or a newer
+    // request can make obsolete work stop early.
     public async Task ExportPackageAsync()
     {
         try
@@ -370,6 +340,8 @@ internal sealed class ComposerCommandCoordinator
         }
     }
 
+    // GroupSelectedAsync collects selected async under a common hierarchy node so they can be manipulated as a unit
+    // without baking away each child’s own geometry/material state.
     public async Task GroupSelectedAsync()
     {
         dialogs.CloseEditors();
@@ -408,6 +380,8 @@ internal sealed class ComposerCommandCoordinator
         }
     }
 
+    // UngroupSelectedAsync removes the grouping relationship around selected async while preserving children and
+    // their world-space meaning, then returns/updates the identities needed for selection.
     public async Task UngroupSelectedAsync()
     {
         dialogs.CloseEditors();
@@ -446,6 +420,8 @@ internal sealed class ComposerCommandCoordinator
         }
     }
 
+    // DuplicateSelectedAsync creates an independent copy of selected async with a new scene identity while
+    // preserving the source geometry/material/authored metadata that should carry over.
     public async Task DuplicateSelectedAsync()
     {
         dialogs.CloseEditors();
@@ -473,6 +449,8 @@ internal sealed class ComposerCommandCoordinator
         }
     }
 
+    // DeleteSelectedAsync deletes selected async as a logical editor operation, including the bookkeeping needed so
+    // selection/history/caches do not retain a dangling object reference.
     public async Task DeleteSelectedAsync()
     {
         dialogs.CloseEditors();
@@ -494,6 +472,8 @@ internal sealed class ComposerCommandCoordinator
         }
     }
 
+    // FormatImportDetails converts import details to a human-readable string intended for status/editor
+    // presentation rather than persistence.
     private string FormatImportDetails() =>
         string.IsNullOrWhiteSpace(session.LastImportDetails)
             ? string.Empty

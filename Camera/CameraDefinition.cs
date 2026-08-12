@@ -2,15 +2,14 @@
  * Camera state is kept independent of Avalonia and renderer-specific code. That lets interactive navigation,
  * scripted paths, tests, and multiple render backends use the same definitions for position, orientation,
  * projection, and interpolation.
- *
- * `CameraDefinition` describes a reusable capability/object/format in data plus behavior, letting registries and
- * callers work with metadata without knowing the concrete implementation details.
  */
 using LightingShowcase.Math3D;
 using LightingShowcase.SceneGraph;
 
 namespace LightingShowcase.CameraSystem;
 
+// CameraDefinition is the canonical mutable look-at/projection state shared by all backends. UI code may change it
+// continuously, while render jobs can Clone it to obtain a stable snapshot without sharing those mutations.
 /// <summary>Canonical orbit/look-at camera state used by all render adapters.</summary>
 public sealed class CameraDefinition
 {
@@ -31,6 +30,8 @@ public sealed class CameraDefinition
         FarPlane = FarPlane
     };
 
+    // The look-at vectors are rebuilt as an orthonormal basis. Degenerate forward/up combinations fall back to the
+    // engine’s canonical axes so ray generation never receives zero-length directions.
     public CameraBasis ToBasis()
     {
         Vec3 forward = (Target - Position).Normalize();

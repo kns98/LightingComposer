@@ -2,60 +2,6 @@
  * This file belongs to the renderer-neutral scene layer, which is the shared source of truth for geometry,
  * transforms, grouping, materials, resources, and serialization-facing state. Higher layers manipulate these
  * abstractions rather than maintaining parallel copies of scene data.
- *
- * `ReadyMadeObjectLibrary` provides shared algorithms/registration behavior without per-instance state.
- *
- * `ReadyMadeNameForPrimitiveKind` reads y made name for primitive kind from the external stream/document,
- * advancing through the format in the order required to resolve references and produce valid internal data.
- *
- * `RebuildPrimitiveShadowGeometry` reconstructs primitive shadow geometry from authoritative source data after an
- * edit has invalidated the previous derived form. Rebuilding rather than incrementally patching reduces the
- * chance of stale topology/cache entries surviving.
- *
- * `BuildParameterizedPrimitive` derives parameterized primitive from lower-level input data, resolving
- * indexing/grouping/derived values once so callers can operate on a coherent higher-level representation.
- *
- * `BuildCapsule` derives capsule from lower-level input data, resolving indexing/grouping/derived values once so
- * callers can operate on a coherent higher-level representation.
- *
- * `BuildPyramid` derives pyramid from lower-level input data, resolving indexing/grouping/derived values once so
- * callers can operate on a coherent higher-level representation.
- *
- * `BuildTriangularPrism` derives triangular prism from lower-level input data, resolving
- * indexing/grouping/derived values once so callers can operate on a coherent higher-level representation.
- *
- * `BuildWedge` derives wedge from lower-level input data, resolving indexing/grouping/derived values once so
- * callers can operate on a coherent higher-level representation.
- *
- * `BuildDiningTable` derives dining table from lower-level input data, resolving indexing/grouping/derived values
- * once so callers can operate on a coherent higher-level representation.
- *
- * `BuildCoffeeTable` derives coffee table from lower-level input data, resolving indexing/grouping/derived values
- * once so callers can operate on a coherent higher-level representation.
- *
- * `BuildBookshelf` derives bookshelf from lower-level input data, resolving indexing/grouping/derived values once
- * so callers can operate on a coherent higher-level representation.
- *
- * `AddSphere` adds sphere to the owning collection/model while using this boundary to preserve indexing,
- * ownership, and derived-state invariants.
- *
- * `AddHemisphere` adds hemisphere to the owning collection/model while using this boundary to preserve indexing,
- * ownership, and derived-state invariants.
- *
- * `AddCylinderSides` adds cylinder sides to the owning collection/model while using this boundary to preserve
- * indexing, ownership, and derived-state invariants.
- *
- * `AddCone` adds cone to the owning collection/model while using this boundary to preserve indexing, ownership,
- * and derived-state invariants.
- *
- * `AddTorus` adds torus to the owning collection/model while using this boundary to preserve indexing, ownership,
- * and derived-state invariants.
- *
- * `AddTube` adds tube to the owning collection/model while using this boundary to preserve indexing, ownership,
- * and derived-state invariants.
- *
- * `AddDisk` adds disk to the owning collection/model while using this boundary to preserve indexing, ownership,
- * and derived-state invariants.
  */
 using LightingShowcase.Math3D;
 
@@ -99,6 +45,8 @@ public static class ReadyMadeObjectLibrary
     public static bool Contains(string name) => Names.Any(n => string.Equals(n, name, StringComparison.OrdinalIgnoreCase));
 
 
+    // ReadyMadeNameForPrimitiveKind reads y made name for primitive kind from the external stream/document,
+    // advancing through the format in the order required to resolve references and produce valid internal data.
     /// <summary>
     /// Converts the compact primitive kind stored in binary scene files back to a
     /// ready-made catalog name. Older saves may contain either a compact kind
@@ -307,6 +255,9 @@ public static class ReadyMadeObjectLibrary
         }
     }
 
+    // For legacy ready-made primitives, authored parameters remain authoritative. The primitive is regenerated in a
+    // temporary scene and its triangles replace the group’s shadow mesh, preserving the group identity/material
+    // context while refreshing its pivot.
     /// <summary>Regenerates the triangle-shadow mesh from authored primitive parameters.</summary>
     public static bool RebuildPrimitiveShadowGeometry(SceneObjectGroup group, SceneMaterials materials)
     {
@@ -491,7 +442,6 @@ public static class ReadyMadeObjectLibrary
         AddQuad(scene, a, e, f, b, m.Wood);      // ramp
     }
 
-    // Furniture builders retained from the previous ready-made object library.
     private static void BuildDiningTable(Scene scene, SceneMaterials m)
     {
         scene.BeginGroup("Table top");

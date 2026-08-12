@@ -1,59 +1,7 @@
 /*
  * This representation separates durable or isolated scene state from the mutable live editor graph. Save/load,
- * undo, background rendering, and tests need snapshots/documents that can be copied or serialized without
- * exposing shared mutable objects across threads.
- *
- * `SceneObjectInfo` is an immutable packet of related values. Record value semantics make it suitable for
- * snapshots, options, commands, or parsed intermediate data because callers can copy/compare it without sharing
- * mutable state. Its constructor values (`Id`, `Name`, `Visible`, `IsSelectable`, `ParentId`, `Depth`,
- * `TriangleCount`, `Kind`, `ChildCount`, `LocalTriangleCount`) travel together because consumers need a
- * consistent snapshot rather than reading those values independently from mutable objects.
- *
- * `MaterialSummary` is an immutable packet of related values. Record value semantics make it suitable for
- * snapshots, options, commands, or parsed intermediate data because callers can copy/compare it without sharing
- * mutable state. Its constructor values (`Id`, `Name`, `BaseColor`, `Metallic`, `Roughness`, `EmissiveStrength`,
- * `Opacity`) travel together because consumers need a consistent snapshot rather than reading those values
- * independently from mutable objects.
- *
- * `Title` is derived rather than separately stored: it evaluates `string.IsNullOrWhiteSpace(Scene.Description) ?
- * : Scene.Description`. Keeping the value computed from its source fields prevents a second cached flag/value
- * from drifting out of sync.
- *
- * `Lights` is derived rather than separately stored: it evaluates `Scene.Lights`. Keeping the value computed from
- * its source fields prevents a second cached flag/value from drifting out of sync.
- *
- * `Assets` is derived rather than separately stored: it evaluates `AssetRegistry.FromScene(Scene)`. Keeping the
- * value computed from its source fields prevents a second cached flag/value from drifting out of sync.
- *
- * The `SceneDocument` constructor captures `scene`. Those are the dependencies/initial values the instance needs
- * for its lifetime, so callbacks and later operations use the same objects/configuration rather than looking them
- * up globally.
- *
- * `BuildRenderData` derives render data from lower-level input data, resolving indexing/grouping/derived values
- * once so callers can operate on a coherent higher-level representation.
- *
- * `GetObjectInfos` reads object infos from the authoritative model and returns a value/snapshot suitable for
- * callers, avoiding direct access to mutable internal storage.
- *
- * `AddObjectInfo` adds object info to the owning collection/model while using this boundary to preserve indexing,
- * ownership, and derived-state invariants.
- *
- * `GetObjectKind` reads object kind from the authoritative model and returns a value/snapshot suitable for
- * callers, avoiding direct access to mutable internal storage.
- *
- * `FindObject` searches for object and returns the matching object/value rather than assuming it exists. Callers
- * can therefore distinguish a missing match from the found instance.
- *
- * `SetObjectVisibility` sets object visibility through the owning abstraction instead of exposing a mutable
- * field. That gives the method one place to validate the value and perform any history/cache/UI side effects
- * required by the change.
- *
- * `SetObjectsVisibility` sets objects visibility through the owning abstraction instead of exposing a mutable
- * field. That gives the method one place to validate the value and perform any history/cache/UI side effects
- * required by the change.
- *
- * `GetMaterialSummaries` reads material summaries from the authoritative model and returns a value/snapshot
- * suitable for callers, avoiding direct access to mutable internal storage.
+ * undo, background rendering, and tests need snapshots/documents that can be copied or serialized without exposing
+ * shared mutable objects across threads.
  */
 using LightingShowcase.Lighting;
 using LightingShowcase.Math3D;

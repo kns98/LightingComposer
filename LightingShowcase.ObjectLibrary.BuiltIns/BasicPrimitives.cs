@@ -2,52 +2,15 @@
  * Object-library definitions generate scene geometry from named, authored parameters. Keeping those parameters
  * attached to the generated object is important: a cube with width/height/depth is still editable as a cube until
  * a topology edit deliberately converts it into ordinary mesh geometry.
- *
- * `PlanePrimitive` is the procedural definition for a plane. It knows how to turn authored parameters into
- * triangles and, where supported, how to absorb object-scale changes back into those parameters so the object
- * remains editable as a named primitive rather than becoming anonymous mesh data.
- *
- * `CubePrimitive` is the procedural definition for a cube. It knows how to turn authored parameters into
- * triangles and, where supported, how to absorb object-scale changes back into those parameters so the object
- * remains editable as a named primitive rather than becoming anonymous mesh data.
- *
- * `CirclePrimitive` is the procedural definition for a circle. It knows how to turn authored parameters into
- * triangles and, where supported, how to absorb object-scale changes back into those parameters so the object
- * remains editable as a named primitive rather than becoming anonymous mesh data.
- *
- * `SpherePrimitive` is the procedural definition for a sphere. It knows how to turn authored parameters into
- * triangles and, where supported, how to absorb object-scale changes back into those parameters so the object
- * remains editable as a named primitive rather than becoming anonymous mesh data.
- *
- * `IcospherePrimitive` is the procedural definition for a icosphere. It knows how to turn authored parameters
- * into triangles and, where supported, how to absorb object-scale changes back into those parameters so the
- * object remains editable as a named primitive rather than becoming anonymous mesh data.
- *
- * `CylinderPrimitive` is the procedural definition for a cylinder. It knows how to turn authored parameters into
- * triangles and, where supported, how to absorb object-scale changes back into those parameters so the object
- * remains editable as a named primitive rather than becoming anonymous mesh data.
- *
- * `ConePrimitive` is the procedural definition for a cone. It knows how to turn authored parameters into
- * triangles and, where supported, how to absorb object-scale changes back into those parameters so the object
- * remains editable as a named primitive rather than becoming anonymous mesh data.
- *
- * `GridPrimitive` is the procedural definition for a grid. It knows how to turn authored parameters into
- * triangles and, where supported, how to absorb object-scale changes back into those parameters so the object
- * remains editable as a named primitive rather than becoming anonymous mesh data.
- *
- * `LowPolySpherePrimitive` is the procedural definition for a low poly sphere. It knows how to turn authored
- * parameters into triangles and, where supported, how to absorb object-scale changes back into those parameters
- * so the object remains editable as a named primitive rather than becoming anonymous mesh data.
- *
- * `HemispherePrimitive` is the procedural definition for a hemisphere. It knows how to turn authored parameters
- * into triangles and, where supported, how to absorb object-scale changes back into those parameters so the
- * object remains editable as a named primitive rather than becoming anonymous mesh data.
  */
 using LightingShowcase.Math3D;
 using LightingShowcase.SceneGraph;
 
 namespace LightingShowcase.ObjectLibrary.BuiltIns;
 
+// PlanePrimitive is the procedural definition for a plane. It knows how to turn authored parameters into triangles
+// and, where supported, how to absorb object-scale changes back into those parameters so the object remains
+// editable as a named primitive rather than becoming anonymous mesh data.
 public sealed class PlanePrimitive : PrimitiveBase
 {
     public override string Kind => "plane";
@@ -75,6 +38,9 @@ public sealed class PlanePrimitive : PrimitiveBase
     };
 }
 
+// CubePrimitive is the procedural definition for a cube. It knows how to turn authored parameters into triangles
+// and, where supported, how to absorb object-scale changes back into those parameters so the object remains
+// editable as a named primitive rather than becoming anonymous mesh data.
 public sealed class CubePrimitive : PrimitiveBase
 {
     public override string Kind => "cube";
@@ -102,6 +68,9 @@ public sealed class CubePrimitive : PrimitiveBase
     };
 }
 
+// CirclePrimitive is the procedural definition for a circle. It knows how to turn authored parameters into
+// triangles and, where supported, how to absorb object-scale changes back into those parameters so the object
+// remains editable as a named primitive rather than becoming anonymous mesh data.
 public sealed class CirclePrimitive : PrimitiveBase
 {
     public override string Kind => "circle";
@@ -132,6 +101,9 @@ public sealed class CirclePrimitive : PrimitiveBase
     }
 }
 
+// SpherePrimitive is the procedural definition for a sphere. It knows how to turn authored parameters into
+// triangles and, where supported, how to absorb object-scale changes back into those parameters so the object
+// remains editable as a named primitive rather than becoming anonymous mesh data.
 public sealed class SpherePrimitive : PrimitiveBase
 {
     // Keep the historical kind "sphere" so older .lscene files remain editable.
@@ -163,6 +135,9 @@ public sealed class SpherePrimitive : PrimitiveBase
     }
 }
 
+// IcospherePrimitive is the procedural definition for a icosphere. It knows how to turn authored parameters into
+// triangles and, where supported, how to absorb object-scale changes back into those parameters so the object
+// remains editable as a named primitive rather than becoming anonymous mesh data.
 public sealed class IcospherePrimitive : PrimitiveBase
 {
     public override string Kind => "icosphere";
@@ -192,6 +167,9 @@ public sealed class IcospherePrimitive : PrimitiveBase
     }
 }
 
+// CylinderPrimitive is the procedural definition for a cylinder. It knows how to turn authored parameters into
+// triangles and, where supported, how to absorb object-scale changes back into those parameters so the object
+// remains editable as a named primitive rather than becoming anonymous mesh data.
 public sealed class CylinderPrimitive : PrimitiveBase
 {
     public override string Kind => "cylinder";
@@ -217,6 +195,9 @@ public sealed class CylinderPrimitive : PrimitiveBase
     public override bool ApplyScaleDelta(IDictionary<string, double> p, char axis, double factor) => char.ToUpperInvariant(axis) == 'Y' ? Multiply(p, "height", factor) : Multiply(p, "radius", factor);
 }
 
+// ConePrimitive is the procedural definition for a cone. It knows how to turn authored parameters into triangles
+// and, where supported, how to absorb object-scale changes back into those parameters so the object remains
+// editable as a named primitive rather than becoming anonymous mesh data.
 public sealed class ConePrimitive : PrimitiveBase
 {
     public override string Kind => "cone";
@@ -251,6 +232,9 @@ public sealed class ConePrimitive : PrimitiveBase
         : MultiplyAny(p, factor, p.ContainsKey("radius1") ? "radius1" : "radius", "radius2");
 }
 
+// GridPrimitive is the procedural definition for a grid. It knows how to turn authored parameters into triangles
+// and, where supported, how to absorb object-scale changes back into those parameters so the object remains
+// editable as a named primitive rather than becoming anonymous mesh data.
 public sealed class GridPrimitive : PrimitiveBase
 {
     public override string Kind => "grid";
@@ -283,6 +267,9 @@ public sealed class GridPrimitive : PrimitiveBase
 // Existing non-3D viewport helper primitives remain registered for backward compatibility
 // with older .lscene documents and plug-in users, but the Composer Add Primitive menu
 // filters to the standard two-finger set above plus Torus.
+// LowPolySpherePrimitive is the procedural definition for a low poly sphere. It knows how to turn authored
+// parameters into triangles and, where supported, how to absorb object-scale changes back into those parameters so
+// the object remains editable as a named primitive rather than becoming anonymous mesh data.
 public sealed class LowPolySpherePrimitive : PrimitiveBase
 {
     public override string Kind => "lowPolySphere";
@@ -299,6 +286,9 @@ public sealed class LowPolySpherePrimitive : PrimitiveBase
     public override bool ApplyScaleDelta(IDictionary<string, double> p, char axis, double factor) => Multiply(p, "radius", factor);
 }
 
+// HemispherePrimitive is the procedural definition for a hemisphere. It knows how to turn authored parameters into
+// triangles and, where supported, how to absorb object-scale changes back into those parameters so the object
+// remains editable as a named primitive rather than becoming anonymous mesh data.
 public sealed class HemispherePrimitive : PrimitiveBase
 {
     public override string Kind => "hemisphere";

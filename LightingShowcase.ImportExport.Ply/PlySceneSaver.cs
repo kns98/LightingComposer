@@ -2,28 +2,6 @@
  * Exporting PLY walks the internal scene and rebuilds the format’s object/index/material/resource structures. The
  * implementation must keep indices and references self-consistent and must make deliberate choices about features
  * that do not map one-to-one between Composer and PLY.
- *
- * `PlySceneSaver` owns translation from Composer scene state into its external file format, including the
- * indexing/resource relationships required for another program to reconstruct the exported model.
- *
- * `SaveAscii` serializes ascii from current internal state, making persistence a snapshot operation rather than
- * allowing the serializer to walk concurrently mutating editor objects.
- *
- * `SaveBinary` serializes binary from current internal state, making persistence a snapshot operation rather than
- * allowing the serializer to walk concurrently mutating editor objects. Binary field order is explicit; changing
- * it requires the corresponding reader/writer to remain symmetrical.
- *
- * `WriteHeader` writes header to the external stream/document in the format’s required order, using stable
- * indices/references so another reader can reconstruct the same relationships.
- *
- * `BuildHeader` derives header from lower-level input data, resolving indexing/grouping/derived values once so
- * callers can operate on a coherent higher-level representation.
- *
- * `WriteAsciiVertex` writes ascii vertex to the external stream/document in the format’s required order, using
- * stable indices/references so another reader can reconstruct the same relationships.
- *
- * `WriteBinaryVertex` writes binary vertex to the external stream/document in the format’s required order, using
- * stable indices/references so another reader can reconstruct the same relationships.
  */
 using System.IO;
 using System.Globalization;
@@ -32,6 +10,8 @@ using LightingShowcase.Math3D;
 
 namespace LightingShowcase.SceneGraph;
 
+// PlySceneSaver owns translation from Composer scene state into its external file format, including the
+// indexing/resource relationships required for another program to reconstruct the exported model.
 /// <summary>Exports the current scene as a triangle-mesh PLY file.</summary>
 public static class PlySceneSaver
 {
@@ -50,6 +30,8 @@ public static class PlySceneSaver
             SaveAscii(fullPath, triangles);
     }
 
+    // SaveAscii serializes ascii from current internal state, making persistence a snapshot operation rather than
+    // allowing the serializer to walk concurrently mutating editor objects.
     private static void SaveAscii(string filePath, List<Triangle> triangles)
     {
         using StreamWriter writer = new(filePath, false, Encoding.UTF8);
@@ -69,6 +51,9 @@ public static class PlySceneSaver
         }
     }
 
+    // SaveBinary serializes binary from current internal state, making persistence a snapshot operation rather than
+    // allowing the serializer to walk concurrently mutating editor objects. Binary field order is explicit;
+    // changing it requires the corresponding reader/writer to remain symmetrical.
     private static void SaveBinary(string filePath, List<Triangle> triangles)
     {
         using FileStream stream = File.Create(filePath);
@@ -93,6 +78,8 @@ public static class PlySceneSaver
         }
     }
 
+    // WriteHeader writes header to the external stream/document in the format’s required order, using stable
+    // indices/references so another reader can reconstruct the same relationships.
     private static void WriteHeader(TextWriter writer, string format, List<Triangle> triangles) => writer.Write(BuildHeader(format, triangles));
 
     private static string BuildHeader(string format, List<Triangle> triangles)
@@ -116,12 +103,16 @@ public static class PlySceneSaver
         return builder.ToString();
     }
 
+    // WriteAsciiVertex writes ascii vertex to the external stream/document in the format’s required order, using
+    // stable indices/references so another reader can reconstruct the same relationships.
     private static void WriteAsciiVertex(TextWriter writer, Vec3 position, Vec2 uv, Vec3 color)
     {
         (byte r, byte g, byte b) = ToRgb(color);
         writer.WriteLine(FormattableString.Invariant($"{position.X:G17} {position.Y:G17} {position.Z:G17} {uv.U:G17} {uv.V:G17} {r} {g} {b}"));
     }
 
+    // WriteBinaryVertex writes binary vertex to the external stream/document in the format’s required order, using
+    // stable indices/references so another reader can reconstruct the same relationships.
     private static void WriteBinaryVertex(BinaryWriter writer, Vec3 position, Vec2 uv, Vec3 color)
     {
         writer.Write((float)position.X);

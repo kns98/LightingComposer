@@ -2,29 +2,13 @@
  * This file belongs to the renderer-neutral scene layer, which is the shared source of truth for geometry,
  * transforms, grouping, materials, resources, and serialization-facing state. Higher layers manipulate these
  * abstractions rather than maintaining parallel copies of scene data.
- *
- * `ReadyMadeObjectFactory` centralizes construction of a family of related objects so callers choose
- * intent/parameters instead of repeating low-level assembly steps.
- *
- * `AddBox` adds box to the owning collection/model while using this boundary to preserve indexing, ownership, and
- * derived-state invariants.
- *
- * `AddPyramid` adds pyramid to the owning collection/model while using this boundary to preserve indexing,
- * ownership, and derived-state invariants.
- *
- * `AddCylinder` adds cylinder to the owning collection/model while using this boundary to preserve indexing,
- * ownership, and derived-state invariants.
- *
- * `AddSphere` adds sphere to the owning collection/model while using this boundary to preserve indexing,
- * ownership, and derived-state invariants.
- *
- * `AddQuad` adds quad to the owning collection/model while using this boundary to preserve indexing, ownership,
- * and derived-state invariants.
  */
 using LightingShowcase.Math3D;
 
 namespace LightingShowcase.SceneGraph;
 
+// ReadyMadeObjectFactory centralizes construction of a family of related objects so callers choose
+// intent/parameters instead of repeating low-level assembly steps.
 /// <summary>Creates procedural built-in objects for quick scene composition.</summary>
 public static class ReadyMadeObjectFactory
 {

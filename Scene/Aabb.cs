@@ -2,13 +2,6 @@
  * This file belongs to the renderer-neutral scene layer, which is the shared source of truth for geometry,
  * transforms, grouping, materials, resources, and serialization-facing state. Higher layers manipulate these
  * abstractions rather than maintaining parallel copies of scene data.
- *
- * `Aabb` is a value type, so small instances can be copied without heap allocation. Its operations establish
- * shared numerical/data semantics for callers that would otherwise risk implementing subtly different formulas.
- *
- * The `Aabb` constructor captures `min`, `max`. Those are the dependencies/initial values the instance needs for
- * its lifetime, so callbacks and later operations use the same objects/configuration rather than looking them up
- * globally.
  */
 using LightingShowcase.Math3D;
 using LightingShowcase.Rendering;
@@ -38,9 +31,13 @@ public readonly struct Aabb
     {
         const double eps = 1e-12;
 
+        // This is the slab-test parallel-ray case. With essentially no motion on an axis, the ray intersects that
+        // slab only when its origin already lies between the slab planes.
         if (System.Math.Abs(direction) < eps)
             return origin >= min && origin <= max;
 
+        // For a nonparallel ray, the two slab-plane intersections become a parametric interval on the ray.
+        // Intersecting that interval with the running tMin/tMax interval across X, Y, and Z yields the box hit.
         double invD = 1.0 / direction;
         double t0 = (min - origin) * invD;
         double t1 = (max - origin) * invD;
@@ -55,6 +52,8 @@ public readonly struct Aabb
     }
     public static Aabb Around(Triangle triangle)
     {
+        // Triangle bounds are padded very slightly so perfectly flat geometry still has nonzero extent. That avoids
+        // precision misses when BVH rays land exactly on a triangle plane.
         const double pad = 1e-5;
 
         double minX = System.Math.Min(triangle.A.X, System.Math.Min(triangle.B.X, triangle.C.X)) - pad;

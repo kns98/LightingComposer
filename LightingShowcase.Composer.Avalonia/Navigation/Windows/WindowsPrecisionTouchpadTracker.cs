@@ -2,22 +2,12 @@
  * This UI code turns editor state into controls and converts user edits back into validated domain operations.
  * Dialog/window state is intentionally temporary: values should only become authoritative scene changes through
  * the session/controller path, which preserves cancel, undo, and renderer invalidation behavior.
- *
- * `WindowsTrackpadGestureKind` makes a closed set of choices compiler-visible instead of passing loosely related
- * integers or strings. Code that switches over `Waiting`, `Baseline`, `Orbit`, `Zoom`, `Circular` is where the
- * behavioral meaning of each choice is implemented.
- *
- * `WindowsTrackpadGesture` is an immutable packet of related values. Record value semantics make it suitable for
- * snapshots, options, commands, or parsed intermediate data because callers can copy/compare it without sharing
- * mutable state. Its constructor values (`Kind`, `OrbitX`, `OrbitY`, `Scale`, `AngleDeltaRadians`, `FrameId`)
- * travel together because consumers need a consistent snapshot rather than reading those values independently
- * from mutable objects.
- *
- * `WindowsPrecisionTouchpadTracker` retains temporal/input history needed to interpret a stream of events as a
- * higher-level gesture or state transition.
  */
 namespace LightingShowcase.Composer.Navigation.Windows;
 
+// WindowsTrackpadGestureKind makes a closed set of choices compiler-visible instead of passing loosely related
+// integers or strings. Code that switches over Waiting, Baseline, Orbit, Zoom, Circular is where the behavioral
+// meaning of each choice is implemented.
 internal enum WindowsTrackpadGestureKind
 {
     Waiting,
@@ -35,6 +25,8 @@ internal readonly record struct WindowsTrackpadGesture(
     double AngleDeltaRadians,
     uint FrameId);
 
+// WindowsPrecisionTouchpadTracker retains temporal/input history needed to interpret a stream of events as a
+// higher-level gesture or state transition.
 /// <summary>
 /// Classifies the two physical Precision Touchpad contacts directly.
 ///

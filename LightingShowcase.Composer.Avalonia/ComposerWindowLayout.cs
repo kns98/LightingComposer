@@ -2,21 +2,6 @@
  * This UI code turns editor state into controls and converts user edits back into validated domain operations.
  * Dialog/window state is intentionally temporary: values should only become authoritative scene changes through
  * the session/controller path, which preserves cancel, undo, and renderer invalidation behavior.
- *
- * `ComposerWindowLayout` provides shared algorithms/registration behavior without per-instance state.
- *
- * `Controls` is an immutable packet of related values. Record value semantics make it suitable for snapshots,
- * options, commands, or parsed intermediate data because callers can copy/compare it without sharing mutable
- * state. Its constructor values (`MenuBar`, `Viewport`, `ObjectTree`, `DuplicateButton`, `GroupButton`,
- * `UngroupButton`, `DeleteButton`, `NameBox`, `VisibleBox`, `ParametersButton`, `MaterialButton`, `PositionX`)
- * travel together because consumers need a consistent snapshot rather than reading those values independently
- * from mutable objects.
- *
- * `BuildScenePanel` derives scene panel from lower-level input data, resolving indexing/grouping/derived values
- * once so callers can operate on a coherent higher-level representation.
- *
- * `BuildInspectorPanel` derives inspector panel from lower-level input data, resolving indexing/grouping/derived
- * values once so callers can operate on a coherent higher-level representation.
  */
 using Avalonia;
 using Avalonia.Controls;

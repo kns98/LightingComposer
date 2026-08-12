@@ -3,101 +3,6 @@
  * buffers/images, commands are submitted against those resources, and stale resources must be rebuilt when
  * geometry or transforms change; a numerically correct algorithm can still be wrong here if lifetime or
  * synchronization is mishandled.
- *
- * `VulkanSceneComputeRenderer` turns camera/scene state into an image using one rendering backend. Its
- * caches/resources are implementation details of that backend; callers should depend on the common rendered
- * result rather than those internals.
- *
- * `SharedComputeResources` owns resources/subscriptions whose lifetime must be ended explicitly.
- *
- * `PreparedComputeScene` owns resources/subscriptions whose lifetime must be ended explicitly.
- *
- * `GpuTriangle` is a value type, so small instances can be copied without heap allocation. Its operations
- * establish shared numerical/data semantics for callers that would otherwise risk implementing subtly different
- * formulas.
- *
- * `GpuTextureInfo` is a value type, so small instances can be copied without heap allocation. Its operations
- * establish shared numerical/data semantics for callers that would otherwise risk implementing subtly different
- * formulas.
- *
- * `TextureUpload` packages CPU-side data/resources immediately before GPU upload so byte layout and ownership are
- * explicit at the CPU/GPU boundary.
- *
- * `TextureBuildResult` packages the outputs of a completed operation into one value so callers see a consistent
- * result rather than partially updated out parameters.
- *
- * `GpuBvhNode` is a value type, so small instances can be copied without heap allocation. Its operations
- * establish shared numerical/data semantics for callers that would otherwise risk implementing subtly different
- * formulas.
- *
- * `CpuBvhNode` is a value type, so small instances can be copied without heap allocation. Its operations
- * establish shared numerical/data semantics for callers that would otherwise risk implementing subtly different
- * formulas.
- *
- * `TriangleCentroidComparer` defines one stable ordering rule used by sorting/partitioning code; changing it
- * changes how the associated spatial/resource structure is organized.
- *
- * `StageLogPath` is derived rather than separately stored: it evaluates `Path.Combine(Path.GetTempPath(), )`.
- * Keeping the value computed from its source fields prevents a second cached flag/value from drifting out of
- * sync.
- *
- * `Dispose` ends this object’s active lifetime: owned cancellations/resources/listeners are released so completed
- * windows/renderers do not keep receiving work or retain unmanaged memory.
- *
- * `Dispose` ends this object’s active lifetime: owned cancellations/resources/listeners are released so completed
- * windows/renderers do not keep receiving work or retain unmanaged memory.
- *
- * `ReleasePreparedScene` releases prepared scene and its owned resources, used when cached/native objects are no
- * longer valid or the owning scene/session is shutting down. GPU resource creation/update is explicit, so correct
- * lifetime and cache invalidation are part of the method’s correctness.
- *
- * `GetOrCreateSharedDevice` reads or create shared device from the authoritative model and returns a
- * value/snapshot suitable for callers, avoiding direct access to mutable internal storage. GPU resource
- * creation/update is explicit, so correct lifetime and cache invalidation are part of the method’s correctness.
- *
- * The `GpuTriangle` constructor captures `triangle`, `textureIds`. Those are the dependencies/initial values the
- * instance needs for its lifetime, so callbacks and later operations use the same objects/configuration rather
- * than looking them up globally.
- *
- * The `GpuTextureInfo` constructor captures `pixelOffset`, `width`, `height`. Those are the dependencies/initial
- * values the instance needs for its lifetime, so callbacks and later operations use the same
- * objects/configuration rather than looking them up globally.
- *
- * The `GpuBvhNode` constructor captures `boundsMin`, `boundsMax`, `leftOrFirst`, `triangleCount`, `rightChild`.
- * Those are the dependencies/initial values the instance needs for its lifetime, so callbacks and later
- * operations use the same objects/configuration rather than looking them up globally.
- *
- * The `CpuBvhNode` constructor captures `boundsMin`, `boundsMax`, `leftOrFirst`, `triangleCount`, `rightChild`.
- * Those are the dependencies/initial values the instance needs for its lifetime, so callbacks and later
- * operations use the same objects/configuration rather than looking them up globally.
- *
- * The `TriangleCentroidComparer` constructor captures `triangles`. Those are the dependencies/initial values the
- * instance needs for its lifetime, so callbacks and later operations use the same objects/configuration rather
- * than looking them up globally.
- *
- * The `GpuLight` constructor captures `light`. Those are the dependencies/initial values the instance needs for
- * its lifetime, so callbacks and later operations use the same objects/configuration rather than looking them up
- * globally.
- *
- * `ReadBackOutputImage` reads back output image from the external stream/document, advancing through the format
- * in the order required to resolve references and produce valid internal data. Cancellation is propagated so
- * shutdown or a newer request can make obsolete work stop early. GPU resource creation/update is explicit, so
- * correct lifetime and cache invalidation are part of the method’s correctness.
- *
- * `GetOrCreatePreparedScene` reads or create prepared scene from the authoritative model and returns a
- * value/snapshot suitable for callers, avoiding direct access to mutable internal storage. Cancellation is
- * propagated so shutdown or a newer request can make obsolete work stop early. Native interop is localized here
- * so handle/pointer lifetime and platform failure handling do not spread through editor code. GPU resource
- * creation/update is explicit, so correct lifetime and cache invalidation are part of the method’s correctness.
- *
- * `GetOrCreateSharedComputeResources` reads or create shared compute resources from the authoritative model and
- * returns a value/snapshot suitable for callers, avoiding direct access to mutable internal storage.
- *
- * `CreateComputeShaderWithDiagnostics` constructs compute shader with diagnostics in the normalized form expected
- * downstream, so allocation plus initialization of its invariants happen together.
- *
- * `BuildGpuBvh` derives gpu bvh from lower-level input data, resolving indexing/grouping/derived values once so
- * callers can operate on a coherent higher-level representation.
  */
 using System.Numerics;
 using System.Runtime.InteropServices;
@@ -112,6 +17,9 @@ using Veldrid.SPIRV;
 
 namespace LightingShowcase.Rendering;
 
+// VulkanSceneComputeRenderer turns camera/scene state into an image using one rendering backend. Its
+// caches/resources are implementation details of that backend; callers should depend on the common rendered result
+// rather than those internals.
 /// <summary>Vulkan compute ray/path tracer for the current triangle scene.</summary>
 public static class VulkanSceneComputeRenderer
 {
@@ -161,12 +69,17 @@ public static class VulkanSceneComputeRenderer
     private static PreparedComputeScene? preparedScene;
     private static bool preflightCompleted;
 
+    // SharedComputeResources owns resources/subscriptions whose lifetime must be ended explicitly.
     private sealed class SharedComputeResources : IDisposable
     {
         public required ResourceLayout Layout { get; init; }
         public required Shader Shader { get; init; }
         public required Pipeline Pipeline { get; init; }
 
+        // Dispose ends this object’s active lifetime: owned cancellations/resources/listeners are released so
+        // completed windows/renderers do not keep receiving work or retain unmanaged memory.
+        // Dispose ends this object’s active lifetime: owned cancellations/resources/listeners are released so
+        // completed windows/renderers do not keep receiving work or retain unmanaged memory.
         public void Dispose()
         {
             try { Pipeline.Dispose(); } catch { }
@@ -175,6 +88,7 @@ public static class VulkanSceneComputeRenderer
         }
     }
 
+    // PreparedComputeScene owns resources/subscriptions whose lifetime must be ended explicitly.
     private sealed class PreparedComputeScene : IDisposable
     {
         public required Scene Scene { get; init; }
@@ -224,6 +138,9 @@ public static class VulkanSceneComputeRenderer
                 try
                 {
                     Stage("Dispose shared Vulkan GraphicsDevice: WaitForIdle");
+                    // Before destroying or reusing GPU resources, wait until submitted command buffers have
+                    // finished referencing them. This is expensive, so normal render paths avoid it where
+                    // fences/staging lifetimes can provide narrower synchronization.
                     device.WaitForIdle();
                 }
                 catch (Exception ex)
@@ -265,6 +182,9 @@ public static class VulkanSceneComputeRenderer
     }
 
 
+    // ReleasePreparedScene releases prepared scene and its owned resources, used when cached/native objects are no
+    // longer valid or the owning scene/session is shutting down. GPU resource creation/update is explicit, so
+    // correct lifetime and cache invalidation are part of the method’s correctness.
     /// <summary>
     /// Releases scene-sized Vulkan buffers while preserving the shared device
     /// and pipeline. This avoids overlapping the old GPU scene with a newly
@@ -281,6 +201,9 @@ public static class VulkanSceneComputeRenderer
                 if (sceneResources == null)
                     return;
 
+                // Before destroying or reusing GPU resources, wait until submitted command buffers have finished
+                // referencing them. This is expensive, so normal render paths avoid it where fences/staging
+                // lifetimes can provide narrower synchronization.
                 try { sharedGraphicsDevice?.WaitForIdle(); } catch { }
                 try { sceneResources.Dispose(); } catch { }
             }
@@ -295,6 +218,8 @@ public static class VulkanSceneComputeRenderer
         return device.BackendType.ToString();
     }
 
+    // GetOrCreateSharedDevice reads or create shared device. GPU resource creation/update is explicit, so correct
+    // lifetime and cache invalidation are part of the method’s correctness.
     private static GraphicsDevice GetOrCreateSharedDevice()
     {
         lock (DeviceSync)
@@ -429,12 +354,16 @@ public static class VulkanSceneComputeRenderer
         }
     }
 
+    // TextureUpload packages CPU-side data/resources immediately before GPU upload so byte layout and ownership are
+    // explicit at the CPU/GPU boundary.
     private sealed class TextureUpload
     {
         public required TextureMap Texture { get; init; }
         public required int PixelOffset { get; init; }
     }
 
+    // TextureBuildResult packages the outputs of a completed operation into one value so callers see a consistent
+    // result rather than partially updated out parameters.
     private sealed class TextureBuildResult
     {
         public required Dictionary<TextureMap, int> TextureIds { get; init; }
@@ -484,6 +413,8 @@ public static class VulkanSceneComputeRenderer
         public GpuBvhNode ToGpu() => new(BoundsMin, BoundsMax, LeftOrFirst, TriangleCount, RightChild);
     }
 
+    // TriangleCentroidComparer defines one stable ordering rule used by sorting/partitioning code; changing it
+    // changes how the associated spatial/resource structure is organized.
     private sealed class TriangleCentroidComparer : IComparer<int>
     {
         private readonly IReadOnlyList<Triangle> triangles;
@@ -1023,6 +954,10 @@ public static class VulkanSceneComputeRenderer
         }
     }
 
+    // ReadBackOutputImage reads back output image from the external stream/document, advancing through the format
+    // in the order required to resolve references and produce valid internal data. Cancellation is propagated so
+    // shutdown or a newer request can make obsolete work stop early. GPU resource creation/update is explicit, so
+    // correct lifetime and cache invalidation are part of the method’s correctness.
     private static RenderImage ReadBackOutputImage(GraphicsDevice gd, ResourceFactory factory, DeviceBuffer outputBuffer, DeviceBuffer stagingBuffer, uint outputBytes, int width, int height, CancellationToken cancellationToken, string stageName)
     {
         Stage($"Copy output buffer to staging buffer ({stageName})");
@@ -1037,6 +972,8 @@ public static class VulkanSceneComputeRenderer
         Stage($"GPU copy/readback idle returned ({stageName})");
 
         ThrowIfCancellationRequested(cancellationToken, "Map staging buffer for readback: " + stageName);
+        // The compute output is copied into a CPU-readable staging buffer, then mapped only after GPU completion.
+        // Mapping device-local output directly would either be unsupported or much slower on discrete GPUs.
         MappedResourceView<uint> mapped = gd.Map<uint>(stagingBuffer, MapMode.Read);
         try
         {
@@ -1045,10 +982,16 @@ public static class VulkanSceneComputeRenderer
         }
         finally
         {
+            // Unmap immediately after copying the staging data so the driver can reclaim/synchronize the mapped
+            // range before the buffer is reused or disposed.
             gd.Unmap(stagingBuffer);
         }
     }
 
+    // GetOrCreatePreparedScene reads or create prepared scene. Cancellation is propagated so shutdown or a newer
+    // request can make obsolete work stop early. Native interop is localized here so handle/pointer lifetime and
+    // platform failure handling do not spread through editor code. GPU resource creation/update is explicit, so
+    // correct lifetime and cache invalidation are part of the method’s correctness.
     private static PreparedComputeScene GetOrCreatePreparedScene(GraphicsDevice gd, Scene scene, CancellationToken cancellationToken)
     {
         lock (DeviceSync)
@@ -1326,6 +1269,8 @@ public static class VulkanSceneComputeRenderer
         }
     }
 
+    // CreateComputeShaderWithDiagnostics constructs compute shader with diagnostics in the normalized form expected
+    // downstream, so allocation plus initialization of its invariants happen together.
     private static Shader CreateComputeShaderWithDiagnostics(ResourceFactory factory, ShaderDescription computeDesc, string shaderPath, string shaderSource)
     {
         try

@@ -2,12 +2,6 @@
  * Lights are represented as renderer-neutral scene data. CPU and GPU backends can therefore interpret the same
  * kind, position/direction, color, and intensity values, while backend-specific sampling/shader details remain
  * outside the scene model.
- *
- * `IsImported` is a read-only predicate over the object’s existing state; it exists so callers share one exact
- * condition when enabling commands or deciding whether an operation is applicable.
- *
- * `IsDefault` is a read-only predicate over the object’s existing state; it exists so callers share one exact
- * condition when enabling commands or deciding whether an operation is applicable.
  */
 using LightingShowcase.Math3D;
 
@@ -27,7 +21,11 @@ public sealed class SceneLight
     public double OuterConeAngle { get; set; }
     public bool Enabled { get; set; }
     public bool CastsShadow { get; set; }
+    // IsImported is a read-only predicate over the object’s existing state; it exists so callers share one exact
+    // condition when enabling commands or deciding whether an operation is applicable.
     public bool IsImported { get; set; }
+    // IsDefault is a read-only predicate over the object’s existing state; it exists so callers share one exact
+    // condition when enabling commands or deciding whether an operation is applicable.
     public bool IsDefault { get; set; }
     public SceneLight(
         string id,
