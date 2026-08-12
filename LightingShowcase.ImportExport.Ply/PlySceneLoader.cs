@@ -1,15 +1,78 @@
-// -----------------------------------------------------------------------------
-// File: Scene/PlySceneLoader.cs
-// Purpose: PLY import.
-//
-// Imports common ASCII and binary PLY polygon meshes into the internal scene
-// graph. The importer reads vertex positions and polygon faces, triangulates
-// n-gons, and generates box-projection UVs because most PLY files do not carry
-// portable texture coordinates. Binary support covers the common
-// binary_little_endian and binary_big_endian PLY variants used by 3D viewport,
-// MeshLab, CloudCompare, 3D scan datasets, and many free model repositories.
-// -----------------------------------------------------------------------------
-
+/*
+ * Importing PLY is a translation problem, not a file-copy operation. The code parses the external representation,
+ * resolves indices/resources/transforms, and creates Composer triangles, object groups, materials, and textures
+ * in the coordinate and ownership conventions expected by the scene layer.
+ *
+ * `PlySceneLoader` owns parsing and translation from its external file format into Composer scene objects;
+ * parser-specific intermediate state stays here instead of leaking into the renderer-neutral scene model.
+ *
+ * `PlyFormat` makes a closed set of choices compiler-visible instead of passing loosely related integers or
+ * strings. Code that switches over `Ascii`, `BinaryLittleEndian`, `BinaryBigEndian` is where the behavioral
+ * meaning of each choice is implemented.
+ *
+ * `PlyHeader` is the parsed metadata that tells the loader how to interpret the records that follow; later
+ * parsing depends on these counts/properties being correct.
+ *
+ * `PlyElement` describes one declared element/section in the source format so subsequent records can be decoded
+ * with the correct property layout.
+ *
+ * `PlyVertex` represents one geometric or parsed vertex and keeps the coordinate/attribute values that must
+ * remain associated with that point.
+ *
+ * `IsList` is a read-only predicate over the object’s existing state; it exists so callers share one exact
+ * condition when enabling commands or deciding whether an operation is applicable.
+ *
+ * The `PlyElement` constructor captures `name`, `count`. Those are the dependencies/initial values the instance
+ * needs for its lifetime, so callbacks and later operations use the same objects/configuration rather than
+ * looking them up globally.
+ *
+ * The `PlyVertex` constructor captures `position`, `color`. Those are the dependencies/initial values the
+ * instance needs for its lifetime, so callbacks and later operations use the same objects/configuration rather
+ * than looking them up globally.
+ *
+ * The `PlyProperty` constructor captures `name`, `type`, `isList`, `countType`, `itemType`. Those are the
+ * dependencies/initial values the instance needs for its lifetime, so callbacks and later operations use the same
+ * objects/configuration rather than looking them up globally.
+ *
+ * `ReadHeader` reads header from the external stream/document, advancing through the format in the order required
+ * to resolve references and produce valid internal data.
+ *
+ * `ReadAsciiVertex` reads ascii vertex from the external stream/document, advancing through the format in the
+ * order required to resolve references and produce valid internal data.
+ *
+ * `ReadAsciiFace` reads ascii face from the external stream/document, advancing through the format in the order
+ * required to resolve references and produce valid internal data.
+ *
+ * `ReadBinaryVertex` reads binary vertex from the external stream/document, advancing through the format in the
+ * order required to resolve references and produce valid internal data.
+ *
+ * `ReadBinaryFace` reads binary face from the external stream/document, advancing through the format in the order
+ * required to resolve references and produce valid internal data.
+ *
+ * `FindElement` searches for element and returns the matching object/value rather than assuming it exists.
+ * Callers can therefore distinguish a missing match from the found instance.
+ *
+ * `FindProperty` searches for property and returns the matching object/value rather than assuming it exists.
+ * Callers can therefore distinguish a missing match from the found instance.
+ *
+ * `SelectFaceIndexProperty` changes the editor’s current face index property choice and synchronizes the
+ * controls/overlay behavior that depend on that mode.
+ *
+ * `ReadBinaryDouble` reads binary double from the external stream/document, advancing through the format in the
+ * order required to resolve references and produce valid internal data.
+ *
+ * `ReadUInt16` reads u int16 from the external stream/document, advancing through the format in the order
+ * required to resolve references and produce valid internal data.
+ *
+ * `ReadUInt32` reads u int32 from the external stream/document, advancing through the format in the order
+ * required to resolve references and produce valid internal data.
+ *
+ * `ReadDouble` reads double from the external stream/document, advancing through the format in the order required
+ * to resolve references and produce valid internal data.
+ *
+ * `GetBounds` reads bounds from the authoritative model and returns a value/snapshot suitable for callers,
+ * avoiding direct access to mutable internal storage.
+ */
 using System;
 using System.Collections.Generic;
 using System.Globalization;

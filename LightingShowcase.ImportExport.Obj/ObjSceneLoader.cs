@@ -1,3 +1,85 @@
+/*
+ * Importing OBJ is a translation problem, not a file-copy operation. The code parses the external representation,
+ * resolves indices/resources/transforms, and creates Composer triangles, object groups, materials, and textures
+ * in the coordinate and ownership conventions expected by the scene layer.
+ *
+ * `ObjSceneLoader` owns parsing and translation from its external file format into Composer scene objects;
+ * parser-specific intermediate state stays here instead of leaking into the renderer-neutral scene model.
+ *
+ * `FaceVertex` pairs one OBJ position index with its optional texture-coordinate index after a face token is
+ * decoded; keeping the pair together simplifies later fan triangulation. Record value semantics make the snapshot
+ * easy to compare/copy without sharing mutable state. Its constructor values (`VertexIndex`, `TextureIndex`)
+ * travel together because consumers need a consistent snapshot rather than reading those values independently
+ * from mutable objects.
+ *
+ * `RawFace` keeps a parsed OBJ polygon together with the material and object/group names active when the `f`
+ * directive was read, so later triangulation still has the correct contextual metadata. Record value semantics
+ * make the snapshot easy to compare/copy without sharing mutable state. Its constructor values (`Vertices`,
+ * `MaterialName`, `ObjectName`) travel together because consumers need a consistent snapshot rather than reading
+ * those values independently from mutable objects.
+ *
+ * `ObjMaterial` is the small intermediate result of MTL parsing: diffuse color plus an optional texture path are
+ * enough for the OBJ importer to construct the Composer material used by faces. Record value semantics make the
+ * snapshot easy to compare/copy without sharing mutable state. Its constructor values (`Color`, `TexturePath`)
+ * travel together because consumers need a consistent snapshot rather than reading those values independently
+ * from mutable objects.
+ *
+ * `GetOrCreateGroup` maps an OBJ object/group name to one `SceneObjectGroup`, creating it on first use so faces
+ * with the same name remain grouped in the imported hierarchy.
+ *
+ * `BuildMaterialCache` converts parsed MTL definitions into reusable Composer `Material` instances before face
+ * emission, avoiding repeated material/texture reconstruction for each triangle.
+ *
+ * `ResolveMaterial` selects the face’s named material and falls back safely when the OBJ/MTL reference is missing
+ * or incomplete.
+ *
+ * `LoadMaterialLibrary` parses an `.mtl` file into named diffuse-color/texture definitions; `newmtl` commits the
+ * previous definition while subsequent directives modify the current one.
+ *
+ * `Commit` stores the MTL definition currently being assembled under its `newmtl` name, skipping it when no valid
+ * name has been established.
+ *
+ * `ResolveTextureToken` extracts the texture filename portion of an MTL map directive after supported options and
+ * resolves it relative to the material-library file.
+ *
+ * `ParseMaterialLibraryNames` parses an OBJ `mtllib` directive into the referenced material-library filenames
+ * after comment/whitespace handling.
+ *
+ * `ParseFaceVertex` decodes an OBJ face token such as `v`, `v/vt`, or `v/vt/vn` into the position and optional UV
+ * indices needed for triangulation.
+ *
+ * `ResolveIndex` implements OBJ’s 1-based and negative-relative index rules, translating them into zero-based
+ * indices and rejecting invalid references.
+ *
+ * `GetUv` returns the referenced texture coordinate or a safe default when a face omits UV data.
+ *
+ * `GetBounds` computes the source vertex bounding box used by the importer’s normalization/placement transform.
+ *
+ * `Transform` recenters/scales an OBJ point and applies the requested destination offset uniformly to imported
+ * vertices.
+ *
+ * `IsDegenerate` rejects triangles with effectively zero area so invalid geometry does not enter bounds, BVH, or
+ * rendering code.
+ *
+ * `StripComment` removes the `#` suffix from an OBJ/MTL line before tokenization so comments never become parser
+ * tokens.
+ *
+ * `SplitWhitespace` tokenizes a directive on arbitrary whitespace while dropping empty fields.
+ *
+ * `ParseDouble` converts user/file text into double and rejects values that violate the numeric/domain
+ * constraints before they can enter scene state.
+ *
+ * `ParseLooseDouble` converts user/file text into loose double and rejects values that violate the numeric/domain
+ * constraints before they can enter scene state.
+ *
+ * `ParseInt` converts user/file text into int and rejects values that violate the numeric/domain constraints
+ * before they can enter scene state.
+ *
+ * `ResolveRelativePath` combines an asset reference with the directory of the file that referenced it and
+ * canonicalizes the resulting filesystem path.
+ *
+ * `SanitizeObjectName` turns missing/blank object names into a usable editor label and trims real names.
+ */
 using LightingShowcase.Math3D;
 using LightingShowcase.SceneGraph;
 

@@ -1,3 +1,53 @@
+/*
+ * The tests in this file are executable statements of editor behavior. They intentionally use real scene/session
+ * objects and inspect externally meaningful results—geometry, hierarchy, material state, serialized output, cache
+ * stamps, or timing—so refactors can change implementation details without weakening the contract being tested.
+ *
+ * `BuildWeldsSharedCornersAndCreatesUniqueEdges` verifies that build welds shared corners and creates unique
+ * edges. The assertions establish that the resulting value/state must exactly match the expected result.
+ *
+ * `TriangleMovesReturnEveryAffectedTriangleAndCornerMask` verifies that triangle moves return every affected
+ * triangle and corner mask. The assertions establish that the resulting value/state must exactly match the
+ * expected result.
+ *
+ * `MovingOneWeldedVertexUpdatesEveryCornerThatUsesIt` verifies that moving one welded vertex updates every corner
+ * that uses it. The assertions establish that the resulting value/state must exactly match the expected result.
+ *
+ * `WeldSearchCrossesSpatialCellBoundariesButChecksRealDistance` verifies that weld search crosses spatial cell
+ * boundaries but checks real distance. The assertions establish that the resulting value/state must exactly match
+ * the expected result.
+ *
+ * `ComponentModesDoNotExposeTheObjectBoundingBoxBeforeAComponentIsPicked` verifies that component modes do not
+ * expose the object bounding box before a component is picked. It uses a real `ComposerSceneSession`, so
+ * registration, locking, history, and scene mutation follow production paths rather than mocks. The assertions
+ * establish that required objects/resources must resolve; the absent case must remain absent; the operation must
+ * explicitly report success. Representative cases include `Cube`.
+ *
+ * `ComponentMoveAxisLockAppliesToVertexEdgeAndFaceModesAndResetsInObjectMode` verifies that component move axis
+ * lock applies to vertex edge and face modes and resets in object mode. It uses a real `ComposerSceneSession`, so
+ * registration, locking, history, and scene mutation follow production paths rather than mocks. The assertions
+ * establish that the operation must explicitly report success; the resulting value/state must exactly match the
+ * expected result. Representative cases include `Cube`.
+ *
+ * `HoverPulseDoesNothingUntilAComponentIsNearThePointer` verifies that hover pulse does nothing until a component
+ * is near the pointer. It uses a real `ComposerSceneSession`, so registration, locking, history, and scene
+ * mutation follow production paths rather than mocks. The assertions establish that the disallowed path must be
+ * rejected. Representative cases include `Cube`.
+ *
+ * `PrimitiveInsertionCreatesAnEditableMeshObject` verifies that primitive insertion creates an editable mesh
+ * object. It uses a real `ComposerSceneSession`, so registration, locking, history, and scene mutation follow
+ * production paths rather than mocks. The assertions establish that required objects/resources must resolve; the
+ * operation must explicitly report success; the resulting value/state must exactly match the expected result.
+ * Representative cases include `Cube`.
+ *
+ * `SquareInsetDepthKeepsPlanarRingAndAddsPerpendicularReveal` verifies that square inset depth keeps planar ring
+ * and adds perpendicular reveal. The assertions establish that the resulting value/state must exactly match the
+ * expected result.
+ *
+ * `SlopedInsetDepthConnectsOuterBoundaryDirectlyToDisplacedInset` verifies that sloped inset depth connects outer
+ * boundary directly to displaced inset. The assertions establish that the resulting value/state must exactly
+ * match the expected result; the expected entry must remain discoverable.
+ */
 using LightingShowcase.Composer;
 using LightingShowcase.Math3D;
 using LightingShowcase.SceneGraph;

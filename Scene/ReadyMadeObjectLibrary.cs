@@ -1,12 +1,62 @@
-// -----------------------------------------------------------------------------
-// File: Scene/ReadyMadeObjectLibrary.cs
-// Purpose: Built-in asset catalog.
-//
-// Provides named factory entries for insertable objects shown in the UI.
-// This comment is intentionally kept in source code so future maintainers can
-// understand the role of this file without opening external documentation.
-// -----------------------------------------------------------------------------
-
+/*
+ * This file belongs to the renderer-neutral scene layer, which is the shared source of truth for geometry,
+ * transforms, grouping, materials, resources, and serialization-facing state. Higher layers manipulate these
+ * abstractions rather than maintaining parallel copies of scene data.
+ *
+ * `ReadyMadeObjectLibrary` provides shared algorithms/registration behavior without per-instance state.
+ *
+ * `ReadyMadeNameForPrimitiveKind` reads y made name for primitive kind from the external stream/document,
+ * advancing through the format in the order required to resolve references and produce valid internal data.
+ *
+ * `RebuildPrimitiveShadowGeometry` reconstructs primitive shadow geometry from authoritative source data after an
+ * edit has invalidated the previous derived form. Rebuilding rather than incrementally patching reduces the
+ * chance of stale topology/cache entries surviving.
+ *
+ * `BuildParameterizedPrimitive` derives parameterized primitive from lower-level input data, resolving
+ * indexing/grouping/derived values once so callers can operate on a coherent higher-level representation.
+ *
+ * `BuildCapsule` derives capsule from lower-level input data, resolving indexing/grouping/derived values once so
+ * callers can operate on a coherent higher-level representation.
+ *
+ * `BuildPyramid` derives pyramid from lower-level input data, resolving indexing/grouping/derived values once so
+ * callers can operate on a coherent higher-level representation.
+ *
+ * `BuildTriangularPrism` derives triangular prism from lower-level input data, resolving
+ * indexing/grouping/derived values once so callers can operate on a coherent higher-level representation.
+ *
+ * `BuildWedge` derives wedge from lower-level input data, resolving indexing/grouping/derived values once so
+ * callers can operate on a coherent higher-level representation.
+ *
+ * `BuildDiningTable` derives dining table from lower-level input data, resolving indexing/grouping/derived values
+ * once so callers can operate on a coherent higher-level representation.
+ *
+ * `BuildCoffeeTable` derives coffee table from lower-level input data, resolving indexing/grouping/derived values
+ * once so callers can operate on a coherent higher-level representation.
+ *
+ * `BuildBookshelf` derives bookshelf from lower-level input data, resolving indexing/grouping/derived values once
+ * so callers can operate on a coherent higher-level representation.
+ *
+ * `AddSphere` adds sphere to the owning collection/model while using this boundary to preserve indexing,
+ * ownership, and derived-state invariants.
+ *
+ * `AddHemisphere` adds hemisphere to the owning collection/model while using this boundary to preserve indexing,
+ * ownership, and derived-state invariants.
+ *
+ * `AddCylinderSides` adds cylinder sides to the owning collection/model while using this boundary to preserve
+ * indexing, ownership, and derived-state invariants.
+ *
+ * `AddCone` adds cone to the owning collection/model while using this boundary to preserve indexing, ownership,
+ * and derived-state invariants.
+ *
+ * `AddTorus` adds torus to the owning collection/model while using this boundary to preserve indexing, ownership,
+ * and derived-state invariants.
+ *
+ * `AddTube` adds tube to the owning collection/model while using this boundary to preserve indexing, ownership,
+ * and derived-state invariants.
+ *
+ * `AddDisk` adds disk to the owning collection/model while using this boundary to preserve indexing, ownership,
+ * and derived-state invariants.
+ */
 using LightingShowcase.Math3D;
 
 namespace LightingShowcase.SceneGraph;
@@ -46,8 +96,6 @@ public static class ReadyMadeObjectLibrary
         "Wall Panel",
         "Pedestal"
     };
-
-    /// <summary>Implements the contains operation for this file's subsystem.</summary>
     public static bool Contains(string name) => Names.Any(n => string.Equals(n, name, StringComparison.OrdinalIgnoreCase));
 
 
@@ -361,20 +409,14 @@ public static class ReadyMadeObjectLibrary
     {
         AddQuad(scene, new Vec3(-0.85, -0.90, 3.10), new Vec3(0.85, -0.90, 3.10), new Vec3(0.85, -0.90, 4.10), new Vec3(-0.85, -0.90, 4.10), m.WhiteWall);
     }
-
-    /// <summary>Implements the build cube operation for this file's subsystem.</summary>
     private static void BuildCube(Scene scene, SceneMaterials m)
     {
         scene.Box(new Vec3(-0.45, -0.95, 3.05), new Vec3(0.45, -0.05, 3.95), m.WhiteWall);
     }
-
-    /// <summary>Implements the build sphere operation for this file's subsystem.</summary>
     private static void BuildSphere(Scene scene, SceneMaterials m, int longitudeSegments, int latitudeSegments)
     {
         AddSphere(scene, new Vec3(0.0, -0.52, 3.55), 0.52, longitudeSegments, latitudeSegments, m.Cushion);
     }
-
-    /// <summary>Implements the build hemisphere operation for this file's subsystem.</summary>
     private static void BuildHemisphere(Scene scene, SceneMaterials m)
     {
         Vec3 center = new(0.0, -0.92, 3.55);
@@ -382,32 +424,22 @@ public static class ReadyMadeObjectLibrary
         AddHemisphere(scene, center, radius, 32, 8, upper: true, m.Cushion);
         AddDisk(scene, center, radius, 32, normalUp: false, m.Cushion);
     }
-
-    /// <summary>Implements the build cylinder operation for this file's subsystem.</summary>
     private static void BuildCylinder(Scene scene, SceneMaterials m)
     {
         AddCylinder(scene, new Vec3(0.0, -1.10, 3.55), 0.45, 1.05, 32, m.Wood);
     }
-
-    /// <summary>Implements the build cone operation for this file's subsystem.</summary>
     private static void BuildCone(Scene scene, SceneMaterials m)
     {
         AddCone(scene, new Vec3(0.0, -1.10, 3.55), 0.55, 1.15, 32, m.RedWall);
     }
-
-    /// <summary>Implements the build torus operation for this file's subsystem.</summary>
     private static void BuildTorus(Scene scene, SceneMaterials m)
     {
         AddTorus(scene, new Vec3(0.0, -0.58, 3.55), 0.48, 0.16, 40, 16, m.BlueWall);
     }
-
-    /// <summary>Implements the build tube operation for this file's subsystem.</summary>
     private static void BuildTube(Scene scene, SceneMaterials m)
     {
         AddTube(scene, new Vec3(0.0, -1.05, 3.55), outerRadius: 0.55, innerRadius: 0.32, height: 1.05, sides: 36, m.Wood);
     }
-
-    /// <summary>Implements the build capsule operation for this file's subsystem.</summary>
     private static void BuildCapsule(Scene scene, SceneMaterials m)
     {
         Vec3 lowerCenter = new(0.0, -0.95, 3.55);
@@ -417,8 +449,6 @@ public static class ReadyMadeObjectLibrary
         AddHemisphere(scene, upperCenter, radius, 28, 8, upper: true, m.Cushion);
         AddHemisphere(scene, lowerCenter, radius, 28, 8, upper: false, m.Cushion);
     }
-
-    /// <summary>Implements the build pyramid operation for this file's subsystem.</summary>
     private static void BuildPyramid(Scene scene, SceneMaterials m)
     {
         Vec3 a = new(-0.55, -1.05, 3.05);
@@ -432,8 +462,6 @@ public static class ReadyMadeObjectLibrary
         scene.AddTriangle(c, apex, d, m.RedWall);
         scene.AddTriangle(d, apex, a, m.RedWall);
     }
-
-    /// <summary>Implements the build triangular prism operation for this file's subsystem.</summary>
     private static void BuildTriangularPrism(Scene scene, SceneMaterials m)
     {
         Vec3 a0 = new(-0.55, -1.05, 3.15);
@@ -448,8 +476,6 @@ public static class ReadyMadeObjectLibrary
         AddQuad(scene, b1, b0, c0, c1, m.BlueWall);
         AddQuad(scene, a0, b0, b1, a1, m.BlueWall);
     }
-
-    /// <summary>Implements the build wedge operation for this file's subsystem.</summary>
     private static void BuildWedge(Scene scene, SceneMaterials m)
     {
         Vec3 a = new(-0.60, -1.05, 3.10);
@@ -477,8 +503,6 @@ public static class ReadyMadeObjectLibrary
         BuildLegGroup(scene, m, "Back left leg", -0.90, 3.92);
         BuildLegGroup(scene, m, "Back right leg", 0.90, 3.92);
     }
-
-    /// <summary>Implements the build coffee table operation for this file's subsystem.</summary>
     private static void BuildCoffeeTable(Scene scene, SceneMaterials m)
     {
         scene.BeginGroup("Coffee table top");
@@ -490,8 +514,6 @@ public static class ReadyMadeObjectLibrary
         BuildLegGroup(scene, m, "Back left leg", -0.62, 3.75, -1.25, -0.80);
         BuildLegGroup(scene, m, "Back right leg", 0.62, 3.75, -1.25, -0.80);
     }
-
-    /// <summary>Implements the build chair operation for this file's subsystem.</summary>
     private static void BuildChair(Scene scene, SceneMaterials m)
     {
         scene.Box(new Vec3(-0.42, -0.72, 3.20), new Vec3(0.42, -0.52, 3.72), m.Wood);
@@ -499,8 +521,6 @@ public static class ReadyMadeObjectLibrary
         Leg(scene, m, -0.32, 3.28, -1.25, -0.72); Leg(scene, m, 0.32, 3.28, -1.25, -0.72);
         Leg(scene, m, -0.32, 3.62, -1.25, -0.72); Leg(scene, m, 0.32, 3.62, -1.25, -0.72);
     }
-
-    /// <summary>Implements the build sofa operation for this file's subsystem.</summary>
     private static void BuildSofa(Scene scene, SceneMaterials m)
     {
         scene.Box(new Vec3(-1.35, -1.05, 3.65), new Vec3(1.35, -0.62, 4.35), m.Sofa);
@@ -510,8 +530,6 @@ public static class ReadyMadeObjectLibrary
         scene.Box(new Vec3(-0.95, -0.58, 3.45), new Vec3(-0.15, -0.18, 3.65), m.Cushion);
         scene.Box(new Vec3(0.15, -0.58, 3.45), new Vec3(0.95, -0.18, 3.65), m.Cushion);
     }
-
-    /// <summary>Implements the build bed operation for this file's subsystem.</summary>
     private static void BuildBed(Scene scene, SceneMaterials m)
     {
         scene.Box(new Vec3(-1.25, -1.10, 3.00), new Vec3(1.25, -0.78, 4.85), m.Wood);
@@ -520,8 +538,6 @@ public static class ReadyMadeObjectLibrary
         scene.Box(new Vec3(-0.95, -0.42, 3.18), new Vec3(-0.10, -0.20, 3.70), m.WhiteWall);
         scene.Box(new Vec3(0.10, -0.42, 3.18), new Vec3(0.95, -0.20, 3.70), m.WhiteWall);
     }
-
-    /// <summary>Implements the build bookshelf operation for this file's subsystem.</summary>
     private static void BuildBookshelf(Scene scene, SceneMaterials m)
     {
         scene.Box(new Vec3(-0.90, -1.30, 3.15), new Vec3(0.90, 0.65, 3.35), m.Wood);
@@ -535,16 +551,12 @@ public static class ReadyMadeObjectLibrary
             scene.Box(new Vec3(0.12, y + 0.09, 3.01), new Vec3(0.52, y + 0.35, 3.20), m.Cushion);
         }
     }
-
-    /// <summary>Implements the build storage cabinet operation for this file's subsystem.</summary>
     private static void BuildStorageCabinet(Scene scene, SceneMaterials m)
     {
         scene.Box(new Vec3(-0.95, -1.20, 3.15), new Vec3(0.95, -0.15, 3.75), m.Wood);
         scene.Box(new Vec3(-0.88, -1.12, 3.10), new Vec3(-0.03, -0.22, 3.12), m.DarkWood);
         scene.Box(new Vec3(0.03, -1.12, 3.10), new Vec3(0.88, -0.22, 3.12), m.DarkWood);
     }
-
-    /// <summary>Implements the build screen operation for this file's subsystem.</summary>
     private static void BuildScreen(Scene scene, SceneMaterials m)
     {
         scene.Box(new Vec3(-1.05, -0.15, 3.45), new Vec3(1.05, 1.05, 3.52), m.ScreenFrame);
@@ -552,44 +564,32 @@ public static class ReadyMadeObjectLibrary
         scene.Box(new Vec3(-0.20, -0.85, 3.72), new Vec3(0.20, -0.15, 3.92), m.DarkWood);
         scene.Box(new Vec3(-0.70, -0.90, 3.55), new Vec3(0.70, -0.75, 4.10), m.DarkWood);
     }
-
-    /// <summary>Implements the build floor lamp operation for this file's subsystem.</summary>
     private static void BuildFloorLamp(Scene scene, SceneMaterials m)
     {
         scene.Box(new Vec3(-0.10, -1.35, 3.45), new Vec3(0.10, 0.62, 3.65), m.DarkWood);
         scene.Box(new Vec3(-0.42, 0.62, 3.18), new Vec3(0.42, 1.05, 3.92), m.LampGlow);
         scene.Box(new Vec3(-0.42, -1.45, 3.18), new Vec3(0.42, -1.35, 3.92), m.DarkWood);
     }
-
-    /// <summary>Implements the build plant operation for this file's subsystem.</summary>
     private static void BuildPlant(Scene scene, SceneMaterials m)
     {
         scene.Box(new Vec3(-0.32, -1.35, 3.20), new Vec3(0.32, -0.55, 3.82), m.Pot);
         scene.Box(new Vec3(-0.45, -0.55, 3.08), new Vec3(0.45, -0.05, 3.94), m.Plant);
         scene.Box(new Vec3(-0.22, -0.05, 3.28), new Vec3(0.22, 0.55, 3.75), m.Plant);
     }
-
-    /// <summary>Implements the build rug operation for this file's subsystem.</summary>
     private static void BuildRug(Scene scene, SceneMaterials m)
     {
         scene.Box(new Vec3(-1.35, -1.48, 3.05), new Vec3(1.35, -1.40, 4.65), m.Rug);
     }
-
-    /// <summary>Implements the build wall panel operation for this file's subsystem.</summary>
     private static void BuildWallPanel(Scene scene, SceneMaterials m)
     {
         scene.Box(new Vec3(-1.05, -0.55, 3.90), new Vec3(1.05, 0.90, 3.98), m.WhiteWall);
         scene.Box(new Vec3(-0.95, -0.45, 3.86), new Vec3(0.95, 0.80, 3.91), m.ScreenFrame);
     }
-
-    /// <summary>Implements the build pedestal operation for this file's subsystem.</summary>
     private static void BuildPedestal(Scene scene, SceneMaterials m)
     {
         scene.Box(new Vec3(-0.42, -1.35, 3.20), new Vec3(0.42, -0.10, 4.02), m.Ceiling);
         scene.Box(new Vec3(-0.55, -0.10, 3.08), new Vec3(0.55, 0.08, 4.14), m.WhiteWall);
     }
-
-    /// <summary>Implements the leg operation for this file's subsystem.</summary>
     private static void Leg(Scene scene, SceneMaterials m, double x, double z, double y0 = -1.25, double y1 = -0.05)
     {
         scene.Box(new Vec3(x - 0.06, y0, z - 0.06), new Vec3(x + 0.06, y1, z + 0.06), m.DarkWood);
@@ -653,8 +653,6 @@ public static class ReadyMadeObjectLibrary
             }
         }
     }
-
-    /// <summary>Implements the sphere point operation for this file's subsystem.</summary>
     private static Vec3 SpherePoint(Vec3 center, double radius, double theta, double phi)
     {
         double sinTheta = Math.Sin(theta);
@@ -718,8 +716,6 @@ public static class ReadyMadeObjectLibrary
             }
         }
     }
-
-    /// <summary>Implements the torus point operation for this file's subsystem.</summary>
     private static Vec3 TorusPoint(Vec3 center, double majorRadius, double tubeRadius, double u, double v)
     {
         double radial = majorRadius + tubeRadius * Math.Cos(v);

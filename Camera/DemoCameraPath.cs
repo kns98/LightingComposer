@@ -1,12 +1,23 @@
-// -----------------------------------------------------------------------------
-// File: Camera/DemoCameraPath.cs
-// Purpose: Demo camera animation.
-//
-// Stores camera keyframes, interpolates between them, and provides an editable camera path for playback.
-// This comment is intentionally kept in source code so future maintainers can
-// understand the role of this file without opening external documentation.
-// -----------------------------------------------------------------------------
-
+/*
+ * Camera state is kept independent of Avalonia and renderer-specific code. That lets interactive navigation,
+ * scripted paths, tests, and multiple render backends use the same definitions for position, orientation,
+ * projection, and interpolation.
+ *
+ * `DemoCameraPath` represents an ordered path/keyframe sequence and the interpolation rules needed to sample it
+ * at arbitrary times/positions.
+ *
+ * `Keys` is derived rather than separately stored: it evaluates `keys`. Keeping the value computed from its
+ * source fields prevents a second cached flag/value from drifting out of sync.
+ *
+ * `UpdateKey` updates key from the newest input while preserving the identities/metadata/caches that remain valid
+ * and invalidating only what the change makes stale.
+ *
+ * `AddKey` adds key to the owning collection/model while using this boundary to preserve indexing, ownership, and
+ * derived-state invariants.
+ *
+ * `RemoveKey` removes key from the owning structure and updates the relationships/derived state that would
+ * otherwise still reference it.
+ */
 using LightingShowcase.Math3D;
 
 namespace LightingShowcase.CameraSystem;
@@ -28,8 +39,6 @@ public sealed class DemoCameraPath
     };
 
     public IReadOnlyList<CameraKey> Keys => keys;
-
-    /// <summary>Implements the sample operation for this file's subsystem.</summary>
     public CameraSample Sample(double normalizedTime)
     {
         if (keys.Count == 0)
@@ -68,8 +77,6 @@ public sealed class DemoCameraPath
         SortKeys();
         return keys.FindIndex(k => NearlyEqual(k.Time, ClampTime(key.Time)) && SameVector(k.Position, key.Position) && SameVector(k.Target, key.Target));
     }
-
-    /// <summary>Implements the remove key operation for this file's subsystem.</summary>
     public void RemoveKey(int index)
     {
         if (index < 0 || index >= keys.Count || keys.Count <= 1)
@@ -77,12 +84,9 @@ public sealed class DemoCameraPath
         keys.RemoveAt(index);
         SortKeys();
     }
-
-    /// <summary>Implements the sort keys operation for this file's subsystem.</summary>
     private void SortKeys() => keys.Sort((a, b) => a.Time.CompareTo(b.Time));
     private static CameraKey ClampKey(CameraKey key) => new(ClampTime(key.Time), key.Position, key.Target);
     private static double ClampTime(double v) => System.Math.Max(0.0, System.Math.Min(1.0, v));
-    /// <summary>Implements the smooth operation for this file's subsystem.</summary>
     private static double Smooth(double t) => t * t * (3.0 - 2.0 * t);
     private static bool NearlyEqual(double a, double b) => System.Math.Abs(a - b) < 0.000001;
     private static bool SameVector(Vec3 a, Vec3 b) => (a - b).Length() < 0.000001;

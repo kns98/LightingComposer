@@ -1,14 +1,50 @@
-// -----------------------------------------------------------------------------
-// File: Scene/ThreeDsSceneSaver.cs
-// Purpose: 3DS export.
-//
-// Writes a broadly compatible legacy Autodesk 3DS mesh file. The 3DS format is
-// limited to 65,535 vertices/faces per mesh, so large scenes are automatically
-// split into multiple object chunks. Geometry and UVs are baked to world space;
-// lights, hierarchy, and advanced material properties are not represented by
-// this interchange format.
-// -----------------------------------------------------------------------------
-
+/*
+ * Exporting THREEDS walks the internal scene and rebuilds the format’s object/index/material/resource structures.
+ * The implementation must keep indices and references self-consistent and must make deliberate choices about
+ * features that do not map one-to-one between Composer and THREEDS.
+ *
+ * `ThreeDsSceneSaver` owns translation from Composer scene state into its external file format, including the
+ * indexing/resource relationships required for another program to reconstruct the exported model.
+ *
+ * The `ExportMaterial` constructor captures `name`, `material`. Those are the dependencies/initial values the
+ * instance needs for its lifetime, so callbacks and later operations use the same objects/configuration rather
+ * than looking them up globally.
+ *
+ * The `ExportTriangle` constructor captures `triangle`, `materialName`. Those are the dependencies/initial values
+ * the instance needs for its lifetime, so callbacks and later operations use the same objects/configuration
+ * rather than looking them up globally.
+ *
+ * `BuildMaterialChunk` derives material chunk from lower-level input data, resolving indexing/grouping/derived
+ * values once so callers can operate on a coherent higher-level representation.
+ *
+ * `BuildObjectChunk` derives object chunk from lower-level input data, resolving indexing/grouping/derived values
+ * once so callers can operate on a coherent higher-level representation.
+ *
+ * `BuildVertexListChunk` derives vertex list chunk from lower-level input data, resolving
+ * indexing/grouping/derived values once so callers can operate on a coherent higher-level representation.
+ *
+ * `BuildMappingCoordsChunk` derives mapping coords chunk from lower-level input data, resolving
+ * indexing/grouping/derived values once so callers can operate on a coherent higher-level representation.
+ *
+ * `BuildFaceListChunk` derives face list chunk from lower-level input data, resolving indexing/grouping/derived
+ * values once so callers can operate on a coherent higher-level representation.
+ *
+ * `BuildChunk` derives chunk from lower-level input data, resolving indexing/grouping/derived values once so
+ * callers can operate on a coherent higher-level representation. Binary field order is explicit; changing it
+ * requires the corresponding reader/writer to remain symmetrical.
+ *
+ * `WriteBytes` writes bytes to the external stream/document in the format’s required order, using stable
+ * indices/references so another reader can reconstruct the same relationships.
+ *
+ * `WriteCString` writes c string to the external stream/document in the format’s required order, using stable
+ * indices/references so another reader can reconstruct the same relationships.
+ *
+ * `WriteFloatVec3` writes float vec3 to the external stream/document in the format’s required order, using stable
+ * indices/references so another reader can reconstruct the same relationships.
+ *
+ * `WriteFloatVec2` writes float vec2 to the external stream/document in the format’s required order, using stable
+ * indices/references so another reader can reconstruct the same relationships.
+ */
 using System.IO;
 using System.Text;
 using LightingShowcase.Math3D;

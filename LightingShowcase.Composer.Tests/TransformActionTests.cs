@@ -1,3 +1,44 @@
+/*
+ * The tests in this file are executable statements of editor behavior. They intentionally use real scene/session
+ * objects and inspect externally meaningful results—geometry, hierarchy, material state, serialized output, cache
+ * stamps, or timing—so refactors can change implementation details without weakening the contract being tested.
+ *
+ * `Apply_button_bakes_transform_into_authoritative_local_geometry` verifies that apply button bakes transform
+ * into authoritative local geometry. It uses a real `ComposerSceneSession`, so registration, locking, history,
+ * and scene mutation follow production paths rather than mocks. Geometry hashes are compared so the test observes
+ * actual world-space mesh changes/restoration instead of only transform fields. The assertions establish that the
+ * operation must explicitly report success; the resulting value/state must exactly match the expected result; the
+ * operation must produce an observable change. Representative cases include `2.5`, `-1.25`, `3`, `0`, `90`, `2`,
+ * `1.5`.
+ *
+ * `Baking_converts_parametric_metadata_to_mesh_and_undo_state_restores_it` verifies that baking converts
+ * parametric metadata to mesh and undo state restores it. The assertions establish that the absent case must
+ * remain absent; the resulting value/state must exactly match the expected result. Representative cases include
+ * `Parametric box`, `cuboid`, `Box`, `width`.
+ *
+ * `Undo_and_redo_restore_exact_baked_geometry_hashes` verifies that undo and redo restore exact baked geometry
+ * hashes. It uses a real `ComposerSceneSession`, so registration, locking, history, and scene mutation follow
+ * production paths rather than mocks. Undo is exercised to prove the previous state was actually captured, not
+ * merely that the forward edit looked correct. Redo then proves the stored “after” state can be reapplied without
+ * replaying the UI gesture. Geometry hashes are compared so the test observes actual world-space mesh
+ * changes/restoration instead of only transform fields. The assertions establish that the operation must
+ * explicitly report success; the resulting value/state must exactly match the expected result; the operation must
+ * produce an observable change. Representative cases include `4`, `2`, `-3`, `15`, `25`, `35`, `1.2`.
+ *
+ * `Blank_transform_fields_mean_identity_after_the_editor_clears_them` verifies that blank transform fields mean
+ * identity after the editor clears them. Representative cases include `, null, `.
+ *
+ * `Invalid_position_text_is_rejected_before_model_mutation` verifies that invalid position text is rejected
+ * before model mutation. The assertions establish that invalid input must fail through the specified exception
+ * contract. Representative cases include `0`, `1`.
+ *
+ * `Non_positive_scale_is_rejected_before_model_mutation` verifies that non positive scale is rejected before
+ * model mutation. The assertions establish that invalid input must fail through the specified exception contract.
+ * Representative cases include `0`.
+ *
+ * `RequireEvidence` resolves evidence but treats absence as a programming/state error. This is used after
+ * preconditions should already guarantee the object exists, making broken invariants fail close to their source.
+ */
 using LightingShowcase.Composer;
 using LightingShowcase.Math3D;
 using LightingShowcase.SceneGraph;

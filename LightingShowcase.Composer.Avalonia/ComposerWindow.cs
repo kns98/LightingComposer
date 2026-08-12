@@ -1,3 +1,98 @@
+/*
+ * This UI code turns editor state into controls and converts user edits back into validated domain operations.
+ * Dialog/window state is intentionally temporary: values should only become authoritative scene changes through
+ * the session/controller path, which preserves cancel, undo, and renderer invalidation behavior.
+ *
+ * `ComposerWindow` owns temporary Avalonia presentation/edit state. Values become durable only when accepted and
+ * routed through the relevant session/controller operation, preserving validation and cancellation semantics.
+ *
+ * `RendererChoice` is an immutable packet of related values. Record value semantics make it suitable for
+ * snapshots, options, commands, or parsed intermediate data because callers can copy/compare it without sharing
+ * mutable state. Its constructor values (`Kind`, `Label`, `Description`) travel together because consumers need a
+ * consistent snapshot rather than reading those values independently from mutable objects.
+ *
+ * `GizmoModeChoice` is an immutable packet of related values. Record value semantics make it suitable for
+ * snapshots, options, commands, or parsed intermediate data because callers can copy/compare it without sharing
+ * mutable state. Its constructor values (`Mode`, `Label`) travel together because consumers need a consistent
+ * snapshot rather than reading those values independently from mutable objects.
+ *
+ * `SelectionModeChoice` is an immutable packet of related values. Record value semantics make it suitable for
+ * snapshots, options, commands, or parsed intermediate data because callers can copy/compare it without sharing
+ * mutable state. Its constructor values (`Mode`, `Label`) travel together because consumers need a consistent
+ * snapshot rather than reading those values independently from mutable objects.
+ *
+ * `MoveAxisChoice` is an immutable packet of related values. Record value semantics make it suitable for
+ * snapshots, options, commands, or parsed intermediate data because callers can copy/compare it without sharing
+ * mutable state. Its constructor values (`Axis`, `Label`) travel together because consumers need a consistent
+ * snapshot rather than reading those values independently from mutable objects.
+ *
+ * `index` is derived rather than separately stored: it evaluates `{ primitiveBox.SelectedIndex = index`. Keeping
+ * the value computed from its source fields prevents a second cached flag/value from drifting out of sync.
+ *
+ * `SelectedRenderer` is derived rather than separately stored: it evaluates `rendererBox.SelectedItem as
+ * RendererChoice ?? rendererChoices[0]`. Keeping the value computed from its source fields prevents a second
+ * cached flag/value from drifting out of sync.
+ *
+ * `SelectedGizmoMode` is derived rather than separately stored: it evaluates `(gizmoModeBox.SelectedItem as
+ * GizmoModeChoice)?.Mode ?? ComposerGizmoMode.Translate`. Keeping the value computed from its source fields
+ * prevents a second cached flag/value from drifting out of sync.
+ *
+ * `SelectedSelectionMode` is derived rather than separately stored: it evaluates `(selectionModeBox.SelectedItem
+ * as SelectionModeChoice)?.Mode ?? ComposerSelectionMode.Object`. Keeping the value computed from its source
+ * fields prevents a second cached flag/value from drifting out of sync.
+ *
+ * `SelectedMoveAxisLock` is derived rather than separately stored: it evaluates `(moveAxisBox.SelectedItem as
+ * MoveAxisChoice)?.Axis ?? ComposerGizmoAxis.None`. Keeping the value computed from its source fields prevents a
+ * second cached flag/value from drifting out of sync.
+ *
+ * `ToString` returns the human-facing label/name for this value so Avalonia controls display meaningful text
+ * instead of the generated record/type representation.
+ *
+ * `ToString` returns the human-facing label/name for this value so Avalonia controls display meaningful text
+ * instead of the generated record/type representation.
+ *
+ * `ToString` returns the human-facing label/name for this value so Avalonia controls display meaningful text
+ * instead of the generated record/type representation.
+ *
+ * `ToString` returns the human-facing label/name for this value so Avalonia controls display meaningful text
+ * instead of the generated record/type representation.
+ *
+ * The `ComposerWindow` constructor captures `startupArguments`. Those are the dependencies/initial values the
+ * instance needs for its lifetime, so callbacks and later operations use the same objects/configuration rather
+ * than looking them up globally.
+ *
+ * `WireEvents` connects the window’s controls and pointer/keyboard lifecycle events to their handlers after
+ * construction. Centralizing the wiring makes it easier to see which user actions can trigger editor commands and
+ * avoids duplicate subscriptions.
+ *
+ * `OpenRenderSettingsAsync` opens render settings async using the current selection/session as its initial state.
+ * The window/dialog is a temporary editor; durable changes still flow through the session operation it invokes.
+ *
+ * `UpdateMeshHover` updates mesh hover from the newest input while preserving the identities/metadata/caches that
+ * remain valid and invalidating only what the change makes stale.
+ *
+ * `ClearMeshHoverOverlay` removes/resets mesh hover overlay to its empty/default state. This is an explicit state
+ * transition rather than leaving old values around for later code to accidentally reuse.
+ *
+ * `RunFaceOperationAsync` executes face operation async as one coordinated action and centralizes success/failure
+ * handling so callers do not each implement inconsistent exception/UI behavior. Potentially blocking/CPU work
+ * runs on a worker task rather than Avalonia’s UI thread.
+ *
+ * `OpenPrimitiveParameters` opens primitive parameters using the current selection/session as its initial state.
+ * The window/dialog is a temporary editor; durable changes still flow through the session operation it invokes.
+ *
+ * `OpenMaterialEditor` opens material editor using the current selection/session as its initial state. The
+ * window/dialog is a temporary editor; durable changes still flow through the session operation it invokes.
+ *
+ * `SelectGizmoMode` changes the editor’s current gizmo mode choice and synchronizes the controls/overlay behavior
+ * that depend on that mode.
+ *
+ * `UpdateHistoryButtons` updates history buttons from the newest input while preserving the
+ * identities/metadata/caches that remain valid and invalidating only what the change makes stale.
+ *
+ * `SetBusy` sets busy through the owning abstraction instead of exposing a mutable field. That gives the method
+ * one place to validate the value and perform any history/cache/UI side effects required by the change.
+ */
 using System.Diagnostics;
 using Avalonia;
 using Avalonia.Controls;

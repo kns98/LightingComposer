@@ -1,3 +1,110 @@
+/*
+ * Mesh editing first converts triangle soup into editor topology—welded vertices, unique edges, and logical
+ * faces—because selection and face operations need stable identities that raw triangle indices alone do not
+ * provide. The topology builder also preserves validated face groupings back onto the scene object so subsequent
+ * picks/edit operations reuse the same face interpretation.
+ *
+ * `ComposerSelectionMode` makes a closed set of choices compiler-visible instead of passing loosely related
+ * integers or strings. Code that switches over `Object`, `Vertex`, `Edge`, `Face` is where the behavioral meaning
+ * of each choice is implemented.
+ *
+ * `ComposerInsetProfile` makes a closed set of choices compiler-visible instead of passing loosely related
+ * integers or strings. Code that switches over `then` is where the behavioral meaning of each choice is
+ * implemented.
+ *
+ * `ComposerMeshSelection` is an immutable packet of related values. Record value semantics make it suitable for
+ * snapshots, options, commands, or parsed intermediate data because callers can copy/compare it without sharing
+ * mutable state. Its constructor values (`GroupId`, `Mode`, `ElementIndex`) travel together because consumers
+ * need a consistent snapshot rather than reading those values independently from mutable objects.
+ *
+ * `ComposerMeshPickResult` is an immutable packet of related values. Record value semantics make it suitable for
+ * snapshots, options, commands, or parsed intermediate data because callers can copy/compare it without sharing
+ * mutable state. Its constructor values (`GroupId`, `Mode`, `ElementIndex`, `Label`) travel together because
+ * consumers need a consistent snapshot rather than reading those values independently from mutable objects.
+ *
+ * `ComposerMeshEdge` is an immutable packet of related values. Record value semantics make it suitable for
+ * snapshots, options, commands, or parsed intermediate data because callers can copy/compare it without sharing
+ * mutable state. Its constructor values (`A`, `B`) travel together because consumers need a consistent snapshot
+ * rather than reading those values independently from mutable objects.
+ *
+ * `ComposerMeshFace` is an immutable packet of related values. Record value semantics make it suitable for
+ * snapshots, options, commands, or parsed intermediate data because callers can copy/compare it without sharing
+ * mutable state. Its constructor values (`Index`, `TriangleIndices`, `VertexIndices`, `BoundaryLoop`) travel
+ * together because consumers need a consistent snapshot rather than reading those values independently from
+ * mutable objects.
+ *
+ * `ComposerMeshTriangleMove` is an immutable packet of related values. Record value semantics make it suitable
+ * for snapshots, options, commands, or parsed intermediate data because callers can copy/compare it without
+ * sharing mutable state. Its constructor values (`TriangleIndex`, `CornerMask`) travel together because consumers
+ * need a consistent snapshot rather than reading those values independently from mutable objects.
+ *
+ * `ComposerMeshTopologyEditResult` is an immutable packet of related values. Record value semantics make it
+ * suitable for snapshots, options, commands, or parsed intermediate data because callers can copy/compare it
+ * without sharing mutable state. Its constructor values (`Triangles`, `LogicalFaceTriangleGroups`) travel
+ * together because consumers need a consistent snapshot rather than reading those values independently from
+ * mutable objects.
+ *
+ * `ComposerWorldEdge` is an immutable packet of related values. Record value semantics make it suitable for
+ * snapshots, options, commands, or parsed intermediate data because callers can copy/compare it without sharing
+ * mutable state. Its constructor values (`A`, `B`) travel together because consumers need a consistent snapshot
+ * rather than reading those values independently from mutable objects.
+ *
+ * `ComposerMeshSelectionVisual` is an immutable packet of related values. Record value semantics make it suitable
+ * for snapshots, options, commands, or parsed intermediate data because callers can copy/compare it without
+ * sharing mutable state. Its constructor values (`Mode`, `Points`, `Edges`, `Faces`) travel together because
+ * consumers need a consistent snapshot rather than reading those values independently from mutable objects.
+ *
+ * `TriangleCount` is derived rather than separately stored: it evaluates `triangleVertexIds.GetLength(0)`.
+ * Keeping the value computed from its source fields prevents a second cached flag/value from drifting out of
+ * sync.
+ *
+ * `Description` is derived rather than separately stored: it evaluates `description`. Keeping the value computed
+ * from its source fields prevents a second cached flag/value from drifting out of sync.
+ *
+ * `UndoSelectionId` is derived rather than separately stored: it evaluates `groupId`. Keeping the value computed
+ * from its source fields prevents a second cached flag/value from drifting out of sync.
+ *
+ * `RedoSelectionId` is derived rather than separately stored: it evaluates `groupId`. Keeping the value computed
+ * from its source fields prevents a second cached flag/value from drifting out of sync.
+ *
+ * `GetVertex` reads vertex from the authoritative model and returns a value/snapshot suitable for callers,
+ * avoiding direct access to mutable internal storage.
+ *
+ * `FindEdgeIndex` searches for edge index and returns the matching object/value rather than assuming it exists.
+ * Callers can therefore distinguish a missing match from the found instance.
+ *
+ * `CreateMovedTriangles` constructs moved triangles in the normalized form expected downstream, so allocation
+ * plus initialization of its invariants happen together.
+ *
+ * `CreateExtrudedFaceTriangles` constructs extruded face triangles in the normalized form expected downstream, so
+ * allocation plus initialization of its invariants happen together.
+ *
+ * `CreateExtrudedFaceEdit` constructs extruded face edit in the normalized form expected downstream, so
+ * allocation plus initialization of its invariants happen together.
+ *
+ * `CreateInsetFaceTriangles` constructs inset face triangles in the normalized form expected downstream, so
+ * allocation plus initialization of its invariants happen together.
+ *
+ * `CreateInsetFaceEdit` constructs inset face edit in the normalized form expected downstream, so allocation plus
+ * initialization of its invariants happen together.
+ *
+ * `ResolveExteriorNormal` turns exterior normal into the canonical value/path/object the rest of the code
+ * expects, handling aliases/relative forms/registry lookup at one boundary instead of throughout the caller.
+ *
+ * `BuildTriangleEdgeMap` derives triangle edge map from lower-level input data, resolving
+ * indexing/grouping/derived values once so callers can operate on a coherent higher-level representation.
+ *
+ * `IsInteriorFanCenter` tests whether interior fan center is true for the supplied/current value. Keeping the
+ * predicate here ensures every caller uses the same definition instead of duplicating a slightly different
+ * condition.
+ *
+ * `ComputeTolerance` calculates tolerance deterministically from its inputs; callers can use the result as
+ * derived data/cache evidence without mutating the underlying scene.
+ *
+ * The `EdgeKey` constructor captures `a`, `b`. Those are the dependencies/initial values the instance needs for
+ * its lifetime, so callbacks and later operations use the same objects/configuration rather than looking them up
+ * globally.
+ */
 using LightingShowcase.Math3D;
 using LightingShowcase.SceneGraph;
 

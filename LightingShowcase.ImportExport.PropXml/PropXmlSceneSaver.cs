@@ -1,12 +1,14 @@
-// -----------------------------------------------------------------------------
-// File: Scene/PropXmlSceneSaver.cs
-// Purpose: Native XML scene export.
-//
-// Writes the project-specific .prop.xml format so scenes can be reopened with editor state preserved.
-// This comment is intentionally kept in source code so future maintainers can
-// understand the role of this file without opening external documentation.
-// -----------------------------------------------------------------------------
-
+/*
+ * Exporting PROPXML walks the internal scene and rebuilds the format’s object/index/material/resource structures.
+ * The implementation must keep indices and references self-consistent and must make deliberate choices about
+ * features that do not map one-to-one between Composer and PROPXML.
+ *
+ * `PropXmlSceneSaver` owns translation from Composer scene state into its external file format, including the
+ * indexing/resource relationships required for another program to reconstruct the exported model.
+ *
+ * `Format` formats a numeric editor value using a stable concise representation so refreshing a text box does not
+ * introduce excessive decimal noise.
+ */
 using System.IO;
 using System.Globalization;
 using System.Xml.Linq;
@@ -34,8 +36,6 @@ public static class PropXmlSceneSaver
         Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(filePath)) ?? Environment.CurrentDirectory);
         document.Save(filePath);
     }
-
-    /// <summary>Implements the to light element operation for this file's subsystem.</summary>
     private static XElement ToLightElement(SceneLight light) =>
         new("Light",
             new XAttribute("id", light.Id),
@@ -48,8 +48,6 @@ public static class PropXmlSceneSaver
             new XAttribute("range", Format(light.Range)),
             new XAttribute("innerConeAngle", Format(light.InnerConeAngle)),
             new XAttribute("outerConeAngle", Format(light.OuterConeAngle)));
-
-    /// <summary>Implements the to object element operation for this file's subsystem.</summary>
     private static XElement ToObjectElement(SceneObjectGroup group, Func<TextureMap, string?>? texturePathResolver) =>
         new("Object",
             new XAttribute("id", group.Id),
@@ -70,8 +68,6 @@ public static class PropXmlSceneSaver
                         new XAttribute("value", Format(p.Value))))),
             new XElement("Triangles", group.LocalTriangles.Select(triangle => ToTriangleElement(triangle, texturePathResolver))),
             group.Children.Count == 0 ? null : new XElement("Children", group.Children.Select(child => ToObjectElement(child, texturePathResolver))));
-
-    /// <summary>Implements the to triangle element operation for this file's subsystem.</summary>
     private static XElement ToTriangleElement(Triangle triangle, Func<TextureMap, string?>? texturePathResolver) =>
         new("Triangle",
             VecAttributes("a", triangle.A),
@@ -81,8 +77,6 @@ public static class PropXmlSceneSaver
             Vec2Attributes("uvB", triangle.UvB),
             Vec2Attributes("uvC", triangle.UvC),
             new XElement("Material", MaterialAttributes(triangle.Material, texturePathResolver)));
-
-    /// <summary>Implements the vec attributes operation for this file's subsystem.</summary>
     internal static object[] VecAttributes(string prefix, Vec3 value) => new object[]
     {
         new XAttribute(prefix + "X", Format(value.X)),
@@ -97,8 +91,6 @@ public static class PropXmlSceneSaver
         new XAttribute(prefix + "U", Format(value.U)),
         new XAttribute(prefix + "V", Format(value.V))
     };
-
-    /// <summary>Implements the material attributes operation for this file's subsystem.</summary>
     internal static object[] MaterialAttributes(Material material, Func<TextureMap, string?>? texturePathResolver = null)
     {
         List<object> attributes = new()
@@ -126,7 +118,5 @@ public static class PropXmlSceneSaver
 
         return attributes.ToArray();
     }
-
-    /// <summary>Implements the format operation for this file's subsystem.</summary>
     internal static string Format(double value) => value.ToString("G17", CultureInfo.InvariantCulture);
 }

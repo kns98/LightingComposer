@@ -1,8 +1,11 @@
-// -----------------------------------------------------------------------------
-// File: Scene/AssetRegistry.cs
-// Purpose: Deduplicated asset table derived from the editable scene.
-// -----------------------------------------------------------------------------
-
+/*
+ * This is an extensibility seam. Callers discover capabilities through a registry/interface instead of
+ * referencing every concrete format or object-library assembly, allowing plugins to be added while the core
+ * scene/editor code remains unchanged.
+ *
+ * `AssetRegistry` is a discovery table that maps stable names/capabilities to registered implementations,
+ * removing the need for central switch statements that know every plugin or primitive at compile time.
+ */
 namespace LightingShowcase.SceneGraph;
 
 /// <summary>Renderer/save-load friendly registry of materials and textures referenced by scene geometry.</summary>

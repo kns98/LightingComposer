@@ -1,11 +1,23 @@
-// -----------------------------------------------------------------------------
-// File: Scene/SceneFormatPlugin.cs
-// Purpose: Scene import/export plugin contracts.
-//
-// All model importers and exporters are reached through this interface so file
-// formats can live in separate DLLs instead of being hard-wired into the editor UI.
-// -----------------------------------------------------------------------------
-
+/*
+ * This is an extensibility seam. Callers discover capabilities through a registry/interface instead of
+ * referencing every concrete format or object-library assembly, allowing plugins to be added while the core
+ * scene/editor code remains unchanged.
+ *
+ * `SceneLoadOptions` collects one operation/backend’s tunable choices and provides a single validation/defaulting
+ * boundary before those choices affect execution.
+ *
+ * `SceneSaveOptions` collects one operation/backend’s tunable choices and provides a single validation/defaulting
+ * boundary before those choices affect execution.
+ *
+ * `ISceneFormatPlugin` defines a capability boundary: callers depend on the contract rather than the concrete
+ * plugin/backend implementing it. New implementations can therefore participate without changing the core caller.
+ *
+ * `CanImport` is a read-only predicate over the object’s existing state; it exists so callers share one exact
+ * condition when enabling commands or deciding whether an operation is applicable.
+ *
+ * `CanExport` is a read-only predicate over the object’s existing state; it exists so callers share one exact
+ * condition when enabling commands or deciding whether an operation is applicable.
+ */
 using LightingShowcase.Math3D;
 
 namespace LightingShowcase.SceneGraph;

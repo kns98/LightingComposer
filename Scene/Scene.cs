@@ -1,12 +1,76 @@
-// -----------------------------------------------------------------------------
-// File: Scene/Scene.cs
-// Purpose: Scene root.
-//
-// Owns all object groups and lights, rebuilds acceleration structures, and exposes add/remove/selection helpers.
-// This comment is intentionally kept in source code so future maintainers can
-// understand the role of this file without opening external documentation.
-// -----------------------------------------------------------------------------
-
+/*
+ * This file belongs to the renderer-neutral scene layer, which is the shared source of truth for geometry,
+ * transforms, grouping, materials, resources, and serialization-facing state. Higher layers manipulate these
+ * abstractions rather than maintaining parallel copies of scene data.
+ *
+ * `SpatialCellKey` is an immutable packet of related values. Record value semantics make it suitable for
+ * snapshots, options, commands, or parsed intermediate data because callers can copy/compare it without sharing
+ * mutable state. Its constructor values (`X`, `Y`, `Z`) travel together because consumers need a consistent
+ * snapshot rather than reading those values independently from mutable objects.
+ *
+ * `VertexKey` is an immutable packet of related values. Record value semantics make it suitable for snapshots,
+ * options, commands, or parsed intermediate data because callers can copy/compare it without sharing mutable
+ * state. Its constructor values (`X`, `Y`, `Z`) travel together because consumers need a consistent snapshot
+ * rather than reading those values independently from mutable objects.
+ *
+ * `EdgeKey` is an immutable packet of related values. Record value semantics make it suitable for snapshots,
+ * options, commands, or parsed intermediate data because callers can copy/compare it without sharing mutable
+ * state.
+ *
+ * `Revision` is derived rather than separately stored: it evaluates `Interlocked.Read(ref revision)`. Keeping the
+ * value computed from its source fields prevents a second cached flag/value from drifting out of sync.
+ *
+ * `HasAccelerationStructure` is derived rather than separately stored: it evaluates `Volatile.Read(ref bvhRoot)
+ * != null`. Keeping the value computed from its source fields prevents a second cached flag/value from drifting
+ * out of sync.
+ *
+ * `OpenModelFile` opens model file using the current selection/session as its initial state. The window/dialog is
+ * a temporary editor; durable changes still flow through the session operation it invokes.
+ *
+ * `InsertModelFromFile` inserts model from file into the live scene/model and returns the resulting
+ * identity/value needed by selection or subsequent editing.
+ *
+ * `LoadPropXmlFile` loads prop xml file from persistent/external data and converts it into validated internal
+ * scene state rather than exposing parser-specific objects to the rest of the application.
+ *
+ * `GetSceneBounds` reads scene bounds from the authoritative model and returns a value/snapshot suitable for
+ * callers, avoiding direct access to mutable internal storage.
+ *
+ * `SetGroupVisibility` sets group visibility through the owning abstraction instead of exposing a mutable field.
+ * That gives the method one place to validate the value and perform any history/cache/UI side effects required by
+ * the change.
+ *
+ * `AddImportedGroup` adds imported group to the owning collection/model while using this boundary to preserve
+ * indexing, ownership, and derived-state invariants.
+ *
+ * `DuplicateGroup` creates an independent copy of group with a new scene identity while preserving the source
+ * geometry/material/authored metadata that should carry over.
+ *
+ * `DeleteGroup` deletes group as a logical editor operation, including the bookkeeping needed so
+ * selection/history/caches do not retain a dangling object reference.
+ *
+ * `CanGroupSelectedObjects` evaluates whether group selected objects is currently legal/available from the
+ * existing state. It is a side-effect-free guard intended to drive command enablement or reject an edit before
+ * mutation.
+ *
+ * `GroupSelectedObjects` collects selected objects under a common hierarchy node so they can be manipulated as a
+ * unit without baking away each child’s own geometry/material state.
+ *
+ * `CanUngroup` evaluates whether ungroup is currently legal/available from the existing state. It is a
+ * side-effect-free guard intended to drive command enablement or reject an edit before mutation.
+ *
+ * The `EdgeKey` constructor captures `a`, `b`. Those are the dependencies/initial values the instance needs for
+ * its lifetime, so callbacks and later operations use the same objects/configuration rather than looking them up
+ * globally.
+ *
+ * The `DisjointSet` constructor captures `count`. Those are the dependencies/initial values the instance needs
+ * for its lifetime, so callbacks and later operations use the same objects/configuration rather than looking them
+ * up globally.
+ *
+ * `RebuildWorldGeometry` reconstructs world geometry from authoritative source data after an edit has invalidated
+ * the previous derived form. Rebuilding rather than incrementally patching reduces the chance of stale
+ * topology/cache entries surviving.
+ */
 using LightingShowcase.Math3D;
 using LightingShowcase.Rendering;
 using LightingShowcase.Lighting;
@@ -95,8 +159,6 @@ public sealed class Scene
 
     /// <summary>Backward-compatible OBJ insert helper routed through the plugin registry.</summary>
     public ObjLoadResult InsertObjFromFile(string filePath, Action<ObjLoadProgress>? progress = null) => InsertModelFromFile(filePath, progress);
-
-    /// <summary>Implements the insert ready made object operation for this file's subsystem.</summary>
     public SceneObjectGroup InsertReadyMadeObject(string objectName)
     {
         SceneObjectGroup group = ObjectLibraryRegistry.Insert(this, materials, objectName);
@@ -284,8 +346,6 @@ public sealed class Scene
     {
         return new SceneSnapshot(Description, ObjectGroups, Lights);
     }
-
-    /// <summary>Implements the restore snapshot operation for this file's subsystem.</summary>
     public void RestoreSnapshot(SceneSnapshot snapshot)
     {
         Clear();
@@ -295,8 +355,6 @@ public sealed class Scene
         nextGroupId = ObjectGroups.SelectMany(g => g.SelfAndDescendants()).Select(g => g.Id).DefaultIfEmpty(0).Max() + 1;
         RebuildWorldGeometry();
     }
-
-    /// <summary>Implements the duplicate group operation for this file's subsystem.</summary>
     public SceneObjectGroup DuplicateGroup(int id)
     {
         SceneObjectGroup source = GroupById(id) ?? throw new ArgumentException("Group not found.", nameof(id));
@@ -315,8 +373,6 @@ public sealed class Scene
         RebuildWorldGeometry();
         return duplicate;
     }
-
-    /// <summary>Implements the delete group operation for this file's subsystem.</summary>
     public void DeleteGroup(int id)
     {
         SceneObjectGroup? group = GroupById(id);
@@ -958,8 +1014,6 @@ public sealed class Scene
         BvhNode? acceleration = GetOrBuildAccelerationStructure();
         return acceleration?.Intersect(ray, 1e-6, double.PositiveInfinity);
     }
-
-    /// <summary>Implements the any intersection operation for this file's subsystem.</summary>
     public bool AnyIntersection(Ray ray, double maxDistance)
     {
         BvhNode? acceleration = GetOrBuildAccelerationStructure();
@@ -972,15 +1026,11 @@ public sealed class Scene
         BvhNode? acceleration = GetOrBuildAccelerationStructure();
         return acceleration?.ShadowOpacity(ray, 1e-6, maxDistance, maxSamples) ?? 0.0;
     }
-
-    /// <summary>Implements the quad operation for this file's subsystem.</summary>
     public void Quad(Vec3 a, Vec3 b, Vec3 c, Vec3 d, Material material)
     {
         AddTriangle(a, b, c, new Vec2(0, 0), new Vec2(1, 0), new Vec2(1, 1), material);
         AddTriangle(a, c, d, new Vec2(0, 0), new Vec2(1, 1), new Vec2(0, 1), material);
     }
-
-    /// <summary>Implements the box operation for this file's subsystem.</summary>
     public void Box(Vec3 min, Vec3 max, Material material)
     {
         double x0 = min.X, y0 = min.Y, z0 = min.Z, x1 = max.X, y1 = max.Y, z1 = max.Z;

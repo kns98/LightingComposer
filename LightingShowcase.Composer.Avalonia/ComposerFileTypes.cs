@@ -1,3 +1,17 @@
+/*
+ * This is desktop-editor glue around the scene and rendering layers. The code should be read in terms of how it
+ * translates user interaction into domain operations while keeping platform UI state, mutable scene state, and
+ * renderer state from becoming entangled.
+ *
+ * `ComposerFileTypes` provides shared algorithms/registration behavior without per-instance state.
+ *
+ * `IsSupportedPath` tests whether supported path is true for the supplied/current value. Keeping the predicate
+ * here ensures every caller uses the same definition instead of duplicating a slightly different condition.
+ *
+ * `IsBinaryScenePath` tests whether binary scene path is true for the supplied/current value. Keeping the
+ * predicate here ensures every caller uses the same definition instead of duplicating a slightly different
+ * condition.
+ */
 using Avalonia.Platform.Storage;
 
 namespace LightingShowcase.Composer;

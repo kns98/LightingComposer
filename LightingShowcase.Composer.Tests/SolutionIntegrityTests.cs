@@ -1,3 +1,17 @@
+/*
+ * The tests in this file are executable statements of editor behavior. They intentionally use real scene/session
+ * objects and inspect externally meaningful results—geometry, hierarchy, material state, serialized output, cache
+ * stamps, or timing—so refactors can change implementation details without weakening the contract being tested.
+ *
+ * `Visual_Studio_solution_references_existing_projects` verifies that visual studio solution references existing
+ * projects. Temporary filesystem output is inspected/cleaned so persistence behavior is tested end-to-end. The
+ * assertions establish that the operation must explicitly report success; the expected entry must remain
+ * discoverable. Representative cases include `LightingShowcase.Composer.sln`, `Project\\(\\\`, `\\) = \\\`,
+ * `]+\\\`, `([^\\\`, `LightingShowcase.Composer.Tests`.
+ *
+ * `FindRepositoryRoot` searches for repository root and returns the matching object/value rather than assuming it
+ * exists. Callers can therefore distinguish a missing match from the found instance.
+ */
 using System.Text.RegularExpressions;
 
 namespace LightingShowcase.Composer.Tests;

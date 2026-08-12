@@ -1,3 +1,112 @@
+/*
+ * Undo/redo is command-based: an edit stores enough “before” and “after” information to reproduce a logical user
+ * action without rerunning the original gesture. Applying a new command clears redo history, while undo and redo
+ * move the same command between stacks. Geometry-heavy commands snapshot the baked node state so topology can be
+ * restored exactly.
+ *
+ * `IComposerEditCommand` defines a capability boundary: callers depend on the contract rather than the concrete
+ * plugin/backend implementing it. New implementations can therefore participate without changing the core caller.
+ *
+ * `BakedGeometryState` is a working/snapshot state object whose fields must move together; callers use it to
+ * capture one coherent point in an interaction, render, or undo workflow.
+ *
+ * `NodeGeometry` is an immutable packet of related values. Record value semantics make it suitable for snapshots,
+ * options, commands, or parsed intermediate data because callers can copy/compare it without sharing mutable
+ * state. Its constructor values (`GroupId`, `Triangles`, `PrimitiveKind`, `PrimitiveSourceName`,
+ * `PrimitiveParameters`, `LogicalFaceTriangleGroups`) travel together because consumers need a consistent
+ * snapshot rather than reading those values independently from mutable objects.
+ *
+ * `BakedTransformEditCommand` represents one logical action with the information needed to apply/reverse it,
+ * which is what lets undo/redo operate on user actions instead of raw UI events.
+ *
+ * `ParametricTransformEditCommand` represents one logical action with the information needed to apply/reverse it,
+ * which is what lets undo/redo operate on user actions instead of raw UI events.
+ *
+ * `GeometryStateEditCommand` represents one logical action with the information needed to apply/reverse it, which
+ * is what lets undo/redo operate on user actions instead of raw UI events.
+ *
+ * `SceneSnapshotEditCommand` represents one logical action with the information needed to apply/reverse it, which
+ * is what lets undo/redo operate on user actions instead of raw UI events.
+ *
+ * `UndoSelectionId` is derived rather than separately stored: it evaluates `groupId`. Keeping the value computed
+ * from its source fields prevents a second cached flag/value from drifting out of sync.
+ *
+ * `RedoSelectionId` is derived rather than separately stored: it evaluates `groupId`. Keeping the value computed
+ * from its source fields prevents a second cached flag/value from drifting out of sync.
+ *
+ * `UndoSelectionId` is derived rather than separately stored: it evaluates `groupId`. Keeping the value computed
+ * from its source fields prevents a second cached flag/value from drifting out of sync.
+ *
+ * `RedoSelectionId` is derived rather than separately stored: it evaluates `groupId`. Keeping the value computed
+ * from its source fields prevents a second cached flag/value from drifting out of sync.
+ *
+ * `UndoSelectionId` is derived rather than separately stored: it evaluates `groupId`. Keeping the value computed
+ * from its source fields prevents a second cached flag/value from drifting out of sync.
+ *
+ * `RedoSelectionId` is derived rather than separately stored: it evaluates `groupId`. Keeping the value computed
+ * from its source fields prevents a second cached flag/value from drifting out of sync.
+ *
+ * `CanUndo` is derived rather than separately stored: it evaluates `undo.Count > 0`. Keeping the value computed
+ * from its source fields prevents a second cached flag/value from drifting out of sync.
+ *
+ * `CanRedo` is derived rather than separately stored: it evaluates `redo.Count > 0`. Keeping the value computed
+ * from its source fields prevents a second cached flag/value from drifting out of sync.
+ *
+ * `UndoDescription` is derived rather than separately stored: it evaluates `undo.TryPeek(out
+ * IComposerEditCommand? command) ? command.Description : null`. Keeping the value computed from its source fields
+ * prevents a second cached flag/value from drifting out of sync.
+ *
+ * `RedoDescription` is derived rather than separately stored: it evaluates `redo.TryPeek(out
+ * IComposerEditCommand? command) ? command.Description : null`. Keeping the value computed from its source fields
+ * prevents a second cached flag/value from drifting out of sync.
+ *
+ * The `BakedGeometryState` constructor captures `nodes`. Those are the dependencies/initial values the instance
+ * needs for its lifetime, so callbacks and later operations use the same objects/configuration rather than
+ * looking them up globally.
+ *
+ * `Undo` pops the most recent command from the undo stack, asks that command to restore its “before” state,
+ * pushes it onto redo, and returns the affected object id so the editor can restore a sensible selection.
+ *
+ * `Redo` pops the next command from the redo stack, reapplies its “after” state, and returns it to the undo
+ * stack, recreating the same logical edit without replaying the original UI gesture.
+ *
+ * `RequireGroup` resolves group but treats absence as a programming/state error. This is used after preconditions
+ * should already guarantee the object exists, making broken invariants fail close to their source.
+ *
+ * `Undo` pops the most recent command from the undo stack, asks that command to restore its “before” state,
+ * pushes it onto redo, and returns the affected object id so the editor can restore a sensible selection.
+ *
+ * `Redo` pops the next command from the redo stack, reapplies its “after” state, and returns it to the undo
+ * stack, recreating the same logical edit without replaying the original UI gesture.
+ *
+ * The `GeometryStateEditCommand` constructor captures `description`, `groupId`, `before`, `after`. Those are the
+ * dependencies/initial values the instance needs for its lifetime, so callbacks and later operations use the same
+ * objects/configuration rather than looking them up globally.
+ *
+ * `Undo` pops the most recent command from the undo stack, asks that command to restore its “before” state,
+ * pushes it onto redo, and returns the affected object id so the editor can restore a sensible selection.
+ *
+ * `Redo` pops the next command from the redo stack, reapplies its “after” state, and returns it to the undo
+ * stack, recreating the same logical edit without replaying the original UI gesture.
+ *
+ * `Undo` pops the most recent command from the undo stack, asks that command to restore its “before” state,
+ * pushes it onto redo, and returns the affected object id so the editor can restore a sensible selection.
+ *
+ * `Redo` pops the next command from the redo stack, reapplies its “after” state, and returns it to the undo
+ * stack, recreating the same logical edit without replaying the original UI gesture.
+ *
+ * `PushApplied` records a command that has already been applied by pushing it onto the undo stack and clearing
+ * the redo stack. Clearing redo is essential because a new edit creates a new history branch.
+ *
+ * `Undo` pops the most recent command from the undo stack, asks that command to restore its “before” state,
+ * pushes it onto redo, and returns the affected object id so the editor can restore a sensible selection.
+ *
+ * `Redo` pops the next command from the redo stack, reapplies its “after” state, and returns it to the undo
+ * stack, recreating the same logical edit without replaying the original UI gesture.
+ *
+ * `Clear` drops both undo and redo stacks. This is used when the scene is replaced and old commands would refer
+ * to object identities/state that no longer belong to the current document.
+ */
 using LightingShowcase.Math3D;
 using LightingShowcase.SceneGraph;
 

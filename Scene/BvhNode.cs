@@ -1,12 +1,41 @@
-// -----------------------------------------------------------------------------
-// File: Scene/BvhNode.cs
-// Purpose: Bounding volume hierarchy.
-//
-// Builds and traverses a recursive acceleration tree so ray/triangle tests remain fast on larger scenes.
-// This comment is intentionally kept in source code so future maintainers can
-// understand the role of this file without opening external documentation.
-// -----------------------------------------------------------------------------
-
+/*
+ * This file belongs to the renderer-neutral scene layer, which is the shared source of truth for geometry,
+ * transforms, grouping, materials, resources, and serialization-facing state. Higher layers manipulate these
+ * abstractions rather than maintaining parallel copies of scene data.
+ *
+ * `BvhNode` is one node in a hierarchy/acceleration structure; its fields connect local data to parent/child
+ * traversal rather than representing an independent scene object.
+ *
+ * The `BvhNode` constructor captures `source`, `start`, `count`. Those are the dependencies/initial values the
+ * instance needs for its lifetime, so callbacks and later operations use the same objects/configuration rather
+ * than looking them up globally.
+ *
+ * `Build` builds a bounding-volume hierarchy over a triangle range. It computes node bounds, chooses the longest
+ * spatial axis, sorts triangle centroids on that axis, and recursively splits until leaves are small enough for
+ * direct triangle tests.
+ *
+ * `Intersect` finds the nearest ray hit below the caller’s distance limit. Node bounds reject whole subtrees
+ * cheaply; leaves test triangles, while interior nodes recurse with the closest distance found so farther hits
+ * cannot replace nearer ones.
+ *
+ * `AnyIntersection` implements the cheaper “is anything in the way?” query used by visibility and shadows. It
+ * returns as soon as a valid hit is found instead of constructing the globally nearest hit.
+ *
+ * `ShadowOpacity` estimates how much light survives transparent blockers by sampling intersections/material alpha
+ * and reducing the remaining light, so shadows can be partial rather than only binary.
+ *
+ * `IntersectLeaf` tests only the triangles assigned to one leaf and keeps the nearest hit that is closer than the
+ * current limit.
+ *
+ * `ComputeBounds` unions the bounds of the node’s triangle range so an AABB can reject rays before any
+ * per-triangle tests.
+ *
+ * `LongestAxis` chooses the largest X/Y/Z extent of a bounding box; that axis is used to partition triangles
+ * spatially during BVH construction.
+ *
+ * `CompareCentroid` orders triangles by centroid coordinate on the selected split axis before the range is
+ * divided into child nodes.
+ */
 using LightingShowcase.Rendering;
 
 namespace LightingShowcase.SceneGraph;
@@ -21,8 +50,6 @@ public sealed class BvhNode
     private readonly Triangle[]? triangles;
 
     public Aabb Bounds { get; }
-
-    /// <summary>Constructs and initializes this component.</summary>
     private BvhNode(List<Triangle> source, int start, int count)
     {
         Bounds = ComputeBounds(source, start, count);
@@ -70,8 +97,6 @@ public sealed class BvhNode
 
         return rightHit ?? leftHit;
     }
-
-    /// <summary>Implements the any intersection operation for this file's subsystem.</summary>
     public bool AnyIntersection(Ray ray, double tMin, double tMax)
     {
         if (!Bounds.Intersect(ray, tMin, tMax))
@@ -125,8 +150,6 @@ public sealed class BvhNode
         double rightOpacity = right?.ShadowOpacity(ray, tMin, tMax, maxSamples) ?? 0.0;
         return 1.0 - (1.0 - leftOpacity) * (1.0 - rightOpacity);
     }
-
-    /// <summary>Implements the intersect leaf operation for this file's subsystem.</summary>
     private Hit? IntersectLeaf(Ray ray, double tMin, double tMax)
     {
         Hit? closest = null;
@@ -144,8 +167,6 @@ public sealed class BvhNode
 
         return closest;
     }
-
-    /// <summary>Implements the compute bounds operation for this file's subsystem.</summary>
     private static Aabb ComputeBounds(List<Triangle> source, int start, int count)
     {
         Aabb bounds = source[start].Bounds;
@@ -153,8 +174,6 @@ public sealed class BvhNode
             bounds = Aabb.Surrounding(bounds, source[start + i].Bounds);
         return bounds;
     }
-
-    /// <summary>Implements the longest axis operation for this file's subsystem.</summary>
     private static int LongestAxis(Aabb bounds)
     {
         double x = bounds.Max.X - bounds.Min.X;
@@ -165,8 +184,6 @@ public sealed class BvhNode
         if (y >= z) return 1;
         return 2;
     }
-
-    /// <summary>Implements the compare centroid operation for this file's subsystem.</summary>
     private static int CompareCentroid(Triangle a, Triangle b, int axis)
     {
         double ca = axis switch

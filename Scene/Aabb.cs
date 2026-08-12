@@ -1,12 +1,15 @@
-// -----------------------------------------------------------------------------
-// File: Scene/Aabb.cs
-// Purpose: Axis-aligned bounding box.
-//
-// Stores object/BVH bounds and provides slab intersection tests for acceleration.
-// This comment is intentionally kept in source code so future maintainers can
-// understand the role of this file without opening external documentation.
-// -----------------------------------------------------------------------------
-
+/*
+ * This file belongs to the renderer-neutral scene layer, which is the shared source of truth for geometry,
+ * transforms, grouping, materials, resources, and serialization-facing state. Higher layers manipulate these
+ * abstractions rather than maintaining parallel copies of scene data.
+ *
+ * `Aabb` is a value type, so small instances can be copied without heap allocation. Its operations establish
+ * shared numerical/data semantics for callers that would otherwise risk implementing subtly different formulas.
+ *
+ * The `Aabb` constructor captures `min`, `max`. Those are the dependencies/initial values the instance needs for
+ * its lifetime, so callbacks and later operations use the same objects/configuration rather than looking them up
+ * globally.
+ */
 using LightingShowcase.Math3D;
 using LightingShowcase.Rendering;
 
@@ -17,8 +20,6 @@ public readonly struct Aabb
 {
     public readonly Vec3 Min;
     public readonly Vec3 Max;
-
-    /// <summary>Constructs and initializes this component.</summary>
     public Aabb(Vec3 min, Vec3 max)
     {
         Min = min;
@@ -33,8 +34,6 @@ public readonly struct Aabb
         if (!HitAxis(ray.Origin.Z, ray.Direction.Z, Min.Z, Max.Z, ref tMin, ref tMax)) return false;
         return true;
     }
-
-    /// <summary>Implements the hit axis operation for this file's subsystem.</summary>
     private static bool HitAxis(double origin, double direction, double min, double max, ref double tMin, ref double tMax)
     {
         const double eps = 1e-12;
@@ -54,8 +53,6 @@ public readonly struct Aabb
 
         return tMax > tMin;
     }
-
-    /// <summary>Implements the around operation for this file's subsystem.</summary>
     public static Aabb Around(Triangle triangle)
     {
         const double pad = 1e-5;
@@ -70,8 +67,6 @@ public readonly struct Aabb
 
         return new Aabb(new Vec3(minX, minY, minZ), new Vec3(maxX, maxY, maxZ));
     }
-
-    /// <summary>Implements the surrounding operation for this file's subsystem.</summary>
     public static Aabb Surrounding(Aabb a, Aabb b)
     {
         Vec3 min = new(

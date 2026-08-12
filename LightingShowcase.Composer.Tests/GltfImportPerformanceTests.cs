@@ -1,3 +1,25 @@
+/*
+ * The tests in this file are executable statements of editor behavior. They intentionally use real scene/session
+ * objects and inspect externally meaningful results—geometry, hierarchy, material state, serialized output, cache
+ * stamps, or timing—so refactors can change implementation details without weakening the contract being tested.
+ *
+ * `Identity_geometry_reuses_local_triangle_objects_and_defers_bvh` verifies that identity geometry reuses local
+ * triangle objects and defers bvh. The assertions establish that required objects/resources must resolve; the
+ * operation must explicitly report success; the disallowed path must be rejected; the resulting value/state must
+ * exactly match the expected result.
+ *
+ * `Wrapping_imported_roots_does_not_rebuild_unchanged_world_geometry` verifies that wrapping imported roots does
+ * not rebuild unchanged world geometry. The assertions establish that the resulting value/state must exactly
+ * match the expected result. Representative cases include `Imported asset`.
+ *
+ * `Optimized_gltf_import_uses_accessor_bounds_and_leaves_bvh_lazy` verifies that optimized gltf import uses
+ * accessor bounds and leaves bvh lazy. The assertions establish that the disallowed path must be rejected; the
+ * expected entry must remain discoverable. Representative cases include `fast_import`, `gltf`,
+ * `accessorBounds=1`, `scannedBounds=0`, `bvh=deferred`.
+ *
+ * `CreateQuadScene` constructs quad scene in the normalized form expected downstream, so allocation plus
+ * initialization of its invariants happen together.
+ */
 using LightingShowcase.CommandLine;
 using LightingShowcase.Math3D;
 using LightingShowcase.Rendering;

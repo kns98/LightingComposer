@@ -1,3 +1,14 @@
+/*
+ * This is desktop-editor glue around the scene and rendering layers. The code should be read in terms of how it
+ * translates user interaction into domain operations while keeping platform UI state, mutable scene state, and
+ * renderer state from becoming entangled.
+ *
+ * `ComposerCamera` provides the mutable/editor-facing camera operations while exposing renderer snapshots so a
+ * frame sees a consistent camera even if interaction continues.
+ *
+ * `ComputeBounds` calculates bounds deterministically from its inputs; callers can use the result as derived
+ * data/cache evidence without mutating the underlying scene.
+ */
 using LightingShowcase.CameraSystem;
 using LightingShowcase.Math3D;
 using LightingShowcase.SceneGraph;

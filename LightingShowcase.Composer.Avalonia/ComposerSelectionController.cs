@@ -1,3 +1,65 @@
+/*
+ * This controller translates Avalonia events and commands into editor operations while keeping the live scene
+ * behind `ComposerSceneSession`. Its job is coordination: validate/route input, invoke the appropriate session or
+ * renderer operation, and update presentation state without becoming a competing owner of scene data.
+ *
+ * `ComposerSelectionController` coordinates a focused interaction workflow. It holds the transient UI/input state
+ * needed for that workflow but delegates authoritative scene mutation to the session/model layer.
+ *
+ * `SelectedObjectIds` is derived rather than separately stored: it evaluates `selectedObjectIds`. Keeping the
+ * value computed from its source fields prevents a second cached flag/value from drifting out of sync.
+ *
+ * `SelectedObjectCount` is derived rather than separately stored: it evaluates `selectedObjectIds.Count`. Keeping
+ * the value computed from its source fields prevents a second cached flag/value from drifting out of sync.
+ *
+ * `ResetForScene` returns for scene to its canonical default/identity state while preserving the surrounding
+ * object/session identity.
+ *
+ * `SetSingleSelection` sets single selection through the owning abstraction instead of exposing a mutable field.
+ * That gives the method one place to validate the value and perform any history/cache/UI side effects required by
+ * the change.
+ *
+ * `SetMultipleSelection` sets multiple selection through the owning abstraction instead of exposing a mutable
+ * field. That gives the method one place to validate the value and perform any history/cache/UI side effects
+ * required by the change.
+ *
+ * `AddExpanded` adds expanded to the owning collection/model while using this boundary to preserve indexing,
+ * ownership, and derived-state invariants.
+ *
+ * `RemoveCachedObject` removes cached object from the owning structure and updates the relationships/derived
+ * state that would otherwise still reference it.
+ *
+ * `FrameSelected` moves/adjusts the camera so selected fits usefully in the viewport. It derives a target from
+ * bounds rather than changing the object itself.
+ *
+ * `RefreshObjectTree` re-reads authoritative state and updates object tree so cached/presented data matches the
+ * current scene after an edit or external change.
+ *
+ * `BuildObjectTreeControl` derives object tree control from lower-level input data, resolving
+ * indexing/grouping/derived values once so callers can operate on a coherent higher-level representation.
+ *
+ * `AddLazyFaceRows` adds lazy face rows to the owning collection/model while using this boundary to preserve
+ * indexing, ownership, and derived-state invariants.
+ *
+ * `LoadInspectorFromSelection` loads inspector from selection from persistent/external data and converts it into
+ * validated internal scene state rather than exposing parser-specific objects to the rest of the application.
+ *
+ * `SetInspectorEnabled` sets inspector enabled through the owning abstraction instead of exposing a mutable
+ * field. That gives the method one place to validate the value and perform any history/cache/UI side effects
+ * required by the change.
+ *
+ * `SelectObject` changes the editor’s current object choice and synchronizes the controls/overlay behavior that
+ * depend on that mode.
+ *
+ * `SelectTriangle` changes the editor’s current triangle choice and synchronizes the controls/overlay behavior
+ * that depend on that mode.
+ *
+ * `ClearVirtualTriangleSelection` removes/resets virtual triangle selection to its empty/default state. This is
+ * an explicit state transition rather than leaving old values around for later code to accidentally reuse.
+ *
+ * `WriteVector` writes vector to the external stream/document in the format’s required order, using stable
+ * indices/references so another reader can reconstruct the same relationships.
+ */
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;

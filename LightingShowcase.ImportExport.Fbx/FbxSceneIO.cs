@@ -1,15 +1,79 @@
-// -----------------------------------------------------------------------------
-// File: Scene/FbxSceneIO.cs
-// Purpose: Lightweight FBX import/export for ASCII and binary mesh geometry.
-//
-// The importer reads common FBX mesh Geometry nodes containing Vertices and
-// PolygonVertexIndex arrays. It supports ASCII FBX and binary FBX 7.x files with
-// little-endian scalar/array properties. Binary array payloads may be stored
-// plain or zlib-compressed. The exporter can write either ASCII FBX or binary FBX
-// 7.4 mesh geometry so the files can round-trip through common DCC tools without
-// requiring Autodesk FBX SDK redistribution.
-// -----------------------------------------------------------------------------
-
+/*
+ * Importing FBX is a translation problem, not a file-copy operation. The code parses the external representation,
+ * resolves indices/resources/transforms, and creates Composer triangles, object groups, materials, and textures
+ * in the coordinate and ownership conventions expected by the scene layer.
+ *
+ * `FbxSceneIO` provides shared algorithms/registration behavior without per-instance state.
+ *
+ * `FbxMeshData` is an immutable packet of related values. Record value semantics make it suitable for snapshots,
+ * options, commands, or parsed intermediate data because callers can copy/compare it without sharing mutable
+ * state. Its constructor values (`Vertices`, `PolygonVertexIndices`, `PolygonVertexColors`) travel together
+ * because consumers need a consistent snapshot rather than reading those values independently from mutable
+ * objects.
+ *
+ * `FbxBinaryNode` is an immutable packet of related values. Record value semantics make it suitable for
+ * snapshots, options, commands, or parsed intermediate data because callers can copy/compare it without sharing
+ * mutable state. Its constructor values (`Name`, `Properties`, `Children`) travel together because consumers need
+ * a consistent snapshot rather than reading those values independently from mutable objects.
+ *
+ * `SaveAscii` serializes ascii from current internal state, making persistence a snapshot operation rather than
+ * allowing the serializer to walk concurrently mutating editor objects.
+ *
+ * `SaveBinary` serializes binary from current internal state, making persistence a snapshot operation rather than
+ * allowing the serializer to walk concurrently mutating editor objects. Binary field order is explicit; changing
+ * it requires the corresponding reader/writer to remain symmetrical.
+ *
+ * `LoadAsciiMesh` loads ascii mesh from persistent/external data and converts it into validated internal scene
+ * state rather than exposing parser-specific objects to the rest of the application.
+ *
+ * `LoadBinaryMesh` loads binary mesh from persistent/external data and converts it into validated internal scene
+ * state rather than exposing parser-specific objects to the rest of the application. Binary field order is
+ * explicit; changing it requires the corresponding reader/writer to remain symmetrical.
+ *
+ * `FindMeshArrays` searches for mesh arrays and returns the matching object/value rather than assuming it exists.
+ * Callers can therefore distinguish a missing match from the found instance.
+ *
+ * `ReadBinaryNode` reads binary node from the external stream/document, advancing through the format in the order
+ * required to resolve references and produce valid internal data.
+ *
+ * `ReadBinaryProperty` reads binary property from the external stream/document, advancing through the format in
+ * the order required to resolve references and produce valid internal data.
+ *
+ * `IsNullRecordAhead` tests whether null record ahead is true for the supplied/current value. Keeping the
+ * predicate here ensures every caller uses the same definition instead of duplicating a slightly different
+ * condition.
+ *
+ * `ParseAsciiVertices` converts user/file text into ascii vertices and rejects values that violate the
+ * numeric/domain constraints before they can enter scene state.
+ *
+ * `ConvertVertices` changes vertices into a different representation while preserving the information that
+ * representation can express; metadata that no longer applies is deliberately dropped at this boundary.
+ *
+ * `ConvertColors` changes colors into a different representation while preserving the information that
+ * representation can express; metadata that no longer applies is deliberately dropped at this boundary.
+ *
+ * `AddPolygon` adds polygon to the owning collection/model while using this boundary to preserve indexing,
+ * ownership, and derived-state invariants.
+ *
+ * `GetBounds` reads bounds from the authoritative model and returns a value/snapshot suitable for callers,
+ * avoiding direct access to mutable internal storage.
+ *
+ * `WriteNode` writes node to the external stream/document in the format’s required order, using stable
+ * indices/references so another reader can reconstruct the same relationships. Binary field order is explicit;
+ * changing it requires the corresponding reader/writer to remain symmetrical.
+ *
+ * `WriteStringProperty` writes string property to the external stream/document in the format’s required order,
+ * using stable indices/references so another reader can reconstruct the same relationships.
+ *
+ * `WriteDoubleArrayProperty` writes double array property to the external stream/document in the format’s
+ * required order, using stable indices/references so another reader can reconstruct the same relationships.
+ *
+ * `WriteIntArrayProperty` writes int array property to the external stream/document in the format’s required
+ * order, using stable indices/references so another reader can reconstruct the same relationships.
+ *
+ * `WriteColorArrayEntry` writes color array entry to the external stream/document in the format’s required order,
+ * using stable indices/references so another reader can reconstruct the same relationships.
+ */
 using System.Globalization;
 using System.IO;
 using System.IO.Compression;

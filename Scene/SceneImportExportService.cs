@@ -1,11 +1,70 @@
-// -----------------------------------------------------------------------------
-// File: Scene/SceneImportExportService.cs
-// Purpose: Scene import/export application service.
-//
-// Phase 1 architecture cleanup: file-format discovery, filters, load/save calls,
-// and export variants are centralized here instead of being hard-coded in the UI.
-// -----------------------------------------------------------------------------
-
+/*
+ * This file belongs to the renderer-neutral scene layer, which is the shared source of truth for geometry,
+ * transforms, grouping, materials, resources, and serialization-facing state. Higher layers manipulate these
+ * abstractions rather than maintaining parallel copies of scene data.
+ *
+ * `ExportFilterChoice` is an immutable packet of related values. Record value semantics make it suitable for
+ * snapshots, options, commands, or parsed intermediate data because callers can copy/compare it without sharing
+ * mutable state. Its constructor values (`DisplayName`, `Extension`, `Variant`) travel together because consumers
+ * need a consistent snapshot rather than reading those values independently from mutable objects.
+ *
+ * `OpenDialogFilter` is derived rather than separately stored: it evaluates `BuildOpenFilter(includePropXml:
+ * true)`. Keeping the value computed from its source fields prevents a second cached flag/value from drifting out
+ * of sync.
+ *
+ * `InsertDialogFilter` is derived rather than separately stored: it evaluates `BuildOpenFilter(includePropXml:
+ * false)`. Keeping the value computed from its source fields prevents a second cached flag/value from drifting
+ * out of sync.
+ *
+ * `SaveDialogFilter` is derived rather than separately stored: it evaluates `BuildSaveFilter()`. Keeping the
+ * value computed from its source fields prevents a second cached flag/value from drifting out of sync.
+ *
+ * The `SceneImportExportService` constructor captures `scene`. Those are the dependencies/initial values the
+ * instance needs for its lifetime, so callbacks and later operations use the same objects/configuration rather
+ * than looking them up globally.
+ *
+ * `IsSupportedDropFile` tests whether supported drop file is true for the supplied/current value. Keeping the
+ * predicate here ensures every caller uses the same definition instead of duplicating a slightly different
+ * condition.
+ *
+ * `IsSupportedModelFile` tests whether supported model file is true for the supplied/current value. Keeping the
+ * predicate here ensures every caller uses the same definition instead of duplicating a slightly different
+ * condition.
+ *
+ * `OpenModel` opens model using the current selection/session as its initial state. The window/dialog is a
+ * temporary editor; durable changes still flow through the session operation it invokes.
+ *
+ * `OpenModelSimplified` opens model simplified using the current selection/session as its initial state. The
+ * window/dialog is a temporary editor; durable changes still flow through the session operation it invokes.
+ *
+ * `OpenModel` opens model using the current selection/session as its initial state. The window/dialog is a
+ * temporary editor; durable changes still flow through the session operation it invokes.
+ *
+ * `InsertModel` inserts model into the live scene/model and returns the resulting identity/value needed by
+ * selection or subsequent editing.
+ *
+ * `OpenPropXml` opens prop xml using the current selection/session as its initial state. The window/dialog is a
+ * temporary editor; durable changes still flow through the session operation it invokes.
+ *
+ * `IsSupportedModelExtension` tests whether supported model extension is true for the supplied/current value.
+ * Keeping the predicate here ensures every caller uses the same definition instead of duplicating a slightly
+ * different condition.
+ *
+ * `IsPropXmlFile` tests whether prop xml file is true for the supplied/current value. Keeping the predicate here
+ * ensures every caller uses the same definition instead of duplicating a slightly different condition.
+ *
+ * `AddDefaultObjectViewingLights` adds default object viewing lights to the owning collection/model while using
+ * this boundary to preserve indexing, ownership, and derived-state invariants.
+ *
+ * `BuildOpenFilter` derives open filter from lower-level input data, resolving indexing/grouping/derived values
+ * once so callers can operate on a coherent higher-level representation.
+ *
+ * `BuildSaveFilter` derives save filter from lower-level input data, resolving indexing/grouping/derived values
+ * once so callers can operate on a coherent higher-level representation.
+ *
+ * `GetExportChoice` reads export choice from the authoritative model and returns a value/snapshot suitable for
+ * callers, avoiding direct access to mutable internal storage.
+ */
 using LightingShowcase.Math3D;
 
 namespace LightingShowcase.SceneGraph;

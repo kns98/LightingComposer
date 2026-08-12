@@ -1,12 +1,19 @@
-// -----------------------------------------------------------------------------
-// File: Scene/Triangle.cs
-// Purpose: Triangle primitive.
-//
-// Stores one renderable triangle and performs ray intersection and bounds calculation.
-// This comment is intentionally kept in source code so future maintainers can
-// understand the role of this file without opening external documentation.
-// -----------------------------------------------------------------------------
-
+/*
+ * This file belongs to the renderer-neutral scene layer, which is the shared source of truth for geometry,
+ * transforms, grouping, materials, resources, and serialization-facing state. Higher layers manipulate these
+ * abstractions rather than maintaining parallel copies of scene data.
+ *
+ * The `Triangle` constructor captures `a`, `b`, `c`, `material`, `groupId`. Those are the dependencies/initial
+ * values the instance needs for its lifetime, so callbacks and later operations use the same
+ * objects/configuration rather than looking them up globally.
+ *
+ * The `Triangle` constructor captures `a`, `b`, `c`, `uvA`, `uvB`, `uvC`, `material`. Those are the
+ * dependencies/initial values the instance needs for its lifetime, so callbacks and later operations use the same
+ * objects/configuration rather than looking them up globally.
+ *
+ * `BuildTangentBasis` derives tangent basis from lower-level input data, resolving indexing/grouping/derived
+ * values once so callers can operate on a coherent higher-level representation.
+ */
 using LightingShowcase.Math3D;
 using LightingShowcase.Rendering;
 
@@ -32,14 +39,10 @@ public sealed class Triangle
 
     private readonly Vec3 edge1;
     private readonly Vec3 edge2;
-
-    /// <summary>Constructs and initializes this component.</summary>
     public Triangle(Vec3 a, Vec3 b, Vec3 c, Material material, int groupId = -1)
         : this(a, b, c, new Vec2(0, 0), new Vec2(1, 0), new Vec2(0, 1), material, groupId)
     {
     }
-
-    /// <summary>Constructs and initializes this component.</summary>
     public Triangle(Vec3 a, Vec3 b, Vec3 c, Vec2 uvA, Vec2 uvB, Vec2 uvC, Material material, int groupId = -1)
         : this(a, b, c, uvA, uvB, uvC, Vec3.Zero, Vec3.Zero, Vec3.Zero, material, groupId)
     {

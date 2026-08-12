@@ -1,3 +1,103 @@
+/*
+ * The tests in this file are executable statements of editor behavior. They intentionally use real scene/session
+ * objects and inspect externally meaningful results—geometry, hierarchy, material state, serialized output, cache
+ * stamps, or timing—so refactors can change implementation details without weakening the contract being tested.
+ *
+ * `Parameterized_cube_exposes_six_polygon_faces` verifies that parameterized cube exposes six polygon faces. It
+ * uses a real `ComposerSceneSession`, so registration, locking, history, and scene mutation follow production
+ * paths rather than mocks. The assertions establish that the operation must explicitly report success; the
+ * resulting value/state must exactly match the expected result. Representative cases include `Cube`.
+ *
+ * `Standard_primitives_recover_their_authored_polygon_faces` verifies that standard primitives recover their
+ * authored polygon faces. It uses a real `ComposerSceneSession`, so registration, locking, history, and scene
+ * mutation follow production paths rather than mocks. The assertions establish that the resulting value/state
+ * must exactly match the expected result. Representative cases include `Plane`, `Cube`, `Circle`, `UV Sphere`,
+ * `Icosphere`, `Cylinder`, `Cone`.
+ *
+ * `High_sided_cylinder_keeps_each_cap_as_one_face_despite_renderer_cap_clamp` verifies that high sided cylinder
+ * keeps each cap as one face despite renderer cap clamp. It uses a real `ComposerSceneSession`, so registration,
+ * locking, history, and scene mutation follow production paths rather than mocks. Preview and commit are asserted
+ * separately because interactive previews are transient, whereas commit must create the one durable edit the user
+ * can undo. The assertions establish that required objects/resources must resolve; the operation must explicitly
+ * report success; the resulting value/state must exactly match the expected result. Representative cases include
+ * `Cylinder`, `sides`.
+ *
+ * `Both_render_triangles_of_a_cube_quad_select_the_same_logical_face` verifies that both render triangles of a
+ * cube quad select the same logical face. It uses a real `ComposerSceneSession`, so registration, locking,
+ * history, and scene mutation follow production paths rather than mocks. The assertions establish that the
+ * operation must explicitly report success; the resulting value/state must exactly match the expected result.
+ * Representative cases include `Cube`.
+ *
+ * `Extruding_a_cube_quad_treats_two_render_triangles_as_one_face` verifies that extruding a cube quad treats two
+ * render triangles as one face. It uses a real `ComposerSceneSession`, so registration, locking, history, and
+ * scene mutation follow production paths rather than mocks. Undo is exercised to prove the previous state was
+ * actually captured, not merely that the forward edit looked correct. The assertions establish that the operation
+ * must explicitly report success; the disallowed path must be rejected; the resulting value/state must exactly
+ * match the expected result. Representative cases include `Cube`.
+ *
+ * `Signed_extrude_distance_uses_positive_outward_and_negative_inward_even_with_reversed_winding` verifies that
+ * signed extrude distance uses positive outward and negative inward even with reversed winding. The assertions
+ * establish that the expected entry must remain discoverable.
+ *
+ * `Insetting_a_cube_quad_operates_on_the_whole_polygon_face` verifies that insetting a cube quad operates on the
+ * whole polygon face. It uses a real `ComposerSceneSession`, so registration, locking, history, and scene
+ * mutation follow production paths rather than mocks. The assertions establish that the operation must explicitly
+ * report success; the disallowed path must be rejected; the resulting value/state must exactly match the expected
+ * result. Representative cases include `Cube`.
+ *
+ * `Recessed_inset_adds_reveal_walls_and_moves_the_inner_cap_off_the_source_plane` verifies that recessed inset
+ * adds reveal walls and moves the inner cap off the source plane. The assertions establish that the resulting
+ * value/state must exactly match the expected result; the expected entry must remain discoverable.
+ *
+ * `Signed_inset_depth_uses_positive_inward_and_negative_outward` verifies that signed inset depth uses positive
+ * inward and negative outward. The assertions establish that the expected entry must remain discoverable.
+ *
+ * `Session_accepts_negative_inset_depth_for_a_protruding_face` verifies that session accepts negative inset depth
+ * for a protruding face. It uses a real `ComposerSceneSession`, so registration, locking, history, and scene
+ * mutation follow production paths rather than mocks. The assertions establish that the operation must explicitly
+ * report success; the disallowed path must be rejected; the resulting value/state must exactly match the expected
+ * result. Representative cases include `Cube`.
+ *
+ * `Ui_style_recessed_inset_on_a_cube_creates_extra_logical_reveal_faces` verifies that ui style recessed inset on
+ * a cube creates extra logical reveal faces. It uses a real `ComposerSceneSession`, so registration, locking,
+ * history, and scene mutation follow production paths rather than mocks. The assertions establish that the
+ * operation must explicitly report success; the disallowed path must be rejected; the resulting value/state must
+ * exactly match the expected result. Representative cases include `Cube`.
+ *
+ * `Converted_cube_retains_six_explicit_logical_faces_and_twelve_logical_edges` verifies that converted cube
+ * retains six explicit logical faces and twelve logical edges. It uses a real `ComposerSceneSession`, so
+ * registration, locking, history, and scene mutation follow production paths rather than mocks. The assertions
+ * establish that the operation must explicitly report success; the disallowed path must be rejected; the
+ * resulting value/state must exactly match the expected result. Representative cases include `Cube`.
+ *
+ * `Inferred_quad_merges_only_when_shared_edge_is_a_real_triangulation_diagonal` verifies that inferred quad
+ * merges only when shared edge is a real triangulation diagonal. The assertions establish that the resulting
+ * value/state must exactly match the expected result.
+ *
+ * `Inferred_planar_grid_keeps_each_cell_as_a_quad_instead_of_merging_a_vertex_fan` verifies that inferred planar
+ * grid keeps each cell as a quad instead of merging a vertex fan. The assertions establish that the resulting
+ * value/state must exactly match the expected result.
+ *
+ * `Inferred_face_does_not_cross_a_fold_or_a_textured_uv_seam` verifies that inferred face does not cross a fold
+ * or a textured uv seam. The assertions establish that the resulting value/state must exactly match the expected
+ * result. Representative cases include `uv-seam`.
+ *
+ * `Explicit_logical_face_metadata_can_retain_a_nonplanar_authored_quad` verifies that explicit logical face
+ * metadata can retain a nonplanar authored quad. The assertions establish that the resulting value/state must
+ * exactly match the expected result. Representative cases include `Authored quad`.
+ *
+ * `Logical_faces_round_trip_through_native_scene_save` verifies that logical faces round trip through native
+ * scene save. It uses a real `ComposerSceneSession`, so registration, locking, history, and scene mutation follow
+ * production paths rather than mocks. Temporary filesystem output is inspected/cleaned so persistence behavior is
+ * tested end-to-end. The assertions establish that the operation must explicitly report success; the resulting
+ * value/state must exactly match the expected result. Representative cases include `Cube`.
+ *
+ * `Multiple_sibling_objects_can_be_grouped_and_ungrouped_together` verifies that multiple sibling objects can be
+ * grouped and ungrouped together. It uses a real `ComposerSceneSession`, so registration, locking, history, and
+ * scene mutation follow production paths rather than mocks. The assertions establish that the operation must
+ * explicitly report success; the resulting value/state must exactly match the expected result; the expected entry
+ * must remain discoverable. Representative cases include `Cube`, `Cylinder`.
+ */
 using LightingShowcase.Composer;
 using LightingShowcase.Math3D;
 using LightingShowcase.SceneGraph;

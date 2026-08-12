@@ -1,3 +1,43 @@
+/*
+ * This UI code turns editor state into controls and converts user edits back into validated domain operations.
+ * Dialog/window state is intentionally temporary: values should only become authoritative scene changes through
+ * the session/controller path, which preserves cancel, undo, and renderer invalidation behavior.
+ *
+ * `WindowsPointerInputType` makes a closed set of choices compiler-visible instead of passing loosely related
+ * integers or strings. Code that switches over `Pointer`, `Touch`, `Pen`, `Mouse`, `Touchpad` is where the
+ * behavioral meaning of each choice is implemented.
+ *
+ * `WindowsPointerFlags` makes a closed set of choices compiler-visible instead of passing loosely related
+ * integers or strings. Code that switches over `None`, `New`, `InRange`, `InContact`, `FirstButton`,
+ * `SecondButton`, `ThirdButton`, `FourthButton`, `FifthButton`, `Primary` is where the behavioral meaning of each
+ * choice is implemented.
+ *
+ * `WindowsPointerButtonChangeType` makes a closed set of choices compiler-visible instead of passing loosely
+ * related integers or strings. Code that switches over `None`, `FirstButtonDown`, `FirstButtonUp`,
+ * `SecondButtonDown`, `SecondButtonUp`, `ThirdButtonDown`, `ThirdButtonUp`, `FourthButtonDown`, `FourthButtonUp`,
+ * `FifthButtonDown` is where the behavioral meaning of each choice is implemented.
+ *
+ * `WindowsNativePoint` is a value type, so small instances can be copied without heap allocation. Its operations
+ * establish shared numerical/data semantics for callers that would otherwise risk implementing subtly different
+ * formulas.
+ *
+ * `WindowsNativeRect` is a value type, so small instances can be copied without heap allocation. Its operations
+ * establish shared numerical/data semantics for callers that would otherwise risk implementing subtly different
+ * formulas.
+ *
+ * `WindowsPointerInfo` is a value type, so small instances can be copied without heap allocation. Its operations
+ * establish shared numerical/data semantics for callers that would otherwise risk implementing subtly different
+ * formulas.
+ *
+ * `WindowsPointerTouchInfo` is a value type, so small instances can be copied without heap allocation. Its
+ * operations establish shared numerical/data semantics for callers that would otherwise risk implementing subtly
+ * different formulas.
+ *
+ * `WindowsTouchContact` is an immutable packet of related values. Record value semantics make it suitable for
+ * snapshots, options, commands, or parsed intermediate data because callers can copy/compare it without sharing
+ * mutable state. Its constructor values (`PointerId`, `FrameId`, `X`, `Y`, `Flags`) travel together because
+ * consumers need a consistent snapshot rather than reading those values independently from mutable objects.
+ */
 using System.Runtime.InteropServices;
 
 namespace LightingShowcase.Composer.Navigation.Windows;

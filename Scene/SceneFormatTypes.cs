@@ -1,12 +1,19 @@
-// -----------------------------------------------------------------------------
-// File: Scene/SceneFormatTypes.cs
-// Purpose: Shared scene import/export result and progress contracts.
-//
-// These types stay in the core application assembly so import/export plugins can
-// be moved into separate DLLs while the UI and SceneFormatPlugin interface still
-// share one common result/progress model.
-// -----------------------------------------------------------------------------
-
+/*
+ * This file belongs to the renderer-neutral scene layer, which is the shared source of truth for geometry,
+ * transforms, grouping, materials, resources, and serialization-facing state. Higher layers manipulate these
+ * abstractions rather than maintaining parallel copies of scene data.
+ *
+ * `ObjLoadResult` packages the outputs of a completed operation into one value so callers see a consistent result
+ * rather than partially updated out parameters.
+ *
+ * The `ObjLoadResult` constructor captures `filePath`, `vertexCount`, `faceCount`, `triangleCount`, `details`.
+ * Those are the dependencies/initial values the instance needs for its lifetime, so callbacks and later
+ * operations use the same objects/configuration rather than looking them up globally.
+ *
+ * The `ObjLoadProgress` constructor captures `stage`, `percent`, `vertexCount`, `faceCount`, `triangleCount`.
+ * Those are the dependencies/initial values the instance needs for its lifetime, so callbacks and later
+ * operations use the same objects/configuration rather than looking them up globally.
+ */
 namespace LightingShowcase.SceneGraph;
 
 /// <summary>Result object returned by the OBJ loader.</summary>
@@ -17,8 +24,6 @@ public sealed class ObjLoadResult
     public int FaceCount { get; }
     public int TriangleCount { get; }
     public string? Details { get; }
-
-    /// <summary>Constructs and initializes this component.</summary>
     public ObjLoadResult(string filePath, int vertexCount, int faceCount, int triangleCount, string? details = null)
     {
         FilePath = filePath;
@@ -37,8 +42,6 @@ public sealed class ObjLoadProgress
     public int VertexCount { get; }
     public int FaceCount { get; }
     public int TriangleCount { get; }
-
-    /// <summary>Constructs and initializes this component.</summary>
     public ObjLoadProgress(string stage, int percent, int vertexCount, int faceCount, int triangleCount)
     {
         Stage = stage;

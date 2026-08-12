@@ -1,3 +1,13 @@
+/*
+ * The code here converts renderer-neutral scene/camera data into pixels or backend-ready state. Dimensions, cache
+ * identity, data packing, and deterministic conversion are treated as part of the rendering contract so
+ * interactive UI code does not need to know backend details.
+ *
+ * `SceneCacheStamp` is an immutable packet of related values. Record value semantics make it suitable for
+ * snapshots, options, commands, or parsed intermediate data because callers can copy/compare it without sharing
+ * mutable state. Its constructor values (`Scene`, `Revision`) travel together because consumers need a consistent
+ * snapshot rather than reading those values independently from mutable objects.
+ */
 using LightingShowcase.SceneGraph;
 
 namespace LightingShowcase.Rendering;

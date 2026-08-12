@@ -1,3 +1,18 @@
+/*
+ * The tests in this file are executable statements of editor behavior. They intentionally use real scene/session
+ * objects and inspect externally meaningful results—geometry, hierarchy, material state, serialized output, cache
+ * stamps, or timing—so refactors can change implementation details without weakening the contract being tested.
+ *
+ * `Transform_work_item_contains_only_plain_data_and_no_Avalonia_objects` verifies that transform work item
+ * contains only plain data and no avalonia objects. The assertions establish that forbidden/unwanted entries must
+ * not be exposed. Representative cases include `Avalonia`.
+ *
+ * `Captured_transform_work_item_can_execute_on_a_worker_thread` verifies that captured transform work item can
+ * execute on a worker thread. It uses a real `ComposerSceneSession`, so registration, locking, history, and scene
+ * mutation follow production paths rather than mocks. The assertions establish that the operation must explicitly
+ * report success; the resulting value/state must exactly match the expected result; the operation must produce an
+ * observable change. Representative cases include `3`, `-2`, `1`, `0`, `30`, `1.25`, `Worker transformed`.
+ */
 using LightingShowcase.Composer;
 
 namespace LightingShowcase.Composer.Tests;

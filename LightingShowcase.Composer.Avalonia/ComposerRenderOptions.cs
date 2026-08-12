@@ -1,3 +1,18 @@
+/*
+ * This is desktop-editor glue around the scene and rendering layers. The code should be read in terms of how it
+ * translates user interaction into domain operations while keeping platform UI state, mutable scene state, and
+ * renderer state from becoming entangled.
+ *
+ * `ComposerRenderOptions` is an immutable packet of related values. Record value semantics make it suitable for
+ * snapshots, options, commands, or parsed intermediate data because callers can copy/compare it without sharing
+ * mutable state. Its constructor values (`Width`, `Height`, `Samples`, `Bounces`, `FieldOfViewDegrees`,
+ * `Exposure`, `AmbientStrength`, `UseShadows`, `BackgroundTop`, `BackgroundBottom`) travel together because
+ * consumers need a consistent snapshot rather than reading those values independently from mutable objects.
+ *
+ * `ValidateColor` checks the invariants required for color and throws/reports an error for non-finite,
+ * out-of-range, or otherwise unsupported values. Keeping validation next to mutation prevents invalid state from
+ * propagating into renderers.
+ */
 using LightingShowcase.Math3D;
 
 namespace LightingShowcase.Composer;

@@ -1,8 +1,15 @@
-// -----------------------------------------------------------------------------
-// File: Scene/PrimitiveGizmoEditMetadata.cs
-// Purpose: Describes how gizmo edits map onto authored primitive parameters.
-// -----------------------------------------------------------------------------
-
+/*
+ * This file belongs to the renderer-neutral scene layer, which is the shared source of truth for geometry,
+ * transforms, grouping, materials, resources, and serialization-facing state. Higher layers manipulate these
+ * abstractions rather than maintaining parallel copies of scene data.
+ *
+ * The `PrimitiveGizmoEditMetadata` constructor captures `displayName`, `moveUpdatesOrigin`, `scaleRule`,
+ * `rotationRule`. Those are the dependencies/initial values the instance needs for its lifetime, so callbacks and
+ * later operations use the same objects/configuration rather than looking them up globally.
+ *
+ * `ToString` returns the human-facing label/name for this value so Avalonia controls display meaningful text
+ * instead of the generated record/type representation.
+ */
 namespace LightingShowcase.SceneGraph;
 
 /// <summary>

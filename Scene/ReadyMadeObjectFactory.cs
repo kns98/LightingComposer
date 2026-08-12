@@ -1,12 +1,26 @@
-// -----------------------------------------------------------------------------
-// File: Scene/ReadyMadeObjectFactory.cs
-// Purpose: Built-in geometry creation.
-//
-// Creates procedural objects such as room parts and simple props used by the ready-made asset library.
-// This comment is intentionally kept in source code so future maintainers can
-// understand the role of this file without opening external documentation.
-// -----------------------------------------------------------------------------
-
+/*
+ * This file belongs to the renderer-neutral scene layer, which is the shared source of truth for geometry,
+ * transforms, grouping, materials, resources, and serialization-facing state. Higher layers manipulate these
+ * abstractions rather than maintaining parallel copies of scene data.
+ *
+ * `ReadyMadeObjectFactory` centralizes construction of a family of related objects so callers choose
+ * intent/parameters instead of repeating low-level assembly steps.
+ *
+ * `AddBox` adds box to the owning collection/model while using this boundary to preserve indexing, ownership, and
+ * derived-state invariants.
+ *
+ * `AddPyramid` adds pyramid to the owning collection/model while using this boundary to preserve indexing,
+ * ownership, and derived-state invariants.
+ *
+ * `AddCylinder` adds cylinder to the owning collection/model while using this boundary to preserve indexing,
+ * ownership, and derived-state invariants.
+ *
+ * `AddSphere` adds sphere to the owning collection/model while using this boundary to preserve indexing,
+ * ownership, and derived-state invariants.
+ *
+ * `AddQuad` adds quad to the owning collection/model while using this boundary to preserve indexing, ownership,
+ * and derived-state invariants.
+ */
 using LightingShowcase.Math3D;
 
 namespace LightingShowcase.SceneGraph;
@@ -192,8 +206,6 @@ public static class ReadyMadeObjectFactory
             }
         }
     }
-
-    /// <summary>Implements the sphere point operation for this file's subsystem.</summary>
     private static Vec3 SpherePoint(Vec3 center, double radius, double theta, double phi)
     {
         double sinTheta = Math.Sin(theta);

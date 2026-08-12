@@ -1,3 +1,15 @@
+/*
+ * This is desktop-editor glue around the scene and rendering layers. The code should be read in terms of how it
+ * translates user interaction into domain operations while keeping platform UI state, mutable scene state, and
+ * renderer state from becoming entangled.
+ *
+ * `CpuCommandLineRenderer` turns camera/scene state into an image using one rendering backend. Its
+ * caches/resources are implementation details of that backend; callers should depend on the common rendered
+ * result rather than those internals.
+ *
+ * `PackDisplayColor` packs display color into the compact binary/pixel representation expected by the downstream
+ * renderer or file format, including clamping/bit placement rather than exposing raw doubles.
+ */
 using LightingShowcase.CameraSystem;
 using LightingShowcase.Lighting;
 using LightingShowcase.Math3D;

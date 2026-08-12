@@ -1,3 +1,4 @@
+<!-- MSBuild evaluates this file before compiling any C# in the project. Target-framework/compiler properties change how the source is interpreted; ProjectReference entries establish which sibling assemblies are available at compile time; PackageReference entries become restored external build inputs. Its external dependencies include StbImageSharp, Veldrid, Veldrid.SPIRV. Keeping those dependency edges explicit is what prevents source files from silently relying on assemblies that the project does not declare. -->
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>

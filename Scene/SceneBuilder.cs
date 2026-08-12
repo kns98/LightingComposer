@@ -1,13 +1,51 @@
-// -----------------------------------------------------------------------------
-// File: Scene/SceneBuilder.cs
-// Purpose: Default advanced material showcase scene.
-//
-// The startup scene is intentionally authored as a compact material/lighting lab
-// for the CPU and Vulkan-compute ray tracers: emissive panels, point lights,
-// metallic/roughness variation, glass/transmission, alpha-blended diffusers,
-// shadows, indirect bounce targets, and mixed primitive geometry.
-// -----------------------------------------------------------------------------
-
+/*
+ * This file belongs to the renderer-neutral scene layer, which is the shared source of truth for geometry,
+ * transforms, grouping, materials, resources, and serialization-facing state. Higher layers manipulate these
+ * abstractions rather than maintaining parallel copies of scene data.
+ *
+ * `SceneBuilder` accumulates/normalizes lower-level inputs and emits a valid higher-level object only when enough
+ * information has been supplied.
+ *
+ * The `SceneBuilder` constructor captures `scene`, `materials`. Those are the dependencies/initial values the
+ * instance needs for its lifetime, so callbacks and later operations use the same objects/configuration rather
+ * than looking them up globally.
+ *
+ * `BuildShowcaseRoom` derives showcase room from lower-level input data, resolving indexing/grouping/derived
+ * values once so callers can operate on a coherent higher-level representation.
+ *
+ * `BuildNeonAndEmissionWall` derives neon and emission wall from lower-level input data, resolving
+ * indexing/grouping/derived values once so callers can operate on a coherent higher-level representation.
+ *
+ * `BuildMetalRoughnessPedestals` derives metal roughness pedestals from lower-level input data, resolving
+ * indexing/grouping/derived values once so callers can operate on a coherent higher-level representation.
+ *
+ * `AddPedestal` adds pedestal to the owning collection/model while using this boundary to preserve indexing,
+ * ownership, and derived-state invariants.
+ *
+ * `BuildGlassTransmissionArea` derives glass transmission area from lower-level input data, resolving
+ * indexing/grouping/derived values once so callers can operate on a coherent higher-level representation.
+ *
+ * `BuildTranslucentLampFeature` derives translucent lamp feature from lower-level input data, resolving
+ * indexing/grouping/derived values once so callers can operate on a coherent higher-level representation.
+ *
+ * `BuildBounceAndShadowTestObjects` derives bounce and shadow test objects from lower-level input data, resolving
+ * indexing/grouping/derived values once so callers can operate on a coherent higher-level representation.
+ *
+ * `BuildCameraFramingProps` derives camera framing props from lower-level input data, resolving
+ * indexing/grouping/derived values once so callers can operate on a coherent higher-level representation.
+ *
+ * `BuildLights` derives lights from lower-level input data, resolving indexing/grouping/derived values once so
+ * callers can operate on a coherent higher-level representation.
+ *
+ * `AddBoxPrimitive` adds box primitive to the owning collection/model while using this boundary to preserve
+ * indexing, ownership, and derived-state invariants.
+ *
+ * `AddSpherePrimitive` adds sphere primitive to the owning collection/model while using this boundary to preserve
+ * indexing, ownership, and derived-state invariants.
+ *
+ * `AddCylinderPrimitive` adds cylinder primitive to the owning collection/model while using this boundary to
+ * preserve indexing, ownership, and derived-state invariants.
+ */
 using LightingShowcase.Lighting;
 using LightingShowcase.Math3D;
 

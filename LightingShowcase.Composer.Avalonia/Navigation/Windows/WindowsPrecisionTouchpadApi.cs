@@ -1,3 +1,20 @@
+/*
+ * This UI code turns editor state into controls and converts user edits back into validated domain operations.
+ * Dialog/window state is intentionally temporary: values should only become authoritative scene changes through
+ * the session/controller path, which preserves cancel, undo, and renderer invalidation behavior.
+ *
+ * `WindowsPrecisionTouchpadApi` owns resources/subscriptions whose lifetime must be ended explicitly.
+ *
+ * `GetExport` reads export from the authoritative model and returns a value/snapshot suitable for callers,
+ * avoiding direct access to mutable internal storage.
+ *
+ * `IsTouchpadPointer` tests whether touchpad pointer is true for the supplied/current value. Keeping the
+ * predicate here ensures every caller uses the same definition instead of duplicating a slightly different
+ * condition.
+ *
+ * `Dispose` ends this object’s active lifetime: owned cancellations/resources/listeners are released so completed
+ * windows/renderers do not keep receiving work or retain unmanaged memory.
+ */
 using System.ComponentModel;
 using System.Runtime.InteropServices;
 

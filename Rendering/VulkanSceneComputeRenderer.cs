@@ -1,13 +1,104 @@
-// -----------------------------------------------------------------------------
-// File: Rendering/VulkanSceneComputeRenderer.cs
-// Purpose: Vulkan compute scene ray/path tracer.
-//
-// This renderer uses Vulkan compute through Veldrid rather than Vulkan RT
-// BLAS/TLAS. It traces the current Scene.Triangles buffer on the GPU, applies
-// scene lights, simple material properties, hard shadows, emissive surfaces, and
-// optional stochastic bounces selected from the Render pane.
-// -----------------------------------------------------------------------------
-
+/*
+ * The Vulkan path makes resource ownership and cache validity explicit. CPU-side scene data is packed into GPU
+ * buffers/images, commands are submitted against those resources, and stale resources must be rebuilt when
+ * geometry or transforms change; a numerically correct algorithm can still be wrong here if lifetime or
+ * synchronization is mishandled.
+ *
+ * `VulkanSceneComputeRenderer` turns camera/scene state into an image using one rendering backend. Its
+ * caches/resources are implementation details of that backend; callers should depend on the common rendered
+ * result rather than those internals.
+ *
+ * `SharedComputeResources` owns resources/subscriptions whose lifetime must be ended explicitly.
+ *
+ * `PreparedComputeScene` owns resources/subscriptions whose lifetime must be ended explicitly.
+ *
+ * `GpuTriangle` is a value type, so small instances can be copied without heap allocation. Its operations
+ * establish shared numerical/data semantics for callers that would otherwise risk implementing subtly different
+ * formulas.
+ *
+ * `GpuTextureInfo` is a value type, so small instances can be copied without heap allocation. Its operations
+ * establish shared numerical/data semantics for callers that would otherwise risk implementing subtly different
+ * formulas.
+ *
+ * `TextureUpload` packages CPU-side data/resources immediately before GPU upload so byte layout and ownership are
+ * explicit at the CPU/GPU boundary.
+ *
+ * `TextureBuildResult` packages the outputs of a completed operation into one value so callers see a consistent
+ * result rather than partially updated out parameters.
+ *
+ * `GpuBvhNode` is a value type, so small instances can be copied without heap allocation. Its operations
+ * establish shared numerical/data semantics for callers that would otherwise risk implementing subtly different
+ * formulas.
+ *
+ * `CpuBvhNode` is a value type, so small instances can be copied without heap allocation. Its operations
+ * establish shared numerical/data semantics for callers that would otherwise risk implementing subtly different
+ * formulas.
+ *
+ * `TriangleCentroidComparer` defines one stable ordering rule used by sorting/partitioning code; changing it
+ * changes how the associated spatial/resource structure is organized.
+ *
+ * `StageLogPath` is derived rather than separately stored: it evaluates `Path.Combine(Path.GetTempPath(), )`.
+ * Keeping the value computed from its source fields prevents a second cached flag/value from drifting out of
+ * sync.
+ *
+ * `Dispose` ends this object’s active lifetime: owned cancellations/resources/listeners are released so completed
+ * windows/renderers do not keep receiving work or retain unmanaged memory.
+ *
+ * `Dispose` ends this object’s active lifetime: owned cancellations/resources/listeners are released so completed
+ * windows/renderers do not keep receiving work or retain unmanaged memory.
+ *
+ * `ReleasePreparedScene` releases prepared scene and its owned resources, used when cached/native objects are no
+ * longer valid or the owning scene/session is shutting down. GPU resource creation/update is explicit, so correct
+ * lifetime and cache invalidation are part of the method’s correctness.
+ *
+ * `GetOrCreateSharedDevice` reads or create shared device from the authoritative model and returns a
+ * value/snapshot suitable for callers, avoiding direct access to mutable internal storage. GPU resource
+ * creation/update is explicit, so correct lifetime and cache invalidation are part of the method’s correctness.
+ *
+ * The `GpuTriangle` constructor captures `triangle`, `textureIds`. Those are the dependencies/initial values the
+ * instance needs for its lifetime, so callbacks and later operations use the same objects/configuration rather
+ * than looking them up globally.
+ *
+ * The `GpuTextureInfo` constructor captures `pixelOffset`, `width`, `height`. Those are the dependencies/initial
+ * values the instance needs for its lifetime, so callbacks and later operations use the same
+ * objects/configuration rather than looking them up globally.
+ *
+ * The `GpuBvhNode` constructor captures `boundsMin`, `boundsMax`, `leftOrFirst`, `triangleCount`, `rightChild`.
+ * Those are the dependencies/initial values the instance needs for its lifetime, so callbacks and later
+ * operations use the same objects/configuration rather than looking them up globally.
+ *
+ * The `CpuBvhNode` constructor captures `boundsMin`, `boundsMax`, `leftOrFirst`, `triangleCount`, `rightChild`.
+ * Those are the dependencies/initial values the instance needs for its lifetime, so callbacks and later
+ * operations use the same objects/configuration rather than looking them up globally.
+ *
+ * The `TriangleCentroidComparer` constructor captures `triangles`. Those are the dependencies/initial values the
+ * instance needs for its lifetime, so callbacks and later operations use the same objects/configuration rather
+ * than looking them up globally.
+ *
+ * The `GpuLight` constructor captures `light`. Those are the dependencies/initial values the instance needs for
+ * its lifetime, so callbacks and later operations use the same objects/configuration rather than looking them up
+ * globally.
+ *
+ * `ReadBackOutputImage` reads back output image from the external stream/document, advancing through the format
+ * in the order required to resolve references and produce valid internal data. Cancellation is propagated so
+ * shutdown or a newer request can make obsolete work stop early. GPU resource creation/update is explicit, so
+ * correct lifetime and cache invalidation are part of the method’s correctness.
+ *
+ * `GetOrCreatePreparedScene` reads or create prepared scene from the authoritative model and returns a
+ * value/snapshot suitable for callers, avoiding direct access to mutable internal storage. Cancellation is
+ * propagated so shutdown or a newer request can make obsolete work stop early. Native interop is localized here
+ * so handle/pointer lifetime and platform failure handling do not spread through editor code. GPU resource
+ * creation/update is explicit, so correct lifetime and cache invalidation are part of the method’s correctness.
+ *
+ * `GetOrCreateSharedComputeResources` reads or create shared compute resources from the authoritative model and
+ * returns a value/snapshot suitable for callers, avoiding direct access to mutable internal storage.
+ *
+ * `CreateComputeShaderWithDiagnostics` constructs compute shader with diagnostics in the normalized form expected
+ * downstream, so allocation plus initialization of its invariants happen together.
+ *
+ * `BuildGpuBvh` derives gpu bvh from lower-level input data, resolving indexing/grouping/derived values once so
+ * callers can operate on a coherent higher-level representation.
+ */
 using System.Numerics;
 using System.Runtime.InteropServices;
 using System.Text;

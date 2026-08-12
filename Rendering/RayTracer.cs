@@ -1,11 +1,25 @@
-// -----------------------------------------------------------------------------
-// File: Rendering/RayTracer.cs
-// Purpose: Ray tracing engine.
-//
-// Finds intersections, shades surfaces, samples lights, handles texture lookup,
-// shadows, alpha/transmission blending, and camera ray generation.
-// -----------------------------------------------------------------------------
-
+/*
+ * The CPU ray tracer is both a renderer and a clear reference implementation of scene geometry semantics. Camera
+ * rays are generated in world space, intersections produce hit data, and shading evaluates lights/materials from
+ * that hit; GPU renderers should agree with these coordinate and material conventions even when they implement
+ * them differently.
+ *
+ * The `RayTracer` constructor captures `scene`, `lighting`. Those are the dependencies/initial values the
+ * instance needs for its lifetime, so callbacks and later operations use the same objects/configuration rather
+ * than looking them up globally.
+ *
+ * `TracePath` traces path through scene geometry, finding the nearest valid intersection and using that hit as
+ * the basis for shading/visibility decisions.
+ *
+ * `TraceDebug` traces debug through scene geometry, finding the nearest valid intersection and using that hit as
+ * the basis for shading/visibility decisions.
+ *
+ * `ShadeHit` evaluates hit from hit/material/light information, combining the relevant surface and illumination
+ * terms into the color returned to the renderer.
+ *
+ * `ApplyNormalMap` applies normal map as a single semantic mutation. Validation, scene changes, undo bookkeeping,
+ * and cache invalidation are kept inside this boundary rather than exposed as separate caller responsibilities.
+ */
 using LightingShowcase.CameraSystem;
 using LightingShowcase.Lighting;
 using LightingShowcase.SceneGraph;
@@ -19,8 +33,6 @@ public sealed class RayTracer
     private const int MaxTransparencyDepth = 4;
     private const double Pi = Math.PI;
     private readonly Scene scene;
-
-    /// <summary>Constructs and initializes this component.</summary>
     public RayTracer(Scene scene, LightingState lighting)
     {
         this.scene = scene;
@@ -267,8 +279,6 @@ public sealed class RayTracer
             bitangent * tangentNormal.Y +
             normal * tangentNormal.Z).Normalize();
     }
-
-    /// <summary>Implements the direct light operation for this file's subsystem.</summary>
     private Vec3 DirectLight(Hit hit, SceneLight light, Vec3 surfaceColor, Vec3 normal, Vec3 viewDirection, double metallic, double roughness)
     {
         return light.Kind switch
@@ -487,12 +497,8 @@ public sealed class RayTracer
             ? value * 12.92
             : 1.055 * Math.Pow(value, 1.0 / 2.4) - 0.055;
     }
-
-    /// <summary>Implements the ray direction operation for this file's subsystem.</summary>
     public static Vec3 RayDirection(int x, int y, int width, int height, CameraBasis basis)
         => RayDirection(x + 0.5, y + 0.5, width, height, basis);
-
-    /// <summary>Implements the ray direction operation for this file's subsystem.</summary>
     public static Vec3 RayDirection(double x, double y, int width, int height, CameraBasis basis)
         => RayDirection(x, y, width, height, basis, 72.0);
 

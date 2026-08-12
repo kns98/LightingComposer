@@ -1,3 +1,76 @@
+/*
+ * This is desktop-editor glue around the scene and rendering layers. The code should be read in terms of how it
+ * translates user interaction into domain operations while keeping platform UI state, mutable scene state, and
+ * renderer state from becoming entangled.
+ *
+ * `ComposerGizmoMode` makes a closed set of choices compiler-visible instead of passing loosely related integers
+ * or strings. Code that switches over `Translate`, `Rotate`, `Scale` is where the behavioral meaning of each
+ * choice is implemented.
+ *
+ * `ComposerGizmoAxis` makes a closed set of choices compiler-visible instead of passing loosely related integers
+ * or strings. Code that switches over `None`, `X`, `Y`, `Z`, `Uniform` is where the behavioral meaning of each
+ * choice is implemented.
+ *
+ * `ComposerGizmoHit` is an immutable packet of related values. Record value semantics make it suitable for
+ * snapshots, options, commands, or parsed intermediate data because callers can copy/compare it without sharing
+ * mutable state. Its constructor values (`Axis`, `ScreenDirectionX`, `ScreenDirectionY`, `WorldUnitsPerPixel`,
+ * `CenterX`, `CenterY`, `GestureSign`, `WorldCenter`, `RotationStartVector`) travel together because consumers
+ * need a consistent snapshot rather than reading those values independently from mutable objects.
+ *
+ * `ComposerOverlayRenderer` turns camera/scene state into an image using one rendering backend. Its
+ * caches/resources are implementation details of that backend; callers should depend on the common rendered
+ * result rather than those internals.
+ *
+ * `ProjectedPoint` is an immutable packet of related values. Record value semantics make it suitable for
+ * snapshots, options, commands, or parsed intermediate data because callers can copy/compare it without sharing
+ * mutable state. Its constructor values (`X`, `Y`, `Depth`) travel together because consumers need a consistent
+ * snapshot rather than reading those values independently from mutable objects.
+ *
+ * `AxisGeometry` is an immutable packet of related values. Record value semantics make it suitable for snapshots,
+ * options, commands, or parsed intermediate data because callers can copy/compare it without sharing mutable
+ * state. Its constructor values (`WorldCenter`, `AxisWorldLength`, `Center`, `XEnd`, `YEnd`, `ZEnd`) travel
+ * together because consumers need a consistent snapshot rather than reading those values independently from
+ * mutable objects.
+ *
+ * `TestAxis` evaluates axis against the current hit-test conditions and updates the best candidate only when this
+ * candidate is within tolerance/closer than the previous one.
+ *
+ * `TestAxis` evaluates axis against the current hit-test conditions and updates the best candidate only when this
+ * candidate is within tolerance/closer than the previous one.
+ *
+ * `TestRing` evaluates ring against the current hit-test conditions and updates the best candidate only when this
+ * candidate is within tolerance/closer than the previous one.
+ *
+ * `DrawBounds` rasterizes bounds into the target image/overlay using projected geometry. Drawing is kept separate
+ * from scene mutation so gizmos/highlights remain presentation-only.
+ *
+ * `DrawScaleGizmo` rasterizes scale gizmo into the target image/overlay using projected geometry. Drawing is kept
+ * separate from scene mutation so gizmos/highlights remain presentation-only.
+ *
+ * `DrawRotationGizmo` rasterizes rotation gizmo into the target image/overlay using projected geometry. Drawing
+ * is kept separate from scene mutation so gizmos/highlights remain presentation-only.
+ *
+ * `DrawRing` rasterizes ring into the target image/overlay using projected geometry. Drawing is kept separate
+ * from scene mutation so gizmos/highlights remain presentation-only.
+ *
+ * `Distance` computes Euclidean distance between the supplied points/components. In hit-testing code this
+ * converts geometric proximity into a scalar that can be compared with a pixel/selection tolerance.
+ *
+ * `DrawHandle` rasterizes handle into the target image/overlay using projected geometry. Drawing is kept separate
+ * from scene mutation so gizmos/highlights remain presentation-only.
+ *
+ * `DrawSquareHandle` rasterizes square handle into the target image/overlay using projected geometry. Drawing is
+ * kept separate from scene mutation so gizmos/highlights remain presentation-only.
+ *
+ * `DrawDisc` rasterizes disc into the target image/overlay using projected geometry. Drawing is kept separate
+ * from scene mutation so gizmos/highlights remain presentation-only.
+ *
+ * `BlendPixel` combines pixel with the destination pixel using alpha/color composition rather than overwriting it
+ * outright, allowing translucent overlays to remain readable over the rendered scene.
+ *
+ * `IsFinite` rejects NaN and infinity so geometry/projection code does not feed non-finite coordinates into
+ * clipping, rasterization, bounds, or scene transforms.
+ */
 using LightingShowcase.CameraSystem;
 using LightingShowcase.Math3D;
 using LightingShowcase.Rendering;

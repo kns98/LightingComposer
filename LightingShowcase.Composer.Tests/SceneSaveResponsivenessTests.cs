@@ -1,3 +1,19 @@
+/*
+ * The tests in this file are executable statements of editor behavior. They intentionally use real scene/session
+ * objects and inspect externally meaningful results—geometry, hierarchy, material state, serialized output, cache
+ * stamps, or timing—so refactors can change implementation details without weakening the contract being tested.
+ *
+ * `Shared_textured_mesh_saves_without_rehashing_the_texture_per_triangle` verifies that shared textured mesh
+ * saves without rehashing the texture per triangle. Timing is measured because responsiveness/performance is part
+ * of the contract being protected. Temporary filesystem output is inspected/cleaned so persistence behavior is
+ * tested end-to-end. The assertions establish that the operation must explicitly report success. Representative
+ * cases include `shared`, `many triangles`, `responsive.lscene`.
+ *
+ * `Save_replaces_destination_atomically_and_removes_temporary_file` verifies that save replaces destination
+ * atomically and removes temporary file. Temporary filesystem output is inspected/cleaned so persistence behavior
+ * is tested end-to-end. The assertions establish that the operation must explicitly report success.
+ * Representative cases include `atomic.lscene`, `old content`, `.atomic.lscene.*.tmp`.
+ */
 using System.Diagnostics;
 using LightingShowcase.Math3D;
 using LightingShowcase.SceneGraph;

@@ -1,8 +1,24 @@
-// -----------------------------------------------------------------------------
-// File: Scene/TransformConverter.cs
-// Purpose: One canonical transform/axis conversion layer.
-// -----------------------------------------------------------------------------
-
+/*
+ * This file belongs to the renderer-neutral scene layer, which is the shared source of truth for geometry,
+ * transforms, grouping, materials, resources, and serialization-facing state. Higher layers manipulate these
+ * abstractions rather than maintaining parallel copies of scene data.
+ *
+ * `TransformConverter` provides shared algorithms/registration behavior without per-instance state.
+ *
+ * `ApplySrt` applies srt as a single semantic mutation. Validation, scene changes, undo bookkeeping, and cache
+ * invalidation are kept inside this boundary rather than exposed as separate caller responsibilities.
+ *
+ * `ApplySrtNormal` applies srt normal as a single semantic mutation. Validation, scene changes, undo bookkeeping,
+ * and cache invalidation are kept inside this boundary rather than exposed as separate caller responsibilities.
+ *
+ * `ApplyInverseSrt` applies inverse srt as a single semantic mutation. Validation, scene changes, undo
+ * bookkeeping, and cache invalidation are kept inside this boundary rather than exposed as separate caller
+ * responsibilities.
+ *
+ * `ApplyInverseSrtNormal` applies inverse srt normal as a single semantic mutation. Validation, scene changes,
+ * undo bookkeeping, and cache invalidation are kept inside this boundary rather than exposed as separate caller
+ * responsibilities.
+ */
 using LightingShowcase.Math3D;
 
 namespace LightingShowcase.SceneGraph;

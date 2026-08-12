@@ -1,3 +1,48 @@
+/*
+ * Object-library definitions generate scene geometry from named, authored parameters. Keeping those parameters
+ * attached to the generated object is important: a cube with width/height/depth is still editable as a cube until
+ * a topology edit deliberately converts it into ordinary mesh geometry.
+ *
+ * `PlanePrimitive` is the procedural definition for a plane. It knows how to turn authored parameters into
+ * triangles and, where supported, how to absorb object-scale changes back into those parameters so the object
+ * remains editable as a named primitive rather than becoming anonymous mesh data.
+ *
+ * `CubePrimitive` is the procedural definition for a cube. It knows how to turn authored parameters into
+ * triangles and, where supported, how to absorb object-scale changes back into those parameters so the object
+ * remains editable as a named primitive rather than becoming anonymous mesh data.
+ *
+ * `CirclePrimitive` is the procedural definition for a circle. It knows how to turn authored parameters into
+ * triangles and, where supported, how to absorb object-scale changes back into those parameters so the object
+ * remains editable as a named primitive rather than becoming anonymous mesh data.
+ *
+ * `SpherePrimitive` is the procedural definition for a sphere. It knows how to turn authored parameters into
+ * triangles and, where supported, how to absorb object-scale changes back into those parameters so the object
+ * remains editable as a named primitive rather than becoming anonymous mesh data.
+ *
+ * `IcospherePrimitive` is the procedural definition for a icosphere. It knows how to turn authored parameters
+ * into triangles and, where supported, how to absorb object-scale changes back into those parameters so the
+ * object remains editable as a named primitive rather than becoming anonymous mesh data.
+ *
+ * `CylinderPrimitive` is the procedural definition for a cylinder. It knows how to turn authored parameters into
+ * triangles and, where supported, how to absorb object-scale changes back into those parameters so the object
+ * remains editable as a named primitive rather than becoming anonymous mesh data.
+ *
+ * `ConePrimitive` is the procedural definition for a cone. It knows how to turn authored parameters into
+ * triangles and, where supported, how to absorb object-scale changes back into those parameters so the object
+ * remains editable as a named primitive rather than becoming anonymous mesh data.
+ *
+ * `GridPrimitive` is the procedural definition for a grid. It knows how to turn authored parameters into
+ * triangles and, where supported, how to absorb object-scale changes back into those parameters so the object
+ * remains editable as a named primitive rather than becoming anonymous mesh data.
+ *
+ * `LowPolySpherePrimitive` is the procedural definition for a low poly sphere. It knows how to turn authored
+ * parameters into triangles and, where supported, how to absorb object-scale changes back into those parameters
+ * so the object remains editable as a named primitive rather than becoming anonymous mesh data.
+ *
+ * `HemispherePrimitive` is the procedural definition for a hemisphere. It knows how to turn authored parameters
+ * into triangles and, where supported, how to absorb object-scale changes back into those parameters so the
+ * object remains editable as a named primitive rather than becoming anonymous mesh data.
+ */
 using LightingShowcase.Math3D;
 using LightingShowcase.SceneGraph;
 

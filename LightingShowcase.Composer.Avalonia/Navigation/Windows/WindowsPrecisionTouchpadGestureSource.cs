@@ -1,3 +1,37 @@
+/*
+ * This UI code turns editor state into controls and converts user edits back into validated domain operations.
+ * Dialog/window state is intentionally temporary: values should only become authoritative scene changes through
+ * the session/controller path, which preserves cancel, undo, and renderer invalidation behavior.
+ *
+ * `NativeTrackpadOrbit` is an immutable packet of related values. Record value semantics make it suitable for
+ * snapshots, options, commands, or parsed intermediate data because callers can copy/compare it without sharing
+ * mutable state. Its constructor values (`X`, `Y`) travel together because consumers need a consistent snapshot
+ * rather than reading those values independently from mutable objects.
+ *
+ * `NativeTrackpadZoom` is an immutable packet of related values. Record value semantics make it suitable for
+ * snapshots, options, commands, or parsed intermediate data because callers can copy/compare it without sharing
+ * mutable state. Its constructor values (`Amount`) travel together because consumers need a consistent snapshot
+ * rather than reading those values independently from mutable objects.
+ *
+ * `NativeTrackpadTurn` is an immutable packet of related values. Record value semantics make it suitable for
+ * snapshots, options, commands, or parsed intermediate data because callers can copy/compare it without sharing
+ * mutable state. Its constructor values (`Radians`) travel together because consumers need a consistent snapshot
+ * rather than reading those values independently from mutable objects.
+ *
+ * `WindowsPrecisionTouchpadGestureSource` owns resources/subscriptions whose lifetime must be ended explicitly.
+ *
+ * `IsAvailable` is derived rather than separately stored: it evaluates `attached && api is not null`. Keeping the
+ * value computed from its source fields prevents a second cached flag/value from drifting out of sync.
+ *
+ * `IsGestureActive` is derived rather than separately stored: it evaluates `gestureActive`. Keeping the value
+ * computed from its source fields prevents a second cached flag/value from drifting out of sync.
+ *
+ * `ReadPositiveEnvironmentDouble` reads positive environment double from the external stream/document, advancing
+ * through the format in the order required to resolve references and produce valid internal data.
+ *
+ * `Dispose` ends this object’s active lifetime: owned cancellations/resources/listeners are released so completed
+ * windows/renderers do not keep receiving work or retain unmanaged memory.
+ */
 namespace LightingShowcase.Composer.Navigation.Windows;
 
 internal readonly record struct NativeTrackpadOrbit(double X, double Y);

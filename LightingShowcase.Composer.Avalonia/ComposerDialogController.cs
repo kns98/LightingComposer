@@ -1,3 +1,24 @@
+/*
+ * This controller translates Avalonia events and commands into editor operations while keeping the live scene
+ * behind `ComposerSceneSession`. Its job is coordination: validate/route input, invoke the appropriate session or
+ * renderer operation, and update presentation state without becoming a competing owner of scene data.
+ *
+ * `ComposerDialogController` coordinates a focused interaction workflow. It holds the transient UI/input state
+ * needed for that workflow but delegates authoritative scene mutation to the session/model layer.
+ *
+ * The `ComposerDialogController` constructor captures `owner`, `session`. Those are the dependencies/initial
+ * values the instance needs for its lifetime, so callbacks and later operations use the same
+ * objects/configuration rather than looking them up globally.
+ *
+ * `HasPrimitiveEditorFor` reports whether primitive editor for is present/usable in the current state, without
+ * changing that state.
+ *
+ * `HasMaterialEditorFor` reports whether material editor for is present/usable in the current state, without
+ * changing that state.
+ *
+ * `Dispose` ends this object’s active lifetime: owned cancellations/resources/listeners are released so completed
+ * windows/renderers do not keep receiving work or retain unmanaged memory.
+ */
 using Avalonia.Controls;
 
 namespace LightingShowcase.Composer;

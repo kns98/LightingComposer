@@ -1,3 +1,25 @@
+/*
+ * The tests in this file are executable statements of editor behavior. They intentionally use real scene/session
+ * objects and inspect externally meaningful results—geometry, hierarchy, material state, serialized output, cache
+ * stamps, or timing—so refactors can change implementation details without weakening the contract being tested.
+ *
+ * `Lscene_reopens_textures_without_the_original_image_file` verifies that lscene reopens textures without the
+ * original image file. Temporary filesystem output is inspected/cleaned so persistence behavior is tested
+ * end-to-end. The assertions establish that required objects/resources must resolve; the operation must
+ * explicitly report success; the disallowed path must be rejected; the resulting value/state must exactly match
+ * the expected result. Representative cases include `original-texture.png`, `embedded.lscene`.
+ *
+ * `Distinct_in_memory_textures_are_not_collapsed_in_lscene` verifies that distinct in memory textures are not
+ * collapsed in lscene. Temporary filesystem output is inspected/cleaned so persistence behavior is tested
+ * end-to-end. The assertions establish that the operation must produce an observable change. Representative cases
+ * include `two textures`, `same-name`, `distinct.lscene`.
+ *
+ * `CreateTexturedScene` constructs textured scene in the normalized form expected downstream, so allocation plus
+ * initialization of its invariants happen together.
+ *
+ * `CreateTempDirectory` constructs temp directory in the normalized form expected downstream, so allocation plus
+ * initialization of its invariants happen together.
+ */
 using LightingShowcase.Math3D;
 using LightingShowcase.SceneGraph;
 

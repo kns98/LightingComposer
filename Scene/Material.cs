@@ -1,12 +1,42 @@
-// -----------------------------------------------------------------------------
-// File: Scene/Material.cs
-// Purpose: Surface material.
-//
-// Stores color, emission, optional texture, and material values consumed by the ray tracer.
-// This comment is intentionally kept in source code so future maintainers can
-// understand the role of this file without opening external documentation.
-// -----------------------------------------------------------------------------
-
+/*
+ * Surface appearance is normalized here so importers, editor controls, and every renderer use the same meaning
+ * for colors, PBR values, alpha behavior, texture slots, UV transforms, and resource identity. That shared model
+ * is what makes a material edited in the UI render consistently across backends.
+ *
+ * `MaterialAlphaMode` makes a closed set of choices compiler-visible instead of passing loosely related integers
+ * or strings. Code that switches over `Opaque`, `Mask`, `Blend` is where the behavioral meaning of each choice is
+ * implemented.
+ *
+ * `MaterialTextureSlot` makes a closed set of choices compiler-visible instead of passing loosely related
+ * integers or strings. Code that switches over `BaseColor`, `MetallicRoughness`, `Normal`, `Emissive`,
+ * `Transmission`, `Occlusion` is where the behavioral meaning of each choice is implemented.
+ *
+ * `HasAnyTexture` is derived rather than separately stored: it evaluates `Texture != null ||
+ * MetallicRoughnessTexture != null || NormalTexture != null || EmissiveTexture != null || TransmissionTexture !=
+ * null || OcclusionTexture != null`. Keeping the value computed from its source fields prevents a second cached
+ * flag/value from drifting out of sync.
+ *
+ * `SampleLinear` samples linear at the requested coordinate/direction, applying the interpolation/addressing
+ * rules owned by this subsystem.
+ *
+ * `SampleAlpha` samples alpha at the requested coordinate/direction, applying the interpolation/addressing rules
+ * owned by this subsystem.
+ *
+ * `SampleNormalMap` samples normal map at the requested coordinate/direction, applying the
+ * interpolation/addressing rules owned by this subsystem.
+ *
+ * `SampleEmission` samples emission at the requested coordinate/direction, applying the interpolation/addressing
+ * rules owned by this subsystem.
+ *
+ * `SampleEmissionLinear` samples emission linear at the requested coordinate/direction, applying the
+ * interpolation/addressing rules owned by this subsystem.
+ *
+ * `SampleOcclusion` samples occlusion at the requested coordinate/direction, applying the
+ * interpolation/addressing rules owned by this subsystem.
+ *
+ * `GetTexture` reads texture from the authoritative model and returns a value/snapshot suitable for callers,
+ * avoiding direct access to mutable internal storage.
+ */
 using LightingShowcase.Math3D;
 
 namespace LightingShowcase.SceneGraph;
@@ -59,8 +89,6 @@ public sealed class Material
     public double Clearcoat { get; }
     public double ClearcoatRoughness { get; }
     public bool ClearcoatUsesTransmissionTexture { get; }
-
-    /// <summary>Constructs and initializes this component.</summary>
     public Material(
         Vec3 color,
         double emission = 0.0,

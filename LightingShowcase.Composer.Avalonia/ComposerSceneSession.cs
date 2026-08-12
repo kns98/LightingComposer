@@ -1,3 +1,161 @@
+/*
+ * `ComposerSceneSession` is the synchronization and transaction boundary around the live scene. Code in these
+ * partial files takes the session gate before touching shared mutable scene data, records logical edits for
+ * undo/redo, preserves procedural metadata when possible, and invalidates renderer caches when geometry/material
+ * state changes. UI code should ask the session to perform edits instead of modifying scene objects directly.
+ *
+ * `ComposerFrame` is an immutable packet of related values. Record value semantics make it suitable for
+ * snapshots, options, commands, or parsed intermediate data because callers can copy/compare it without sharing
+ * mutable state. Its constructor values (`Image`, `ElapsedMilliseconds`, `Details`) travel together because
+ * consumers need a consistent snapshot rather than reading those values independently from mutable objects.
+ *
+ * `ComposerObjectState` is an immutable packet of related values. Record value semantics make it suitable for
+ * snapshots, options, commands, or parsed intermediate data because callers can copy/compare it without sharing
+ * mutable state. Its constructor values (`Id`, `Name`, `Visible`, `Position`, `Rotation`, `Scale`, `ParentId`,
+ * `HighestAncestorId`) travel together because consumers need a consistent snapshot rather than reading those
+ * values independently from mutable objects.
+ *
+ * `ComposerModelEvidence` is an immutable packet of related values. Record value semantics make it suitable for
+ * snapshots, options, commands, or parsed intermediate data because callers can copy/compare it without sharing
+ * mutable state. Its constructor values (`ObjectId`, `SceneRevision`, `Position`, `Rotation`, `Scale`,
+ * `WorldBounds`, `WorldGeometryHash`, `LocalGeometryHash`, `TriangleCount`) travel together because consumers
+ * need a consistent snapshot rather than reading those values independently from mutable objects.
+ *
+ * `ComposerTriangleInfo` is an immutable packet of related values. Record value semantics make it suitable for
+ * snapshots, options, commands, or parsed intermediate data because callers can copy/compare it without sharing
+ * mutable state. Its constructor values (`Index`, `Label`) travel together because consumers need a consistent
+ * snapshot rather than reading those values independently from mutable objects.
+ *
+ * `ComposerFaceInfo` is an immutable packet of related values. Record value semantics make it suitable for
+ * snapshots, options, commands, or parsed intermediate data because callers can copy/compare it without sharing
+ * mutable state. Its constructor values (`FaceIndex`, `PrimaryTriangleIndex`, `TriangleCount`, `Label`) travel
+ * together because consumers need a consistent snapshot rather than reading those values independently from
+ * mutable objects.
+ *
+ * `ComposerSceneSession` owns resources/subscriptions whose lifetime must be ended explicitly and is one slice of
+ * a partial type whose shared state/invariants continue in sibling files.
+ *
+ * `TriangleCount` is derived rather than separately stored: it evaluates `scene.Triangles.Count`. Keeping the
+ * value computed from its source fields prevents a second cached flag/value from drifting out of sync.
+ *
+ * `LightCount` is derived rather than separately stored: it evaluates `scene.Lights.Count`. Keeping the value
+ * computed from its source fields prevents a second cached flag/value from drifting out of sync.
+ *
+ * `ObjectCount` is derived rather than separately stored: it evaluates `scene.ObjectGroups.SelectMany(group =>
+ * group.SelfAndDescendants()).Count()`. Keeping the value computed from its source fields prevents a second
+ * cached flag/value from drifting out of sync.
+ *
+ * `HasRenderableScene` is derived rather than separately stored: it evaluates `scene.Triangles.Count > 0`.
+ * Keeping the value computed from its source fields prevents a second cached flag/value from drifting out of
+ * sync.
+ *
+ * `CanUndo` is derived rather than separately stored: it evaluates `editHistory.CanUndo`. Keeping the value
+ * computed from its source fields prevents a second cached flag/value from drifting out of sync.
+ *
+ * `CanRedo` is derived rather than separately stored: it evaluates `editHistory.CanRedo`. Keeping the value
+ * computed from its source fields prevents a second cached flag/value from drifting out of sync.
+ *
+ * `UndoDescription` is derived rather than separately stored: it evaluates `editHistory.UndoDescription`. Keeping
+ * the value computed from its source fields prevents a second cached flag/value from drifting out of sync.
+ *
+ * `RedoDescription` is derived rather than separately stored: it evaluates `editHistory.RedoDescription`. Keeping
+ * the value computed from its source fields prevents a second cached flag/value from drifting out of sync.
+ *
+ * `SelectedObjectId` is derived rather than separately stored: it evaluates `selectedObjectId`. Keeping the value
+ * computed from its source fields prevents a second cached flag/value from drifting out of sync.
+ *
+ * The `ComposerSceneSession` constructor establishes a valid default state before the instance can be used.
+ *
+ * `GetTriangleInfos` reads triangle infos from the authoritative model and returns a value/snapshot suitable for
+ * callers, avoiding direct access to mutable internal storage. It takes `sceneGate` before touching the live
+ * scene and releases it in `finally`, so readers/renderers cannot observe a half-completed mutation.
+ *
+ * `GetFaceInfos` reads face infos from the authoritative model and returns a value/snapshot suitable for callers,
+ * avoiding direct access to mutable internal storage. It takes `sceneGate` before touching the live scene and
+ * releases it in `finally`, so readers/renderers cannot observe a half-completed mutation.
+ *
+ * `GetFaceCount` reads face count from the authoritative model and returns a value/snapshot suitable for callers,
+ * avoiding direct access to mutable internal storage. It takes `sceneGate` before touching the live scene and
+ * releases it in `finally`, so readers/renderers cannot observe a half-completed mutation.
+ *
+ * `GetObjectState` reads object state from the authoritative model and returns a value/snapshot suitable for
+ * callers, avoiding direct access to mutable internal storage. It takes `sceneGate` before touching the live
+ * scene and releases it in `finally`, so readers/renderers cannot observe a half-completed mutation.
+ *
+ * `GetTransformTargetState` reads transform target state from the authoritative model and returns a
+ * value/snapshot suitable for callers, avoiding direct access to mutable internal storage. It takes `sceneGate`
+ * before touching the live scene and releases it in `finally`, so readers/renderers cannot observe a
+ * half-completed mutation.
+ *
+ * `GetModelEvidence` reads model evidence from the authoritative model and returns a value/snapshot suitable for
+ * callers, avoiding direct access to mutable internal storage. It takes `sceneGate` before touching the live
+ * scene and releases it in `finally`, so readers/renderers cannot observe a half-completed mutation.
+ *
+ * `SetSelectedObject` sets selected object through the owning abstraction instead of exposing a mutable field.
+ * That gives the method one place to validate the value and perform any history/cache/UI side effects required by
+ * the change. It takes `sceneGate` before touching the live scene and releases it in `finally`, so
+ * readers/renderers cannot observe a half-completed mutation.
+ *
+ * `SetSelectedTriangle` sets selected triangle through the owning abstraction instead of exposing a mutable
+ * field. That gives the method one place to validate the value and perform any history/cache/UI side effects
+ * required by the change. It takes `sceneGate` before touching the live scene and releases it in `finally`, so
+ * readers/renderers cannot observe a half-completed mutation.
+ *
+ * `CancelPendingTransform` evaluates whether cel pending transform is currently legal/available from the existing
+ * state. It is a side-effect-free guard intended to drive command enablement or reject an edit before mutation.
+ * It takes `sceneGate` before touching the live scene and releases it in `finally`, so readers/renderers cannot
+ * observe a half-completed mutation.
+ *
+ * `CommitPendingTransform` finalizes pending transform: the current preview becomes authoritative and the
+ * before/after state is recorded as one logical undoable edit. It takes `sceneGate` before touching the live
+ * scene and releases it in `finally`, so readers/renderers cannot observe a half-completed mutation. Cancellation
+ * is propagated so shutdown or a newer request can make obsolete work stop early. Procedural/object-library
+ * metadata is accessed through the registry so editable primitive identity survives operations that should
+ * preserve it.
+ *
+ * `ResetObjectTransform` returns object transform to its canonical default/identity state while preserving the
+ * surrounding object/session identity. It takes `sceneGate` before touching the live scene and releases it in
+ * `finally`, so readers/renderers cannot observe a half-completed mutation. Cancellation is propagated so
+ * shutdown or a newer request can make obsolete work stop early.
+ *
+ * `GroupObjects` collects objects under a common hierarchy node so they can be manipulated as a unit without
+ * baking away each child’s own geometry/material state. It takes `sceneGate` before touching the live scene and
+ * releases it in `finally`, so readers/renderers cannot observe a half-completed mutation. History bookkeeping
+ * surrounds the mutation so internal steps collapse into the intended user-level undo transaction.
+ *
+ * `CanUngroupObjects` evaluates whether ungroup objects is currently legal/available from the existing state. It
+ * is a side-effect-free guard intended to drive command enablement or reject an edit before mutation. It takes
+ * `sceneGate` before touching the live scene and releases it in `finally`, so readers/renderers cannot observe a
+ * half-completed mutation.
+ *
+ * `UngroupObjects` removes the grouping relationship around objects while preserving children and their
+ * world-space meaning, then returns/updates the identities needed for selection. It takes `sceneGate` before
+ * touching the live scene and releases it in `finally`, so readers/renderers cannot observe a half-completed
+ * mutation. History bookkeeping surrounds the mutation so internal steps collapse into the intended user-level
+ * undo transaction.
+ *
+ * `UngroupObject` removes the grouping relationship around object while preserving children and their world-space
+ * meaning, then returns/updates the identities needed for selection. It takes `sceneGate` before touching the
+ * live scene and releases it in `finally`, so readers/renderers cannot observe a half-completed mutation. History
+ * bookkeeping surrounds the mutation so internal steps collapse into the intended user-level undo transaction.
+ *
+ * `Undo` restores the state captured before the most recent logical edit and moves that edit to redo history
+ * rather than recomputing what the user originally did. It takes `sceneGate` before touching the live scene and
+ * releases it in `finally`, so readers/renderers cannot observe a half-completed mutation. Cancellation is
+ * propagated so shutdown or a newer request can make obsolete work stop early. History bookkeeping surrounds the
+ * mutation so internal steps collapse into the intended user-level undo transaction.
+ *
+ * `Redo` reapplies the state captured after the next redoable edit and moves the command back to undo history. It
+ * takes `sceneGate` before touching the live scene and releases it in `finally`, so readers/renderers cannot
+ * observe a half-completed mutation. Cancellation is propagated so shutdown or a newer request can make obsolete
+ * work stop early. History bookkeeping surrounds the mutation so internal steps collapse into the intended
+ * user-level undo transaction.
+ *
+ * `DuplicateObject` creates an independent copy of object with a new scene identity while preserving the source
+ * geometry/material/authored metadata that should carry over. It takes `sceneGate` before touching the live scene
+ * and releases it in `finally`, so readers/renderers cannot observe a half-completed mutation. History
+ * bookkeeping surrounds the mutation so internal steps collapse into the intended user-level undo transaction.
+ */
 using System.Diagnostics;
 using LightingShowcase.CameraSystem;
 using LightingShowcase.CommandLine;

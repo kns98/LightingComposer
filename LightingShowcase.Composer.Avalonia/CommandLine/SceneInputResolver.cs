@@ -1,3 +1,11 @@
+/*
+ * This is desktop-editor glue around the scene and rendering layers. The code should be read in terms of how it
+ * translates user interaction into domain operations while keeping platform UI state, mutable scene state, and
+ * renderer state from becoming entangled.
+ *
+ * `SceneInputResolver` turns flexible user/file input into a canonical internal value, centralizing
+ * path/format/identity rules that callers should not duplicate.
+ */
 namespace LightingShowcase.CommandLine;
 
 internal sealed class ResolvedSceneInput

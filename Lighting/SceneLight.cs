@@ -1,13 +1,14 @@
-// -----------------------------------------------------------------------------
-// File: Lighting/SceneLight.cs
-// Purpose: Editable light data.
-//
-// Represents a scene light with id, shape, position, direction, color,
-// intensity, range, spot cone, and enabled state. The properties are mutable
-// because the composer edits existing lights in place and the
-// ray tracer reads the latest scene snapshot.
-// -----------------------------------------------------------------------------
-
+/*
+ * Lights are represented as renderer-neutral scene data. CPU and GPU backends can therefore interpret the same
+ * kind, position/direction, color, and intensity values, while backend-specific sampling/shader details remain
+ * outside the scene model.
+ *
+ * `IsImported` is a read-only predicate over the object’s existing state; it exists so callers share one exact
+ * condition when enabling commands or deciding whether an operation is applicable.
+ *
+ * `IsDefault` is a read-only predicate over the object’s existing state; it exists so callers share one exact
+ * condition when enabling commands or deciding whether an operation is applicable.
+ */
 using LightingShowcase.Math3D;
 
 namespace LightingShowcase.Lighting;
@@ -28,8 +29,6 @@ public sealed class SceneLight
     public bool CastsShadow { get; set; }
     public bool IsImported { get; set; }
     public bool IsDefault { get; set; }
-
-    /// <summary>Constructs and initializes this component.</summary>
     public SceneLight(
         string id,
         Vec3 position,

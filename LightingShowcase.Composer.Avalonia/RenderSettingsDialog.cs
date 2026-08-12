@@ -1,3 +1,33 @@
+/*
+ * This UI code turns editor state into controls and converts user edits back into validated domain operations.
+ * Dialog/window state is intentionally temporary: values should only become authoritative scene changes through
+ * the session/controller path, which preserves cancel, undo, and renderer invalidation behavior.
+ *
+ * `RenderSettingsDialog` owns temporary Avalonia presentation/edit state. Values become durable only when
+ * accepted and routed through the relevant session/controller operation, preserving validation and cancellation
+ * semantics.
+ *
+ * `ShowForResultAsync` shows the dialog modally relative to its owner and returns the typed result chosen by the
+ * user; closing/cancelling without acceptance returns `null` rather than fabricating default values.
+ *
+ * `Accept` reads and validates the dialog’s current control values; when they form a valid result it closes the
+ * dialog with that value, otherwise the dialog remains open so invalid text never reaches the scene operation.
+ *
+ * `ReadEnabledInt` reads enabled int from the external stream/document, advancing through the format in the order
+ * required to resolve references and produce valid internal data.
+ *
+ * `ReadEnabledDouble` reads enabled double from the external stream/document, advancing through the format in the
+ * order required to resolve references and produce valid internal data.
+ *
+ * `ReadEnabledColor` reads enabled color from the external stream/document, advancing through the format in the
+ * order required to resolve references and produce valid internal data.
+ *
+ * `NewButton` creates a consistently configured button UI/domain object so repeated controls/objects share
+ * sizing, alignment, or default behavior.
+ *
+ * `ClearErrors` removes prior validation messages before a new validation pass so the UI shows only errors that
+ * apply to the current control values.
+ */
 using System.Globalization;
 using Avalonia;
 using Avalonia.Controls;

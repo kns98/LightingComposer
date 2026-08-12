@@ -1,3 +1,98 @@
+/*
+ * `ComposerSceneSession` is the synchronization and transaction boundary around the live scene. Code in these
+ * partial files takes the session gate before touching shared mutable scene data, records logical edits for
+ * undo/redo, preserves procedural metadata when possible, and invalidates renderer caches when geometry/material
+ * state changes. UI code should ask the session to perform edits instead of modifying scene objects directly.
+ *
+ * `ComposerSceneSession` is one slice of a partial type whose shared state/invariants continue in sibling files.
+ *
+ * `CachedMeshTopology` is an immutable packet of related values. Record value semantics make it suitable for
+ * snapshots, options, commands, or parsed intermediate data because callers can copy/compare it without sharing
+ * mutable state. Its constructor values (`SceneRevision`, `TriangleCount`, `Topology`) travel together because
+ * consumers need a consistent snapshot rather than reading those values independently from mutable objects.
+ *
+ * `SelectionMode` is derived rather than separately stored: it evaluates `selectionMode`. Keeping the value
+ * computed from its source fields prevents a second cached flag/value from drifting out of sync.
+ *
+ * `HasMeshComponentSelection` is derived rather than separately stored: it evaluates
+ * `selectedMeshSelection.HasValue`. Keeping the value computed from its source fields prevents a second cached
+ * flag/value from drifting out of sync.
+ *
+ * `MeshMoveAxisLock` is derived rather than separately stored: it evaluates `meshMoveAxisLock`. Keeping the value
+ * computed from its source fields prevents a second cached flag/value from drifting out of sync.
+ *
+ * `GetMeshFaceGroupCountForTests` reads mesh face group count for tests from the authoritative model and returns
+ * a value/snapshot suitable for callers, avoiding direct access to mutable internal storage. It takes `sceneGate`
+ * before touching the live scene and releases it in `finally`, so readers/renderers cannot observe a
+ * half-completed mutation.
+ *
+ * `GetMeshEdgeCountForTests` reads mesh edge count for tests from the authoritative model and returns a
+ * value/snapshot suitable for callers, avoiding direct access to mutable internal storage. It takes `sceneGate`
+ * before touching the live scene and releases it in `finally`, so readers/renderers cannot observe a
+ * half-completed mutation.
+ *
+ * `SetSelectionMode` sets selection mode through the owning abstraction instead of exposing a mutable field. That
+ * gives the method one place to validate the value and perform any history/cache/UI side effects required by the
+ * change. It takes `sceneGate` before touching the live scene and releases it in `finally`, so readers/renderers
+ * cannot observe a half-completed mutation.
+ *
+ * `SetMeshMoveAxisLock` sets mesh move axis lock through the owning abstraction instead of exposing a mutable
+ * field. That gives the method one place to validate the value and perform any history/cache/UI side effects
+ * required by the change. It takes `sceneGate` before touching the live scene and releases it in `finally`, so
+ * readers/renderers cannot observe a half-completed mutation.
+ *
+ * `ClearMeshHover` removes/resets mesh hover to its empty/default state. This is an explicit state transition
+ * rather than leaving old values around for later code to accidentally reuse. It takes `sceneGate` before
+ * touching the live scene and releases it in `finally`, so readers/renderers cannot observe a half-completed
+ * mutation.
+ *
+ * `ToggleMeshHoverPulse` flips mesh hover pulse between its two states and returns/propagates the new state so UI
+ * and model remain synchronized. It takes `sceneGate` before touching the live scene and releases it in
+ * `finally`, so readers/renderers cannot observe a half-completed mutation.
+ *
+ * `InsertPrimitive` inserts primitive into the live scene/model and returns the resulting identity/value needed
+ * by selection or subsequent editing. It takes `sceneGate` before touching the live scene and releases it in
+ * `finally`, so readers/renderers cannot observe a half-completed mutation. History bookkeeping surrounds the
+ * mutation so internal steps collapse into the intended user-level undo transaction.
+ *
+ * `GetActiveSelectionBounds` reads active selection bounds from the authoritative model and returns a
+ * value/snapshot suitable for callers, avoiding direct access to mutable internal storage. It takes `sceneGate`
+ * before touching the live scene and releases it in `finally`, so readers/renderers cannot observe a
+ * half-completed mutation.
+ *
+ * `UpdateMeshElementMovePreview` updates mesh element move preview from the newest input while preserving the
+ * identities/metadata/caches that remain valid and invalidating only what the change makes stale. It takes
+ * `sceneGate` before touching the live scene and releases it in `finally`, so readers/renderers cannot observe a
+ * half-completed mutation.
+ *
+ * `CancelMeshElementMovePreview` evaluates whether cel mesh element move preview is currently legal/available
+ * from the existing state. It is a side-effect-free guard intended to drive command enablement or reject an edit
+ * before mutation. It takes `sceneGate` before touching the live scene and releases it in `finally`, so
+ * readers/renderers cannot observe a half-completed mutation.
+ *
+ * `CommitMeshElementMove` finalizes mesh element move: the current preview becomes authoritative and the
+ * before/after state is recorded as one logical undoable edit. It takes `sceneGate` before touching the live
+ * scene and releases it in `finally`, so readers/renderers cannot observe a half-completed mutation. Cancellation
+ * is propagated so shutdown or a newer request can make obsolete work stop early. History bookkeeping surrounds
+ * the mutation so internal steps collapse into the intended user-level undo transaction.
+ *
+ * `CanEditSelectedFace` evaluates whether edit selected face is currently legal/available from the existing
+ * state. It is a side-effect-free guard intended to drive command enablement or reject an edit before mutation.
+ * It takes `sceneGate` before touching the live scene and releases it in `finally`, so readers/renderers cannot
+ * observe a half-completed mutation.
+ *
+ * `CreateVulkanMeshEditPreview` constructs vulkan mesh edit preview in the normalized form expected downstream,
+ * so allocation plus initialization of its invariants happen together.
+ *
+ * `GetMeshTopology` reads mesh topology from the authoritative model and returns a value/snapshot suitable for
+ * callers, avoiding direct access to mutable internal storage.
+ *
+ * `FindHitTriangle` searches for hit triangle and returns the matching object/value rather than assuming it
+ * exists. Callers can therefore distinguish a missing match from the found instance.
+ *
+ * `TransformPointToWorld` applies the relevant coordinate transform to point to world, making explicit whether
+ * data is being moved between local, world, view, or preview space.
+ */
 using LightingShowcase.CameraSystem;
 using LightingShowcase.Math3D;
 using LightingShowcase.Rendering;

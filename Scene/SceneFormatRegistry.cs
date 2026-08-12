@@ -1,8 +1,36 @@
-// -----------------------------------------------------------------------------
-// File: Scene/SceneFormatRegistry.cs
-// Purpose: Discovers and routes scene import/export plugins.
-// -----------------------------------------------------------------------------
-
+/*
+ * This is an extensibility seam. Callers discover capabilities through a registry/interface instead of
+ * referencing every concrete format or object-library assembly, allowing plugins to be added while the core
+ * scene/editor code remains unchanged.
+ *
+ * `SceneFormatRegistry` is a discovery table that maps stable names/capabilities to registered implementations,
+ * removing the need for central switch statements that know every plugin or primitive at compile time.
+ *
+ * `Importers` is derived rather than separately stored: it evaluates `Plugins.Where(p => p.CanImport).ToList()`.
+ * Keeping the value computed from its source fields prevents a second cached flag/value from drifting out of
+ * sync.
+ *
+ * `Exporters` is derived rather than separately stored: it evaluates `Plugins.Where(p => p.CanExport).ToList()`.
+ * Keeping the value computed from its source fields prevents a second cached flag/value from drifting out of
+ * sync.
+ *
+ * `LoadPluginAssemblies` loads plugin assemblies from persistent/external data and converts it into validated
+ * internal scene state rather than exposing parser-specific objects to the rest of the application.
+ *
+ * `IsImportExtension` tests whether import extension is true for the supplied/current value. Keeping the
+ * predicate here ensures every caller uses the same definition instead of duplicating a slightly different
+ * condition.
+ *
+ * `IsExportExtension` tests whether export extension is true for the supplied/current value. Keeping the
+ * predicate here ensures every caller uses the same definition instead of duplicating a slightly different
+ * condition.
+ *
+ * `FindImporter` searches for importer and returns the matching object/value rather than assuming it exists.
+ * Callers can therefore distinguish a missing match from the found instance.
+ *
+ * `FindExporter` searches for exporter and returns the matching object/value rather than assuming it exists.
+ * Callers can therefore distinguish a missing match from the found instance.
+ */
 using System.Reflection;
 using LightingShowcase.Math3D;
 

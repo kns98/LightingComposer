@@ -1,3 +1,23 @@
+/*
+ * This UI code turns editor state into controls and converts user edits back into validated domain operations.
+ * Dialog/window state is intentionally temporary: values should only become authoritative scene changes through
+ * the session/controller path, which preserves cancel, undo, and renderer invalidation behavior.
+ *
+ * `FaceOperationValues` is an immutable packet of related values. Record value semantics make it suitable for
+ * snapshots, options, commands, or parsed intermediate data because callers can copy/compare it without sharing
+ * mutable state. Its constructor values (`AmountMeters`, `SecondaryMeters`, `InsetProfile`) travel together
+ * because consumers need a consistent snapshot rather than reading those values independently from mutable
+ * objects.
+ *
+ * `FaceOperationDialog` owns temporary Avalonia presentation/edit state. Values become durable only when accepted
+ * and routed through the relevant session/controller operation, preserving validation and cancellation semantics.
+ *
+ * `ShowForResultAsync` shows the dialog modally relative to its owner and returns the typed result chosen by the
+ * user; closing/cancelling without acceptance returns `null` rather than fabricating default values.
+ *
+ * `Accept` reads and validates the dialog’s current control values; when they form a valid result it closes the
+ * dialog with that value, otherwise the dialog remains open so invalid text never reaches the scene operation.
+ */
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Layout;

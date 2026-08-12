@@ -1,8 +1,11 @@
-// -----------------------------------------------------------------------------
-// File: Camera/CameraDefinition.cs
-// Purpose: Renderer-neutral camera data shared by preview and final render.
-// -----------------------------------------------------------------------------
-
+/*
+ * Camera state is kept independent of Avalonia and renderer-specific code. That lets interactive navigation,
+ * scripted paths, tests, and multiple render backends use the same definitions for position, orientation,
+ * projection, and interpolation.
+ *
+ * `CameraDefinition` describes a reusable capability/object/format in data plus behavior, letting registries and
+ * callers work with metadata without knowing the concrete implementation details.
+ */
 using LightingShowcase.Math3D;
 using LightingShowcase.SceneGraph;
 

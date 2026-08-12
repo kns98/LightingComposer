@@ -1,3 +1,31 @@
+/*
+ * This is desktop-editor glue around the scene and rendering layers. The code should be read in terms of how it
+ * translates user interaction into domain operations while keeping platform UI state, mutable scene state, and
+ * renderer state from becoming entangled.
+ *
+ * `RenderJobRunner` orchestrates a complete operation from validated inputs through execution/result handling,
+ * keeping workflow sequencing out of lower-level parsers/renderers.
+ *
+ * `RunAsync` executes async as one coordinated action and centralizes success/failure handling so callers do not
+ * each implement inconsistent exception/UI behavior. Cancellation is propagated so shutdown or a newer request
+ * can make obsolete work stop early.
+ *
+ * `RunExclusive` executes exclusive as one coordinated action and centralizes success/failure handling so callers
+ * do not each implement inconsistent exception/UI behavior. Cancellation is propagated so shutdown or a newer
+ * request can make obsolete work stop early.
+ *
+ * `LoadScene` loads scene from persistent/external data and converts it into validated internal scene state
+ * rather than exposing parser-specific objects to the rest of the application.
+ *
+ * `BuildCamera` derives camera from lower-level input data, resolving indexing/grouping/derived values once so
+ * callers can operate on a coherent higher-level representation.
+ *
+ * `ComputeTriangleBounds` calculates triangle bounds deterministically from its inputs; callers can use the
+ * result as derived data/cache evidence without mutating the underlying scene.
+ *
+ * `ResolveOutputPath` turns output path into the canonical value/path/object the rest of the code expects,
+ * handling aliases/relative forms/registry lookup at one boundary instead of throughout the caller.
+ */
 using System.Diagnostics;
 using LightingShowcase.CameraSystem;
 using LightingShowcase.Math3D;

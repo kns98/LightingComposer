@@ -1,8 +1,31 @@
-// -----------------------------------------------------------------------------
-// File: Scene/ScenePrimitive.cs
-// Purpose: Self-discoverable editable object contract.
-// -----------------------------------------------------------------------------
-
+/*
+ * This file belongs to the renderer-neutral scene layer, which is the shared source of truth for geometry,
+ * transforms, grouping, materials, resources, and serialization-facing state. Higher layers manipulate these
+ * abstractions rather than maintaining parallel copies of scene data.
+ *
+ * `PrimitiveParameterKind` makes a closed set of choices compiler-visible instead of passing loosely related
+ * integers or strings. Code that switches over `Length`, `Integer`, `Number`, `Toggle`, `Choice` is where the
+ * behavioral meaning of each choice is implemented.
+ *
+ * `PrimitiveParameterDescriptor` is an immutable packet of related values. Record value semantics make it
+ * suitable for snapshots, options, commands, or parsed intermediate data because callers can copy/compare it
+ * without sharing mutable state. Its constructor values (`Key`, `Label`, `Kind`, `Minimum`, `Maximum`, `Step`,
+ * `UnitLabel`, `Choices`) travel together because consumers need a consistent snapshot rather than reading those
+ * values independently from mutable objects.
+ *
+ * `IEditablePrimitiveDefinition` defines a capability boundary: callers depend on the contract rather than the
+ * concrete plugin/backend implementing it. New implementations can therefore participate without changing the
+ * core caller.
+ *
+ * `ISceneObjectDefinition` defines a capability boundary: callers depend on the contract rather than the concrete
+ * plugin/backend implementing it. New implementations can therefore participate without changing the core caller.
+ *
+ * `IScenePrimitive` defines a capability boundary: callers depend on the contract rather than the concrete
+ * plugin/backend implementing it. New implementations can therefore participate without changing the core caller.
+ *
+ * `Normalize` returns a unit-length direction while guarding the degenerate near-zero case so division does not
+ * create infinities or unstable directions.
+ */
 using LightingShowcase.Math3D;
 
 namespace LightingShowcase.SceneGraph;

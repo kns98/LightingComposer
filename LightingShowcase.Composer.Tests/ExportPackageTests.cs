@@ -1,3 +1,45 @@
+/*
+ * The tests in this file are executable statements of editor behavior. They intentionally use real scene/session
+ * objects and inspect externally meaningful results—geometry, hierarchy, material state, serialized output, cache
+ * stamps, or timing—so refactors can change implementation details without weakening the contract being tested.
+ *
+ * `Obj_package_contains_numbered_mtl_and_local_texture_reference` verifies that obj package contains numbered mtl
+ * and local texture reference. Temporary filesystem output is inspected/cleaned so persistence behavior is tested
+ * end-to-end. The assertions establish that the operation must explicitly report success; the resulting
+ * value/state must exactly match the expected result; the expected entry must remain discoverable. Representative
+ * cases include `sample`, `obj`, `res_0001.mtl`, `res_0002.png`, `mtllib res_0001.mtl`, `map_Kd res_0002.png`.
+ *
+ * `Gltf_package_contains_bin_and_references_packaged_texture` verifies that gltf package contains bin and
+ * references packaged texture. Temporary filesystem output is inspected/cleaned so persistence behavior is tested
+ * end-to-end. The assertions establish that the operation must explicitly report success; the resulting
+ * value/state must exactly match the expected result; the expected entry must remain discoverable. Representative
+ * cases include `sample`, `gltf`, `res_0001.bin`, `images`, `res_0002.png`, `uri`, `buffers`.
+ *
+ * `Glb_package_uses_external_numbered_buffer_and_texture` verifies that glb package uses external numbered buffer
+ * and texture. Temporary filesystem output is inspected/cleaned so persistence behavior is tested end-to-end. The
+ * assertions establish that the resulting value/state must exactly match the expected result; the expected entry
+ * must remain discoverable. Representative cases include `sample`, `glb`, `res_0001.bin`, `res_0002.png`,
+ * `buffers`, `uri`, `images`.
+ *
+ * `Native_export_uses_external_numbered_resources_while_normal_save_remains_embedded` verifies that native export
+ * uses external numbered resources while normal save remains embedded. Temporary filesystem output is
+ * inspected/cleaned so persistence behavior is tested end-to-end. The assertions establish that required
+ * objects/resources must resolve; the operation must explicitly report success; the resulting value/state must
+ * exactly match the expected result. Representative cases include `sample`, `lscene`, `res_0001.png`.
+ *
+ * `Export_related_files_use_numbered_resource_names` verifies that export related files use numbered resource
+ * names. Temporary filesystem output is inspected/cleaned so persistence behavior is tested end-to-end.
+ * Representative cases include `sample`, `^res_[0-9]{4}\.[A-Za-z0-9]+$`.
+ *
+ * `Export_catalog_routes_every_non_native_format_to_a_registered_exporter` verifies that export catalog routes
+ * every non native format to a registered exporter. The assertions establish that the operation must explicitly
+ * report success; the expected entry must remain discoverable. Representative cases include `probe`.
+ *
+ * `Every_known_export_format_creates_a_new_directory_and_primary_file` verifies that every known export format
+ * creates a new directory and primary file. Temporary filesystem output is inspected/cleaned so persistence
+ * behavior is tested end-to-end. The assertions establish that the operation must explicitly report success; the
+ * operation must produce an observable change. Representative cases include `sample`.
+ */
 using System.Text;
 using System.Text.Json;
 using LightingShowcase.CommandLine;

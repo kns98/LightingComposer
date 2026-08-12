@@ -1,3 +1,23 @@
+/*
+ * This is desktop-editor glue around the scene and rendering layers. The code should be read in terms of how it
+ * translates user interaction into domain operations while keeping platform UI state, mutable scene state, and
+ * renderer state from becoming entangled.
+ *
+ * `Program` provides shared algorithms/registration behavior without per-instance state.
+ *
+ * `BuildAvaloniaApp` derives avalonia app from lower-level input data, resolving indexing/grouping/derived values
+ * once so callers can operate on a coherent higher-level representation.
+ *
+ * `RunCommandLineAsync` executes command line async as one coordinated action and centralizes success/failure
+ * handling so callers do not each implement inconsistent exception/UI behavior. Cancellation is propagated so
+ * shutdown or a newer request can make obsolete work stop early. Serializer-specific handling stays at this
+ * boundary rather than leaking into the live scene model.
+ *
+ * `RunExport` executes export as one coordinated action and centralizes success/failure handling so callers do
+ * not each implement inconsistent exception/UI behavior. Cancellation is propagated so shutdown or a newer
+ * request can make obsolete work stop early. Serializer-specific handling stays at this boundary rather than
+ * leaking into the live scene model.
+ */
 using Avalonia;
 using LightingShowcase.CommandLine;
 using LightingShowcase.SceneGraph;

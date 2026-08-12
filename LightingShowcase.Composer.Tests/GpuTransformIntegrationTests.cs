@@ -1,3 +1,34 @@
+/*
+ * The tests in this file are executable statements of editor behavior. They intentionally use real scene/session
+ * objects and inspect externally meaningful results—geometry, hierarchy, material state, serialized output, cache
+ * stamps, or timing—so refactors can change implementation details without weakening the contract being tested.
+ *
+ * The `GpuTransformIntegrationTests` constructor captures `output`. Those are the dependencies/initial values the
+ * instance needs for its lifetime, so callbacks and later operations use the same objects/configuration rather
+ * than looking them up globally.
+ *
+ * `Vulkan_preview_changes_after_model_transform` verifies that vulkan preview changes after model transform. It
+ * uses a real `ComposerSceneSession`, so registration, locking, history, and scene mutation follow production
+ * paths rather than mocks. The assertions establish that the operation must explicitly report success; the
+ * operation must produce an observable change; the expected entry must remain discoverable. Representative cases
+ * include `LIGHTINGSHOWCASE_RUN_GPU_TESTS`, `1`, `refreshed in-place`.
+ *
+ * `Vulkan_raster_previews_pending_rotation_and_scale_without_committing_geometry` verifies that vulkan raster
+ * previews pending rotation and scale without committing geometry. It uses a real `ComposerSceneSession`, so
+ * registration, locking, history, and scene mutation follow production paths rather than mocks. The assertions
+ * establish that the operation must explicitly report success; the resulting value/state must exactly match the
+ * expected result; the operation must produce an observable change; the expected entry must remain discoverable.
+ * Representative cases include `LIGHTINGSHOWCASE_RUN_GPU_TESTS`, `1`, `live-transform=`.
+ *
+ * `Vulkan_raster_previews_face_move_without_rebuilding_scene_geometry` verifies that vulkan raster previews face
+ * move without rebuilding scene geometry. It uses a real `ComposerSceneSession`, so registration, locking,
+ * history, and scene mutation follow production paths rather than mocks. The assertions establish that the
+ * operation must explicitly report success; the resulting value/state must exactly match the expected result; the
+ * operation must produce an observable change; the expected entry must remain discoverable. Representative cases
+ * include `LIGHTINGSHOWCASE_RUN_GPU_TESTS`, `1`, `Cube`, `live-mesh-edit=`.
+ *
+ * `HashPixels` reports whether h pixels is present/usable in the current state, without changing that state.
+ */
 using LightingShowcase.Composer;
 using LightingShowcase.Math3D;
 using LightingShowcase.Rendering;

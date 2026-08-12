@@ -1,14 +1,89 @@
-// -----------------------------------------------------------------------------
-// File: Scene/GltfSceneIO.cs
-// Purpose: glTF/GLB import and export with scene lights.
-//
-// Provides a lightweight built-in glTF 2.0 reader/writer focused on the subset
-// this editor needs: triangle meshes, node names/transforms, basic materials,
-// and KHR_lights_punctual point lights. This avoids adding a large dependency
-// while still giving the application a widely supported external format that can
-// carry lighting data.
-// -----------------------------------------------------------------------------
-
+/*
+ * Importing GLTF is a translation problem, not a file-copy operation. The code parses the external
+ * representation, resolves indices/resources/transforms, and creates Composer triangles, object groups,
+ * materials, and textures in the coordinate and ownership conventions expected by the scene layer.
+ *
+ * `GltfSceneIO` provides shared algorithms/registration behavior without per-instance state.
+ *
+ * `GltfDocument` is an immutable packet of related values. Record value semantics make it suitable for snapshots,
+ * options, commands, or parsed intermediate data because callers can copy/compare it without sharing mutable
+ * state. Its constructor values (`JsonUtf8`, `BinaryChunk`) travel together because consumers need a consistent
+ * snapshot rather than reading those values independently from mutable objects.
+ *
+ * `GltfMaterial` is an immutable packet of related values. Record value semantics make it suitable for snapshots,
+ * options, commands, or parsed intermediate data because callers can copy/compare it without sharing mutable
+ * state. Its constructor values (`Material`, `BaseColorTexCoord`) travel together because consumers need a
+ * consistent snapshot rather than reading those values independently from mutable objects.
+ *
+ * `ImportedLight` is an immutable packet of related values. Record value semantics make it suitable for
+ * snapshots, options, commands, or parsed intermediate data because callers can copy/compare it without sharing
+ * mutable state. Its constructor values (`Id`, `Kind`, `Position`, `Direction`, `Color`, `Intensity`, `Range`,
+ * `InnerConeAngle`, `OuterConeAngle`, `Enabled`) travel together because consumers need a consistent snapshot
+ * rather than reading those values independently from mutable objects.
+ *
+ * `AccessorInfo` is an immutable packet of related values. Record value semantics make it suitable for snapshots,
+ * options, commands, or parsed intermediate data because callers can copy/compare it without sharing mutable
+ * state. Its constructor values (`Buffer`, `Offset`, `Stride`, `Count`, `ComponentType`, `Type`) travel together
+ * because consumers need a consistent snapshot rather than reading those values independently from mutable
+ * objects.
+ *
+ * `ExportVertex` is an immutable packet of related values. Record value semantics make it suitable for snapshots,
+ * options, commands, or parsed intermediate data because callers can copy/compare it without sharing mutable
+ * state. Its constructor values (`Px`, `Py`, `Pz`, `Nx`, `Ny`, `Nz`, `U`, `V`) travel together because consumers
+ * need a consistent snapshot rather than reading those values independently from mutable objects.
+ *
+ * `ExportBuild` is an immutable packet of related values. Record value semantics make it suitable for snapshots,
+ * options, commands, or parsed intermediate data because callers can copy/compare it without sharing mutable
+ * state. Its constructor values (`Root`, `Bin`, `CompactJson`) travel together because consumers need a
+ * consistent snapshot rather than reading those values independently from mutable objects.
+ *
+ * `ImportMesh` imports mesh by translating external geometry/resources into Composer conventions and ownership
+ * structures.
+ *
+ * `BuildExport` derives export from lower-level input data, resolving indexing/grouping/derived values once so
+ * callers can operate on a coherent higher-level representation.
+ *
+ * `GetMaterialId` reads material id from the authoritative model and returns a value/snapshot suitable for
+ * callers, avoiding direct access to mutable internal storage.
+ *
+ * `BuildPrimitive` derives primitive from lower-level input data, resolving indexing/grouping/derived values once
+ * so callers can operate on a coherent higher-level representation.
+ *
+ * `AddVertex` adds vertex to the owning collection/model while using this boundary to preserve indexing,
+ * ownership, and derived-state invariants.
+ *
+ * `WriteGltf` writes gltf to the external stream/document in the format’s required order, using stable
+ * indices/references so another reader can reconstruct the same relationships. Serializer-specific handling stays
+ * at this boundary rather than leaking into the live scene model.
+ *
+ * `WriteGlb` writes glb to the external stream/document in the format’s required order, using stable
+ * indices/references so another reader can reconstruct the same relationships. Binary field order is explicit;
+ * changing it requires the corresponding reader/writer to remain symmetrical. Serializer-specific handling stays
+ * at this boundary rather than leaking into the live scene model.
+ *
+ * `ReadDocument` reads document from the external stream/document, advancing through the format in the order
+ * required to resolve references and produce valid internal data. Binary field order is explicit; changing it
+ * requires the corresponding reader/writer to remain symmetrical.
+ *
+ * `LoadBuffers` loads buffers from persistent/external data and converts it into validated internal scene state
+ * rather than exposing parser-specific objects to the rest of the application.
+ *
+ * `ReadMaterials` reads materials from the external stream/document, advancing through the format in the order
+ * required to resolve references and produce valid internal data.
+ *
+ * `ApplyTextureTransform` applies texture transform as a single semantic mutation. Validation, scene changes,
+ * undo bookkeeping, and cache invalidation are kept inside this boundary rather than exposed as separate caller
+ * responsibilities.
+ *
+ * `ReadTextureCoordSet` reads texture coord set from the external stream/document, advancing through the format
+ * in the order required to resolve references and produce valid internal data.
+ *
+ * `ReadLights` reads lights from the external stream/document, advancing through the format in the order required
+ * to resolve references and produce valid internal data.
+ *
+ * `ReadVec3Accessor` reads vec3 accessor from the external stream/document, advancing through the format in the
+ * order required to resolve references and produce valid internal data.
+ */
 using System.IO;
 using System.Diagnostics;
 using System.Globalization;

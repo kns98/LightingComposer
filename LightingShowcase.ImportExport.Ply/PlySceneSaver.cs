@@ -1,13 +1,30 @@
-// -----------------------------------------------------------------------------
-// File: Scene/PlySceneSaver.cs
-// Purpose: PLY export.
-//
-// Writes the current scene to ASCII or binary_little_endian PLY. The exporter
-// preserves vertex position, UV coordinates, and per-vertex RGB color.
-// Colors are written using common red/green/blue uchar vertex properties so they
-// round-trip through this project and common mesh tools.
-// -----------------------------------------------------------------------------
-
+/*
+ * Exporting PLY walks the internal scene and rebuilds the format’s object/index/material/resource structures. The
+ * implementation must keep indices and references self-consistent and must make deliberate choices about features
+ * that do not map one-to-one between Composer and PLY.
+ *
+ * `PlySceneSaver` owns translation from Composer scene state into its external file format, including the
+ * indexing/resource relationships required for another program to reconstruct the exported model.
+ *
+ * `SaveAscii` serializes ascii from current internal state, making persistence a snapshot operation rather than
+ * allowing the serializer to walk concurrently mutating editor objects.
+ *
+ * `SaveBinary` serializes binary from current internal state, making persistence a snapshot operation rather than
+ * allowing the serializer to walk concurrently mutating editor objects. Binary field order is explicit; changing
+ * it requires the corresponding reader/writer to remain symmetrical.
+ *
+ * `WriteHeader` writes header to the external stream/document in the format’s required order, using stable
+ * indices/references so another reader can reconstruct the same relationships.
+ *
+ * `BuildHeader` derives header from lower-level input data, resolving indexing/grouping/derived values once so
+ * callers can operate on a coherent higher-level representation.
+ *
+ * `WriteAsciiVertex` writes ascii vertex to the external stream/document in the format’s required order, using
+ * stable indices/references so another reader can reconstruct the same relationships.
+ *
+ * `WriteBinaryVertex` writes binary vertex to the external stream/document in the format’s required order, using
+ * stable indices/references so another reader can reconstruct the same relationships.
+ */
 using System.IO;
 using System.Globalization;
 using System.Text;

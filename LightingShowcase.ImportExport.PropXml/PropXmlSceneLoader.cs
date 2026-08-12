@@ -1,12 +1,53 @@
-// -----------------------------------------------------------------------------
-// File: Scene/PropXmlSceneLoader.cs
-// Purpose: Native XML scene import.
-//
-// Reads the project-specific .prop.xml format, including object transforms and scene metadata.
-// This comment is intentionally kept in source code so future maintainers can
-// understand the role of this file without opening external documentation.
-// -----------------------------------------------------------------------------
-
+/*
+ * Importing PROPXML is a translation problem, not a file-copy operation. The code parses the external
+ * representation, resolves indices/resources/transforms, and creates Composer triangles, object groups,
+ * materials, and textures in the coordinate and ownership conventions expected by the scene layer.
+ *
+ * `PropXmlSceneLoader` owns parsing and translation from its external file format into Composer scene objects;
+ * parser-specific intermediate state stays here instead of leaking into the renderer-neutral scene model.
+ *
+ * `LoadIntoScene` loads into scene from persistent/external data and converts it into validated internal scene
+ * state rather than exposing parser-specific objects to the rest of the application.
+ *
+ * `ReadLight` reads light from the external stream/document, advancing through the format in the order required
+ * to resolve references and produce valid internal data.
+ *
+ * `ReadLightKind` reads light kind from the external stream/document, advancing through the format in the order
+ * required to resolve references and produce valid internal data.
+ *
+ * `ReadObject` reads object from the external stream/document, advancing through the format in the order required
+ * to resolve references and produce valid internal data.
+ *
+ * `ReadPrimitiveParameters` reads primitive parameters from the external stream/document, advancing through the
+ * format in the order required to resolve references and produce valid internal data.
+ *
+ * `ReadMaterial` reads material from the external stream/document, advancing through the format in the order
+ * required to resolve references and produce valid internal data.
+ *
+ * `ReadOptionalMaterial` reads optional material from the external stream/document, advancing through the format
+ * in the order required to resolve references and produce valid internal data.
+ *
+ * `ReadMaterialAttributes` reads material attributes from the external stream/document, advancing through the
+ * format in the order required to resolve references and produce valid internal data.
+ *
+ * `ReadTexture` reads texture from the external stream/document, advancing through the format in the order
+ * required to resolve references and produce valid internal data.
+ *
+ * `ReadVec` reads vec from the external stream/document, advancing through the format in the order required to
+ * resolve references and produce valid internal data.
+ *
+ * `ReadVec2` reads vec2 from the external stream/document, advancing through the format in the order required to
+ * resolve references and produce valid internal data.
+ *
+ * `ReadDouble` reads double from the external stream/document, advancing through the format in the order required
+ * to resolve references and produce valid internal data.
+ *
+ * `ReadInt` reads int from the external stream/document, advancing through the format in the order required to
+ * resolve references and produce valid internal data.
+ *
+ * `ReadBool` reads bool from the external stream/document, advancing through the format in the order required to
+ * resolve references and produce valid internal data.
+ */
 using System.IO;
 using System.Globalization;
 using System.Xml.Linq;

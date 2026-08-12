@@ -1,3 +1,61 @@
+/*
+ * Object-library definitions generate scene geometry from named, authored parameters. Keeping those parameters
+ * attached to the generated object is important: a cube with width/height/depth is still editable as a cube until
+ * a topology edit deliberately converts it into ordinary mesh geometry.
+ *
+ * `EditableParameters` is derived rather than separately stored: it evaluates
+ * `Array.Empty<PrimitiveParameterDescriptor>()`. Keeping the value computed from its source fields prevents a
+ * second cached flag/value from drifting out of sync.
+ *
+ * `CreateParametersFromBounds` constructs parameters from bounds in the normalized form expected downstream, so
+ * allocation plus initialization of its invariants happen together.
+ *
+ * `ApplyMoveDelta` applies move delta as a single semantic mutation. Validation, scene changes, undo bookkeeping,
+ * and cache invalidation are kept inside this boundary rather than exposed as separate caller responsibilities.
+ *
+ * `ApplyPendingTransform` applies pending transform as a single semantic mutation. Validation, scene changes,
+ * undo bookkeeping, and cache invalidation are kept inside this boundary rather than exposed as separate caller
+ * responsibilities.
+ *
+ * `Multiply` performs component-wise multiplication, preserving independent axes/color channels instead of
+ * reducing them to a scalar.
+ *
+ * `AddSphere` adds sphere to the owning collection/model while using this boundary to preserve indexing,
+ * ownership, and derived-state invariants.
+ *
+ * `AddHemisphere` adds hemisphere to the owning collection/model while using this boundary to preserve indexing,
+ * ownership, and derived-state invariants.
+ *
+ * `AddCylinder` adds cylinder to the owning collection/model while using this boundary to preserve indexing,
+ * ownership, and derived-state invariants.
+ *
+ * `AddCylinderSides` adds cylinder sides to the owning collection/model while using this boundary to preserve
+ * indexing, ownership, and derived-state invariants.
+ *
+ * `AddCone` adds cone to the owning collection/model while using this boundary to preserve indexing, ownership,
+ * and derived-state invariants.
+ *
+ * `AddTorus` adds torus to the owning collection/model while using this boundary to preserve indexing, ownership,
+ * and derived-state invariants.
+ *
+ * `AddTube` adds tube to the owning collection/model while using this boundary to preserve indexing, ownership,
+ * and derived-state invariants.
+ *
+ * `AddCircle` adds circle to the owning collection/model while using this boundary to preserve indexing,
+ * ownership, and derived-state invariants.
+ *
+ * `AddGrid` adds grid to the owning collection/model while using this boundary to preserve indexing, ownership,
+ * and derived-state invariants.
+ *
+ * `AddFrustum` adds frustum to the owning collection/model while using this boundary to preserve indexing,
+ * ownership, and derived-state invariants.
+ *
+ * `AddIcosphere` adds icosphere to the owning collection/model while using this boundary to preserve indexing,
+ * ownership, and derived-state invariants.
+ *
+ * `AddDisk` adds disk to the owning collection/model while using this boundary to preserve indexing, ownership,
+ * and derived-state invariants.
+ */
 using LightingShowcase.Math3D;
 using LightingShowcase.SceneGraph;
 

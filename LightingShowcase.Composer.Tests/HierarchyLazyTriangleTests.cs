@@ -1,3 +1,36 @@
+/*
+ * The tests in this file are executable statements of editor behavior. They intentionally use real scene/session
+ * objects and inspect externally meaningful results—geometry, hierarchy, material state, serialized output, cache
+ * stamps, or timing—so refactors can change implementation details without weakening the contract being tested.
+ *
+ * `MultiTriangleModel` is a caller/UI-facing snapshot of domain state; it deliberately avoids handing out the
+ * live mutable scene object that produced it.
+ *
+ * `Triangle_details_are_retrieved_in_pages_without_adding_scene_nodes` verifies that triangle details are
+ * retrieved in pages without adding scene nodes. It uses a real `ComposerSceneSession`, so registration, locking,
+ * history, and scene mutation follow production paths rather than mocks. The assertions establish that the
+ * resulting value/state must exactly match the expected result; the expected entry must remain discoverable.
+ * Representative cases include `Triangle`.
+ *
+ * `Root_node_can_be_ungrouped_and_undo_restores_it` verifies that root node can be ungrouped and undo restores
+ * it. It uses a real `ComposerSceneSession`, so registration, locking, history, and scene mutation follow
+ * production paths rather than mocks. Undo is exercised to prove the previous state was actually captured, not
+ * merely that the forward edit looked correct. The assertions establish that required objects/resources must
+ * resolve; the absent case must remain absent; the operation must explicitly report success; the resulting
+ * value/state must exactly match the expected result; the expected entry must remain discoverable.
+ *
+ * `Nested_mesh_node_can_be_ungrouped_without_first_ungrouping_the_root` verifies that nested mesh node can be
+ * ungrouped without first ungrouping the root. It uses a real `ComposerSceneSession`, so registration, locking,
+ * history, and scene mutation follow production paths rather than mocks. Undo is exercised to prove the previous
+ * state was actually captured, not merely that the forward edit looked correct. The assertions establish that
+ * required objects/resources must resolve; the absent case must remain absent; the operation must explicitly
+ * report success; the resulting value/state must exactly match the expected result.
+ *
+ * The `MultiTriangleModel` constructor establishes a valid default state before the instance can be used.
+ *
+ * `Dispose` ends this object’s active lifetime: owned cancellations/resources/listeners are released so completed
+ * windows/renderers do not keep receiving work or retain unmanaged memory.
+ */
 using LightingShowcase.Composer;
 using LightingShowcase.SceneGraph;
 

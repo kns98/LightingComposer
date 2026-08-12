@@ -1,13 +1,143 @@
-// -----------------------------------------------------------------------------
-// File: Rendering/VulkanRasterRenderer.cs
-// Purpose: Vulkan graphics-pipeline raster preview.
-//
-// This renderer is intentionally separate from VulkanSceneComputeRenderer.  It
-// uses Vulkan's normal vertex/fragment raster pipeline for fast preview frames:
-// vertex buffer -> depth-tested triangle rasterization -> fragment lighting ->
-// off-screen color texture -> staging readback -> cross-platform RGBA image.
-// -----------------------------------------------------------------------------
-
+/*
+ * The Vulkan path makes resource ownership and cache validity explicit. CPU-side scene data is packed into GPU
+ * buffers/images, commands are submitted against those resources, and stale resources must be rebuilt when
+ * geometry or transforms change; a numerically correct algorithm can still be wrong here if lifetime or
+ * synchronization is mishandled.
+ *
+ * `VulkanRasterRenderer` turns camera/scene state into an image using one rendering backend. Its caches/resources
+ * are implementation details of that backend; callers should depend on the common rendered result rather than
+ * those internals.
+ *
+ * `SharedRasterResources` owns resources/subscriptions whose lifetime must be ended explicitly.
+ *
+ * `PreparedRasterScene` owns resources/subscriptions whose lifetime must be ended explicitly.
+ *
+ * `RasterTargets` owns resources/subscriptions whose lifetime must be ended explicitly.
+ *
+ * `RasterVertex` is a value type, so small instances can be copied without heap allocation. Its operations
+ * establish shared numerical/data semantics for callers that would otherwise risk implementing subtly different
+ * formulas.
+ *
+ * `RasterCameraConstants` is a value type, so small instances can be copied without heap allocation. Its
+ * operations establish shared numerical/data semantics for callers that would otherwise risk implementing subtly
+ * different formulas.
+ *
+ * `RasterTransformConstants` is a value type, so small instances can be copied without heap allocation. Its
+ * operations establish shared numerical/data semantics for callers that would otherwise risk implementing subtly
+ * different formulas.
+ *
+ * `VertexRange` is an immutable packet of related values. Record value semantics make it suitable for snapshots,
+ * options, commands, or parsed intermediate data because callers can copy/compare it without sharing mutable
+ * state. Its constructor values (`Start`, `Count`) travel together because consumers need a consistent snapshot
+ * rather than reading those values independently from mutable objects.
+ *
+ * `PreviewRangeSet` is an immutable packet of related values. Record value semantics make it suitable for
+ * snapshots, options, commands, or parsed intermediate data because callers can copy/compare it without sharing
+ * mutable state. Its constructor values (`Opaque`, `Transparent`) travel together because consumers need a
+ * consistent snapshot rather than reading those values independently from mutable objects.
+ *
+ * `RasterTrianglePatch` is an immutable packet of related values. Record value semantics make it suitable for
+ * snapshots, options, commands, or parsed intermediate data because callers can copy/compare it without sharing
+ * mutable state. Its constructor values (`Transparent`, `VertexStart`, `Source`, `CornerMask`,
+ * `OriginalVertices`) travel together because consumers need a consistent snapshot rather than reading those
+ * values independently from mutable objects.
+ *
+ * `StageLogPath` is derived rather than separately stored: it evaluates `Path.Combine(Path.GetTempPath(), )`.
+ * Keeping the value computed from its source fields prevents a second cached flag/value from drifting out of
+ * sync.
+ *
+ * `None` is derived rather than separately stored: it evaluates `new()`. Keeping the value computed from its
+ * source fields prevents a second cached flag/value from drifting out of sync.
+ *
+ * `OpaqueVertexCount` is derived rather than separately stored: it evaluates `checked(OpaqueTriangleCount * 3)`.
+ * Keeping the value computed from its source fields prevents a second cached flag/value from drifting out of
+ * sync.
+ *
+ * `TransparentVertexCount` is derived rather than separately stored: it evaluates
+ * `checked(TransparentTriangleCount * 3)`. Keeping the value computed from its source fields prevents a second
+ * cached flag/value from drifting out of sync.
+ *
+ * `MaterialCount` is derived rather than separately stored: it evaluates `Materials.Length`. Keeping the value
+ * computed from its source fields prevents a second cached flag/value from drifting out of sync.
+ *
+ * `TotalTriangles` is derived rather than separately stored: it evaluates `checked(OpaqueTriangleCount +
+ * TransparentTriangleCount)`. Keeping the value computed from its source fields prevents a second cached
+ * flag/value from drifting out of sync.
+ *
+ * `StageLoggingEnabled` is derived rather than separately stored: it evaluates `IsVulkanDebugEnabled() ||
+ * string.Equals(Environment.GetEnvironmentVariable( ), , StringComparison.OrdinalIgnoreCase)`. Keeping the value
+ * computed from its source fields prevents a second cached flag/value from drifting out of sync.
+ *
+ * `Dispose` ends this object’s active lifetime: owned cancellations/resources/listeners are released so completed
+ * windows/renderers do not keep receiving work or retain unmanaged memory.
+ *
+ * `Dispose` ends this object’s active lifetime: owned cancellations/resources/listeners are released so completed
+ * windows/renderers do not keep receiving work or retain unmanaged memory.
+ *
+ * `Dispose` ends this object’s active lifetime: owned cancellations/resources/listeners are released so completed
+ * windows/renderers do not keep receiving work or retain unmanaged memory. GPU resource creation/update is
+ * explicit, so correct lifetime and cache invalidation are part of the method’s correctness.
+ *
+ * The `RasterVertex` constructor captures `position`, `normal`, `uv`, `materialIndex`. Those are the
+ * dependencies/initial values the instance needs for its lifetime, so callbacks and later operations use the same
+ * objects/configuration rather than looking them up globally.
+ *
+ * The `RasterCameraConstants` constructor captures `position`, `basis`, `width`, `height`, `lightCount`,
+ * `textureCount`, `debugMode`. Those are the dependencies/initial values the instance needs for its lifetime, so
+ * callbacks and later operations use the same objects/configuration rather than looking them up globally.
+ *
+ * The `RasterTransformConstants` constructor captures `preview`. Those are the dependencies/initial values the
+ * instance needs for its lifetime, so callbacks and later operations use the same objects/configuration rather
+ * than looking them up globally.
+ *
+ * The `RasterLight` constructor captures `light`. Those are the dependencies/initial values the instance needs
+ * for its lifetime, so callbacks and later operations use the same objects/configuration rather than looking them
+ * up globally.
+ *
+ * The `RasterTexturePlacement` constructor captures `offsetX`, `offsetY`, `scaleX`, `scaleY`, `pageIndex`,
+ * `texture`. Those are the dependencies/initial values the instance needs for its lifetime, so callbacks and
+ * later operations use the same objects/configuration rather than looking them up globally.
+ *
+ * `ReleasePreparedScene` releases prepared scene and its owned resources, used when cached/native objects are no
+ * longer valid or the owning scene/session is shutting down. GPU resource creation/update is explicit, so correct
+ * lifetime and cache invalidation are part of the method’s correctness.
+ *
+ * `BuildGroupVertexRanges` derives group vertex ranges from lower-level input data, resolving
+ * indexing/grouping/derived values once so callers can operate on a coherent higher-level representation.
+ *
+ * `GetOrCreatePreparedScene` reads or create prepared scene from the authoritative model and returns a
+ * value/snapshot suitable for callers, avoiding direct access to mutable internal storage. Cancellation is
+ * propagated so shutdown or a newer request can make obsolete work stop early. Native interop is localized here
+ * so handle/pointer lifetime and platform failure handling do not spread through editor code. GPU resource
+ * creation/update is explicit, so correct lifetime and cache invalidation are part of the method’s correctness.
+ *
+ * `GetOrCreateTargets` reads or create targets from the authoritative model and returns a value/snapshot suitable
+ * for callers, avoiding direct access to mutable internal storage. GPU resource creation/update is explicit, so
+ * correct lifetime and cache invalidation are part of the method’s correctness.
+ *
+ * `ComputeSceneBounds` calculates scene bounds deterministically from its inputs; callers can use the result as
+ * derived data/cache evidence without mutating the underlying scene.
+ *
+ * `GetOrCreateSharedDevice` reads or create shared device from the authoritative model and returns a
+ * value/snapshot suitable for callers, avoiding direct access to mutable internal storage. GPU resource
+ * creation/update is explicit, so correct lifetime and cache invalidation are part of the method’s correctness.
+ *
+ * `GetOrCreateSharedRasterResources` reads or create shared raster resources from the authoritative model and
+ * returns a value/snapshot suitable for callers, avoiding direct access to mutable internal storage.
+ *
+ * `CreateRasterShaders` constructs raster shaders in the normalized form expected downstream, so allocation plus
+ * initialization of its invariants happen together.
+ *
+ * `ComputeCameraFarPlane` calculates camera far plane deterministically from its inputs; callers can use the
+ * result as derived data/cache evidence without mutating the underlying scene.
+ *
+ * `BuildTextureAtlas` derives texture atlas from lower-level input data, resolving indexing/grouping/derived
+ * values once so callers can operate on a coherent higher-level representation. GPU resource creation/update is
+ * explicit, so correct lifetime and cache invalidation are part of the method’s correctness.
+ *
+ * `BuildDimensionCandidates` derives dimension candidates from lower-level input data, resolving
+ * indexing/grouping/derived values once so callers can operate on a coherent higher-level representation.
+ */
 using System.Diagnostics;
 using System.Numerics;
 using System.Runtime.InteropServices;

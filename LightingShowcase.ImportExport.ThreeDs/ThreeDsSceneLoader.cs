@@ -1,15 +1,59 @@
-// -----------------------------------------------------------------------------
-// File: Scene/ThreeDsSceneLoader.cs
-// Purpose: Autodesk 3DS import.
-//
-// Imports the legacy .3ds interchange format used by old 3D Studio / 3ds Max
-// model libraries. Native .max files are proprietary scene files and cannot be
-// read safely without Autodesk 3ds Max or an Autodesk SDK/export step, but many
-// free "3ds Max" asset sites provide .3ds files. This loader covers the common
-// static mesh subset: object meshes, vertices, triangle faces, UVs, diffuse
-// material colors, and diffuse texture filenames.
-// -----------------------------------------------------------------------------
-
+/*
+ * Importing THREEDS is a translation problem, not a file-copy operation. The code parses the external
+ * representation, resolves indices/resources/transforms, and creates Composer triangles, object groups,
+ * materials, and textures in the coordinate and ownership conventions expected by the scene layer.
+ *
+ * `ThreeDsSceneLoader` owns parsing and translation from its external file format into Composer scene objects;
+ * parser-specific intermediate state stays here instead of leaking into the renderer-neutral scene model.
+ *
+ * The `ThreeDsMesh` constructor captures `name`. Those are the dependencies/initial values the instance needs for
+ * its lifetime, so callbacks and later operations use the same objects/configuration rather than looking them up
+ * globally.
+ *
+ * The `ThreeDsFace` constructor captures `a`, `b`, `c`. Those are the dependencies/initial values the instance
+ * needs for its lifetime, so callbacks and later operations use the same objects/configuration rather than
+ * looking them up globally.
+ *
+ * `ReadDocument` reads document from the external stream/document, advancing through the format in the order
+ * required to resolve references and produce valid internal data. Binary field order is explicit; changing it
+ * requires the corresponding reader/writer to remain symmetrical.
+ *
+ * `ReadVertexList` reads vertex list from the external stream/document, advancing through the format in the order
+ * required to resolve references and produce valid internal data.
+ *
+ * `ReadMappingCoords` reads mapping coords from the external stream/document, advancing through the format in the
+ * order required to resolve references and produce valid internal data.
+ *
+ * `ReadFaceList` reads face list from the external stream/document, advancing through the format in the order
+ * required to resolve references and produce valid internal data.
+ *
+ * `ReadFaceMaterial` reads face material from the external stream/document, advancing through the format in the
+ * order required to resolve references and produce valid internal data.
+ *
+ * `ReadMaterial` reads material from the external stream/document, advancing through the format in the order
+ * required to resolve references and produce valid internal data.
+ *
+ * `ReadColorContainer` reads color container from the external stream/document, advancing through the format in
+ * the order required to resolve references and produce valid internal data.
+ *
+ * `ReadTextureMap` reads texture map from the external stream/document, advancing through the format in the order
+ * required to resolve references and produce valid internal data.
+ *
+ * `ResolveTexturePath` turns texture path into the canonical value/path/object the rest of the code expects,
+ * handling aliases/relative forms/registry lookup at one boundary instead of throughout the caller.
+ *
+ * `IsValidFace` tests whether valid face is true for the supplied/current value. Keeping the predicate here
+ * ensures every caller uses the same definition instead of duplicating a slightly different condition.
+ *
+ * `GetUv` reads uv from the authoritative model and returns a value/snapshot suitable for callers, avoiding
+ * direct access to mutable internal storage.
+ *
+ * `GetBounds` reads bounds from the authoritative model and returns a value/snapshot suitable for callers,
+ * avoiding direct access to mutable internal storage.
+ *
+ * `ReadNullTerminatedString` reads null terminated string from the external stream/document, advancing through
+ * the format in the order required to resolve references and produce valid internal data.
+ */
 using System;
 using System.Collections.Generic;
 using System.Globalization;

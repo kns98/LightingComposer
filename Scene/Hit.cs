@@ -1,12 +1,8 @@
-// -----------------------------------------------------------------------------
-// File: Scene/Hit.cs
-// Purpose: Intersection result.
-//
-// Mutable record of the nearest ray hit, including distance, position, normal, material, and texture coordinate.
-// This comment is intentionally kept in source code so future maintainers can
-// understand the role of this file without opening external documentation.
-// -----------------------------------------------------------------------------
-
+/*
+ * This file belongs to the renderer-neutral scene layer, which is the shared source of truth for geometry,
+ * transforms, grouping, materials, resources, and serialization-facing state. Higher layers manipulate these
+ * abstractions rather than maintaining parallel copies of scene data.
+ */
 using LightingShowcase.Math3D;
 
 namespace LightingShowcase.SceneGraph;
@@ -23,8 +19,6 @@ public sealed class Hit
     public double TextureV { get; }
     public Vec3 Tangent { get; }
     public Vec3 Bitangent { get; }
-
-    /// <summary>Constructs and initializes this component.</summary>
     public Hit(
         double t,
         Vec3 point,

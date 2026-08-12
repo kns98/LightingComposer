@@ -1,8 +1,89 @@
-// -----------------------------------------------------------------------------
-// File: ReadyMadeObjectPrimitives.cs
-// Purpose: One self-discoverable class per ready-made object definition.
-// -----------------------------------------------------------------------------
-
+/*
+ * Object-library definitions generate scene geometry from named, authored parameters. Keeping those parameters
+ * attached to the generated object is important: a cube with width/height/depth is still editable as a cube until
+ * a topology edit deliberately converts it into ordinary mesh geometry.
+ *
+ * `BoxPart` is an immutable packet of related values. Record value semantics make it suitable for snapshots,
+ * options, commands, or parsed intermediate data because callers can copy/compare it without sharing mutable
+ * state. Its constructor values (`Min`, `Max`, `Material`) travel together because consumers need a consistent
+ * snapshot rather than reading those values independently from mutable objects.
+ *
+ * `EmittedTriangle` is an immutable packet of related values. Record value semantics make it suitable for
+ * snapshots, options, commands, or parsed intermediate data because callers can copy/compare it without sharing
+ * mutable state. Its constructor values (`A`, `B`, `C`, `UvA`, `UvB`, `UvC`, `Material`) travel together because
+ * consumers need a consistent snapshot rather than reading those values independently from mutable objects.
+ *
+ * `DiningTableObject` defines/builds a ready-made scene object from simpler geometry so the palette can insert a
+ * semantically named object rather than a hard-coded triangle blob.
+ *
+ * `CoffeeTableObject` defines/builds a ready-made scene object from simpler geometry so the palette can insert a
+ * semantically named object rather than a hard-coded triangle blob.
+ *
+ * `ChairObject` defines/builds a ready-made scene object from simpler geometry so the palette can insert a
+ * semantically named object rather than a hard-coded triangle blob.
+ *
+ * `SofaObject` defines/builds a ready-made scene object from simpler geometry so the palette can insert a
+ * semantically named object rather than a hard-coded triangle blob.
+ *
+ * `BedObject` defines/builds a ready-made scene object from simpler geometry so the palette can insert a
+ * semantically named object rather than a hard-coded triangle blob.
+ *
+ * `BookshelfObject` defines/builds a ready-made scene object from simpler geometry so the palette can insert a
+ * semantically named object rather than a hard-coded triangle blob.
+ *
+ * `StorageCabinetObject` defines/builds a ready-made scene object from simpler geometry so the palette can insert
+ * a semantically named object rather than a hard-coded triangle blob.
+ *
+ * `CreateDefaultParameters` constructs default parameters in the normalized form expected downstream, so
+ * allocation plus initialization of its invariants happen together.
+ *
+ * `CreateParametersFromBounds` constructs parameters from bounds in the normalized form expected downstream, so
+ * allocation plus initialization of its invariants happen together.
+ *
+ * `ApplyMoveDelta` applies move delta as a single semantic mutation. Validation, scene changes, undo bookkeeping,
+ * and cache invalidation are kept inside this boundary rather than exposed as separate caller responsibilities.
+ *
+ * `ApplyScaleDelta` applies scale delta as a single semantic mutation. Validation, scene changes, undo
+ * bookkeeping, and cache invalidation are kept inside this boundary rather than exposed as separate caller
+ * responsibilities.
+ *
+ * `ApplyPendingTransform` applies pending transform as a single semantic mutation. Validation, scene changes,
+ * undo bookkeeping, and cache invalidation are kept inside this boundary rather than exposed as separate caller
+ * responsibilities.
+ *
+ * `CreateParameters` constructs parameters in the normalized form expected downstream, so allocation plus
+ * initialization of its invariants happen together.
+ *
+ * `CaptureSource` copies source into an independent snapshot so later mutation cannot change the saved baseline.
+ * This is typically the “before” side of undo, preview, caching, or thread isolation.
+ *
+ * `Multiply` performs component-wise multiplication, preserving independent axes/color channels instead of
+ * reducing them to a scalar.
+ *
+ * `CreateParts` constructs parts in the normalized form expected downstream, so allocation plus initialization of
+ * its invariants happen together.
+ *
+ * `CreateParts` constructs parts in the normalized form expected downstream, so allocation plus initialization of
+ * its invariants happen together.
+ *
+ * `CreateParts` constructs parts in the normalized form expected downstream, so allocation plus initialization of
+ * its invariants happen together.
+ *
+ * `CreateParts` constructs parts in the normalized form expected downstream, so allocation plus initialization of
+ * its invariants happen together.
+ *
+ * `CreateParts` constructs parts in the normalized form expected downstream, so allocation plus initialization of
+ * its invariants happen together.
+ *
+ * `CreateParts` constructs parts in the normalized form expected downstream, so allocation plus initialization of
+ * its invariants happen together.
+ *
+ * `CreateParts` constructs parts in the normalized form expected downstream, so allocation plus initialization of
+ * its invariants happen together.
+ *
+ * `CreateParts` constructs parts in the normalized form expected downstream, so allocation plus initialization of
+ * its invariants happen together.
+ */
 using LightingShowcase.Math3D;
 
 namespace LightingShowcase.SceneGraph;

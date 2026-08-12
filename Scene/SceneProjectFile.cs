@@ -1,8 +1,24 @@
-// -----------------------------------------------------------------------------
-// File: Scene/SceneProjectFile.cs
-// Purpose: Portable project manifest save/load helpers.
-// -----------------------------------------------------------------------------
-
+/*
+ * This representation separates durable or isolated scene state from the mutable live editor graph. Save/load,
+ * undo, background rendering, and tests need snapshots/documents that can be copied or serialized without
+ * exposing shared mutable objects across threads.
+ *
+ * `SceneProjectFile` provides shared algorithms/registration behavior without per-instance state.
+ *
+ * `IsImported` is a read-only predicate over the object’s existing state; it exists so callers share one exact
+ * condition when enabling commands or deciding whether an operation is applicable.
+ *
+ * `IsDefault` is a read-only predicate over the object’s existing state; it exists so callers share one exact
+ * condition when enabling commands or deciding whether an operation is applicable.
+ *
+ * `SaveManifest` serializes manifest from current internal state, making persistence a snapshot operation rather
+ * than allowing the serializer to walk concurrently mutating editor objects. Serializer-specific handling stays
+ * at this boundary rather than leaking into the live scene model.
+ *
+ * `LoadManifest` loads manifest from persistent/external data and converts it into validated internal scene state
+ * rather than exposing parser-specific objects to the rest of the application. Serializer-specific handling stays
+ * at this boundary rather than leaking into the live scene model.
+ */
 using System.Text.Json;
 using LightingShowcase.Lighting;
 using LightingShowcase.Math3D;

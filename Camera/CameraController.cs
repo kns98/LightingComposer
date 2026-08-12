@@ -1,12 +1,33 @@
-// -----------------------------------------------------------------------------
-// File: Camera/CameraController.cs
-// Purpose: Interactive camera model.
-//
-// Stores canonical orbit/look-at camera state and applies keyboard/mouse movement
-// for manual navigation. The controller owns user interaction only; import/render
-// coordinate fixes belong in TransformConverter or renderer adapters.
-// -----------------------------------------------------------------------------
-
+/*
+ * Camera state is kept independent of Avalonia and renderer-specific code. That lets interactive navigation,
+ * scripted paths, tests, and multiple render backends use the same definitions for position, orientation,
+ * projection, and interpolation.
+ *
+ * `CameraController` coordinates a focused interaction workflow. It holds the transient UI/input state needed for
+ * that workflow but delegates authoritative scene mutation to the session/model layer.
+ *
+ * `Distance` is derived rather than separately stored: it evaluates `Math.Max(MinDistance, (Position -
+ * Target).Length())`. Keeping the value computed from its source fields prevents a second cached flag/value from
+ * drifting out of sync.
+ *
+ * The `CameraController` constructor establishes a valid default state before the instance can be used.
+ *
+ * `SetPosition` sets position through the owning abstraction instead of exposing a mutable field. That gives the
+ * method one place to validate the value and perform any history/cache/UI side effects required by the change.
+ *
+ * `SetLookAt` sets look at through the owning abstraction instead of exposing a mutable field. That gives the
+ * method one place to validate the value and perform any history/cache/UI side effects required by the change.
+ *
+ * `GetBasis` reads basis from the authoritative model and returns a value/snapshot suitable for callers, avoiding
+ * direct access to mutable internal storage.
+ *
+ * `RebuildPositionFromOrbit` reconstructs position from orbit from authoritative source data after an edit has
+ * invalidated the previous derived form. Rebuilding rather than incrementally patching reduces the chance of
+ * stale topology/cache entries surviving.
+ *
+ * `UpdateAnglesFromLookAt` updates angles from look at from the newest input while preserving the
+ * identities/metadata/caches that remain valid and invalidating only what the change makes stale.
+ */
 using LightingShowcase.Math3D;
 using LightingShowcase.SceneGraph;
 

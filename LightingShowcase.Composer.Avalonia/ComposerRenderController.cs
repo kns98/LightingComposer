@@ -1,3 +1,70 @@
+/*
+ * Rendering requests arrive much faster than a heavyweight renderer can necessarily finish them, so this
+ * controller behaves like a small scheduler. It coalesces repeated requests, cancels obsolete non-interactive
+ * frames, lowers interactive resolution when appropriate, and only presents a completed frame if it still
+ * corresponds to the newest request. That prevents stale renders from flashing into the viewport after the user
+ * has already moved on.
+ *
+ * `ComposerRenderController` coordinates a focused interaction workflow. It holds the transient UI/input state
+ * needed for that workflow but delegates authoritative scene mutation to the session/model layer.
+ *
+ * `IsRendering` mirrors the controller’s render-loop flag, allowing input/window code to ask whether a frame is
+ * actively being produced without being able to mutate the scheduler state.
+ *
+ * `GetOptions` reads options from the authoritative model and returns a value/snapshot suitable for callers,
+ * avoiding direct access to mutable internal storage.
+ *
+ * `SetOptions` sets options through the owning abstraction instead of exposing a mutable field. That gives the
+ * method one place to validate the value and perform any history/cache/UI side effects required by the change.
+ *
+ * `CanRenderContinuously` decides whether drag/navigation can request another frame immediately. The software
+ * rasterizer is always considered fast enough, the CPU ray tracer is deliberately excluded, and Vulkan modes are
+ * enabled only after a measured frame time exists and stays below 160 ms for raster or 220 ms for compute.
+ *
+ * `RequestRenderAsync` is the render coalescer. It increments a version for every request, cancels an active
+ * frame when a new non-interactive request supersedes it, and if a render is already running merely sets
+ * `renderAgain`. The loop then renders the newest pending state without starting overlapping frames. Cancellation
+ * is propagated so shutdown or a newer request can make obsolete work stop early.
+ *
+ * `RenderOneFrameAsync` takes a snapshot of renderer choice, options, camera, output size, and gizmo mode for one
+ * frame, renders that snapshot on a worker thread, and discards the result if cancellation or a newer request
+ * makes it stale. Accepted frames update exponentially smoothed timing, bitmap pixels, FPS/memory statistics, and
+ * backend details. Potentially blocking/CPU work runs on a worker task rather than Avalonia’s UI thread.
+ * Cancellation is propagated so shutdown or a newer request can make obsolete work stop early.
+ *
+ * `ScheduleResizeRender` debounces resize-driven rendering. Each resize cancels the previous delay and starts a
+ * linked cancellation source, so only the last resize in a burst survives long enough to request a full render.
+ * Cancellation is propagated so shutdown or a newer request can make obsolete work stop early.
+ *
+ * `RenderAfterResizeDelayAsync` waits 140 ms after the most recent resize before requesting a non-interactive
+ * frame. Cancellation is expected during continuous resizing and is swallowed; the exact cancellation source is
+ * then cleared and disposed.
+ *
+ * `StopCurrentRenderAsync` invalidates the current render version, clears queued follow-up work, cancels the
+ * active frame, and waits in short 8 ms intervals until the render loop has actually exited. Callers can
+ * therefore know that no old frame is still in flight before replacing scene state. Cancellation is propagated so
+ * shutdown or a newer request can make obsolete work stop early.
+ *
+ * `CancelCurrentRender` marks any current result obsolete by advancing the version and signals its cancellation
+ * token. Unlike `StopCurrentRenderAsync`, it does not wait for the worker to finish.
+ *
+ * `ClearImage` detaches and disposes the current `WriteableBitmap`, then resets remembered dimensions to 1×1.
+ * Disposing the old bitmap is necessary because Avalonia bitmaps own unmanaged pixel resources.
+ *
+ * `ShowImage` copies the renderer’s packed RGBA pixels into an Avalonia `WriteableBitmap`. It reallocates only
+ * when dimensions change, locks the framebuffer for direct row copies, respects the destination row stride, then
+ * invalidates the image so Avalonia repaints the new pixels. Row data is copied directly into the destination
+ * buffer, so byte count and destination stride are handled explicitly.
+ *
+ * `AlignToEight` rounds a positive dimension up to the next multiple of eight with bit masking, never allowing a
+ * value below eight.
+ *
+ * `FormatBytes` formats process memory as GiB once it reaches one GiB and otherwise as MiB, keeping the status
+ * line compact while retaining useful scale.
+ *
+ * `Dispose` ends this object’s active lifetime: owned cancellations/resources/listeners are released so completed
+ * windows/renderers do not keep receiving work or retain unmanaged memory.
+ */
 using System.Diagnostics;
 using Avalonia;
 using Avalonia.Controls;

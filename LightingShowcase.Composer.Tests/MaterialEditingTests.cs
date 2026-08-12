@@ -1,3 +1,57 @@
+/*
+ * The tests in this file are executable statements of editor behavior. They intentionally use real scene/session
+ * objects and inspect externally meaningful results—geometry, hierarchy, material state, serialized output, cache
+ * stamps, or timing—so refactors can change implementation details without weakening the contract being tested.
+ *
+ * `PresetAndColorEditsKeepProceduralParameters` verifies that preset and color edits keep procedural parameters.
+ * It uses a real `ComposerSceneSession`, so registration, locking, history, and scene mutation follow production
+ * paths rather than mocks. The assertions establish that required objects/resources must resolve; the operation
+ * must explicitly report success; the resulting value/state must exactly match the expected result.
+ * Representative cases include `Cube`, `Steel`.
+ *
+ * `MeterTiledTextureSurvivesProceduralRegeneration` verifies that meter tiled texture survives procedural
+ * regeneration. It uses a real `ComposerSceneSession`, so registration, locking, history, and scene mutation
+ * follow production paths rather than mocks. Preview and commit are asserted separately because interactive
+ * previews are transient, whereas commit must create the one durable edit the user can undo. Temporary filesystem
+ * output is inspected/cleaned so persistence behavior is tested end-to-end. The assertions establish that
+ * required objects/resources must resolve; the operation must explicitly report success; the resulting
+ * value/state must exactly match the expected result. Representative cases include `test.png`, `Cube`, `width`.
+ *
+ * `MaterialEditParticipatesInUndo` verifies that material edit participates in undo. It uses a real
+ * `ComposerSceneSession`, so registration, locking, history, and scene mutation follow production paths rather
+ * than mocks. Undo is exercised to prove the previous state was actually captured, not merely that the forward
+ * edit looked correct. The assertions establish that the operation must explicitly report success; the resulting
+ * value/state must exactly match the expected result. Representative cases include `Cube`.
+ *
+ * `TexturedProceduralPrimitiveRoundTripsThroughComposerScene` verifies that textured procedural primitive round
+ * trips through composer scene. It uses a real `ComposerSceneSession`, so registration, locking, history, and
+ * scene mutation follow production paths rather than mocks. Temporary filesystem output is inspected/cleaned so
+ * persistence behavior is tested end-to-end. The assertions establish that required objects/resources must
+ * resolve; the operation must explicitly report success; the resulting value/state must exactly match the
+ * expected result. Representative cases include `roundtrip.png`, `Cube`.
+ *
+ * `DirectMaterialPropertiesAreEditableAndUndoableWithoutLosingPrimitiveParameters` verifies that direct material
+ * properties are editable and undoable without losing primitive parameters. It uses a real
+ * `ComposerSceneSession`, so registration, locking, history, and scene mutation follow production paths rather
+ * than mocks. Undo is exercised to prove the previous state was actually captured, not merely that the forward
+ * edit looked correct. The assertions establish that required objects/resources must resolve; the operation must
+ * explicitly report success; the resulting value/state must exactly match the expected result; the operation must
+ * produce an observable change. Representative cases include `Cylinder`.
+ *
+ * `TextureSlotsAndPerTextureMappingAreEditableIndependently` verifies that texture slots and per texture mapping
+ * are editable independently. It uses a real `ComposerSceneSession`, so registration, locking, history, and scene
+ * mutation follow production paths rather than mocks. Temporary filesystem output is inspected/cleaned so
+ * persistence behavior is tested end-to-end. The assertions establish that required objects/resources must
+ * resolve; the operation must explicitly report success; the disallowed path must be rejected; the resulting
+ * value/state must exactly match the expected result. Representative cases include `slot.png`, `Cube`.
+ *
+ * `SecondaryTextureMappingRoundTripsThroughComposerScene` verifies that secondary texture mapping round trips
+ * through composer scene. It uses a real `ComposerSceneSession`, so registration, locking, history, and scene
+ * mutation follow production paths rather than mocks. Temporary filesystem output is inspected/cleaned so
+ * persistence behavior is tested end-to-end. The assertions establish that required objects/resources must
+ * resolve; the operation must explicitly report success; the resulting value/state must exactly match the
+ * expected result. Representative cases include `emissive.png`, `Cylinder`.
+ */
 using LightingShowcase.Composer;
 using LightingShowcase.Math3D;
 using LightingShowcase.SceneGraph;

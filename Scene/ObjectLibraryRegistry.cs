@@ -1,8 +1,46 @@
-// -----------------------------------------------------------------------------
-// File: Scene/ObjectLibraryRegistry.cs
-// Purpose: Discovers external object-definition DLLs and owns scene insertion.
-// -----------------------------------------------------------------------------
-
+/*
+ * This is an extensibility seam. Callers discover capabilities through a registry/interface instead of
+ * referencing every concrete format or object-library assembly, allowing plugins to be added while the core
+ * scene/editor code remains unchanged.
+ *
+ * `ObjectLibraryRegistry` is a discovery table that maps stable names/capabilities to registered implementations,
+ * removing the need for central switch statements that know every plugin or primitive at compile time.
+ *
+ * `AuthoredAffine` is an immutable packet of related values. Record value semantics make it suitable for
+ * snapshots, options, commands, or parsed intermediate data because callers can copy/compare it without sharing
+ * mutable state. Its constructor values (`M11`, `M12`, `M13`, `TX`, `M21`, `M22`, `M23`, `TY`, `M31`, `M32`,
+ * `M33`, `TZ`) travel together because consumers need a consistent snapshot rather than reading those values
+ * independently from mutable objects.
+ *
+ * `IsIdentity` is a read-only predicate over the object’s existing state; it exists so callers share one exact
+ * condition when enabling commands or deciding whether an operation is applicable.
+ *
+ * `ReadyMadeNameForPrimitiveKind` reads y made name for primitive kind from the external stream/document,
+ * advancing through the format in the order required to resolve references and produce valid internal data.
+ * Primitive definitions are resolved through the registry, allowing plugin-provided primitives to follow the same
+ * path as built-ins.
+ *
+ * `RebuildPrimitiveShadowGeometry` reconstructs primitive shadow geometry from authoritative source data after an
+ * edit has invalidated the previous derived form. Rebuilding rather than incrementally patching reduces the
+ * chance of stale topology/cache entries surviving. Primitive definitions are resolved through the registry,
+ * allowing plugin-provided primitives to follow the same path as built-ins.
+ *
+ * `ClearParametricTextureProjection` removes/resets parametric texture projection to its empty/default state.
+ * This is an explicit state transition rather than leaving old values around for later code to accidentally
+ * reuse.
+ *
+ * `IsIdentitySrt` tests whether identity srt is true for the supplied/current value. Keeping the predicate here
+ * ensures every caller uses the same definition instead of duplicating a slightly different condition.
+ *
+ * `ReadAuthoredAffine` reads authored affine from the external stream/document, advancing through the format in
+ * the order required to resolve references and produce valid internal data.
+ *
+ * `WriteAuthoredAffine` writes authored affine to the external stream/document in the format’s required order,
+ * using stable indices/references so another reader can reconstruct the same relationships.
+ *
+ * `TransformPoint` applies the relevant coordinate transform to point, making explicit whether data is being
+ * moved between local, world, view, or preview space.
+ */
 using LightingShowcase.Math3D;
 
 namespace LightingShowcase.SceneGraph;

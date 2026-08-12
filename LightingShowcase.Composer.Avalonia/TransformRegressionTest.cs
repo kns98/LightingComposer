@@ -1,3 +1,13 @@
+/*
+ * This is desktop-editor glue around the scene and rendering layers. The code should be read in terms of how it
+ * translates user interaction into domain operations while keeping platform UI state, mutable scene state, and
+ * renderer state from becoming entangled.
+ *
+ * `TransformRegressionTest` provides shared algorithms/registration behavior without per-instance state.
+ *
+ * `Fail` stores the supplied validation message in the `out` error value and returns `false`, allowing
+ * parsing/validation routines to report a reason without throwing for ordinary bad user input.
+ */
 using LightingShowcase.Math3D;
 using LightingShowcase.SceneGraph;
 
