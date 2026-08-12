@@ -1039,7 +1039,8 @@ internal sealed partial class ComposerSceneSession : IDisposable
         bool interactive,
         CancellationToken cancellationToken,
         ComposerGizmoMode gizmoMode = ComposerGizmoMode.Translate,
-        bool objectGizmoOnly = false)
+        bool objectGizmoOnly = false,
+        ComposerRenderOptions? renderOptions = null)
     {
         _ = objectGizmoOnly; // Retained for call-site compatibility; Object mode is always gizmo-only now.
         sceneGate.Wait(cancellationToken);
@@ -1101,35 +1102,22 @@ internal sealed partial class ComposerSceneSession : IDisposable
                     cancellationToken,
                     out details),
 
-                ComposerRendererKind.VulkanCompute => VulkanSceneComputeRenderer.Render(
+                ComposerRendererKind.VulkanCompute => RenderVulkanCompute(
                     scene,
-                    camera.Position,
-                    camera.ToBasis(),
+                    camera,
                     width,
                     height,
-                    bounceCount: 0,
-                    sampleIndex: 0,
-                    sampleCount: 1,
-                    cancellationToken: cancellationToken,
-                    details: out details,
-                    progressCallback: null,
-                    settings: new RenderSettings
-                    {
-                        Width = width,
-                        Height = height,
-                        Backend = RenderBackend.VulkanGpu,
-                        PathBounceCount = 0,
-                        Exposure = 1.0,
-                        AmbientStrength = 1.0,
-                        UseShadows = true
-                    },
-                    fieldOfViewDegrees: camera.FieldOfViewDegrees),
+                    interactive,
+                    renderOptions ?? ComposerRenderOptions.DefaultsFor(ComposerRendererKind.VulkanCompute),
+                    cancellationToken,
+                    out details),
 
                 ComposerRendererKind.Cpu => CpuComposerRenderer.Render(
                     scene,
                     camera,
                     width,
                     height,
+                    renderOptions ?? ComposerRenderOptions.DefaultsFor(ComposerRendererKind.Cpu),
                     cancellationToken,
                     out details),
 
@@ -1184,6 +1172,51 @@ internal sealed partial class ComposerSceneSession : IDisposable
             sceneGate.Release();
         }
     }
+
+
+private static RenderImage RenderVulkanCompute(
+    Scene scene,
+    CameraDefinition camera,
+    int width,
+    int height,
+    bool interactive,
+    ComposerRenderOptions options,
+    CancellationToken cancellationToken,
+    out string details)
+{
+    options.Validate();
+
+    int samples = interactive ? 1 : options.Samples;
+    int bounces = interactive ? 0 : options.Bounces;
+
+    RenderSettings settings = new()
+    {
+        Width = width,
+        Height = height,
+        Backend = RenderBackend.VulkanGpu,
+        PathBounceCount = bounces,
+        Exposure = options.Exposure,
+        AmbientStrength = options.AmbientStrength,
+        BackgroundTop = options.BackgroundTop,
+        BackgroundBottom = options.BackgroundBottom,
+        UseShadows = options.UseShadows
+    };
+
+    return VulkanSceneComputeRenderer.Render(
+        scene,
+        camera.Position,
+        camera.ToBasis(),
+        width,
+        height,
+        bounceCount: bounces,
+        sampleIndex: 0,
+        sampleCount: samples,
+        cancellationToken: cancellationToken,
+        details: out details,
+        progressCallback: null,
+        settings: settings,
+        fieldOfViewDegrees: options.FieldOfViewDegrees);
+}
 
     private VulkanRasterTransformPreview? CreateVulkanTransformPreview()
     {

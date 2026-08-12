@@ -18,7 +18,7 @@ A standalone, platform-neutral scene composer and renderer built with Avalonia 1
 - Undo and redo transforms, procedural/material edits, polygon face edits, and hierarchy Group/Ungroup operations with toolbar buttons or `Ctrl+Z` / `Ctrl+Y`.
 - Expand a mesh through a lazy `… show faces` row. Logical face rows are virtual and paged 200 at a time, so a Cube shows six editable faces rather than twelve renderer triangles and browsing them does not enlarge the scene or GPU buffers.
 - Save and reopen `.lscene` compositions.
-- Preview with software raster, Vulkan raster, Vulkan compute, or CPU ray rendering.
+- Preview with software raster, Vulkan raster, Vulkan compute, or CPU ray rendering. When CPU is selected, **CPU…** opens render settings for resolution, samples, bounces, field of view, and exposure.
 - Show frame time, approximate FPS, object count, triangle count, and process memory.
 - Use the same executable for headless command-line rendering.
 
@@ -82,7 +82,7 @@ A path may also be passed without the `compose` verb:
 - Right drag: orbit.
 - Middle drag or Shift+right drag: pan.
 - Mouse wheel: zoom.
-- Precision touchpad: two-finger movement orbits; pinch magnifies/zooms. Translation and pinch can be applied concurrently during the same gesture.
+- Precision touchpad: on Windows 11, native two-contact input maps common movement to orbit, pinch/spread to zoom, and two-finger twist to turntable rotation around the scene center. Other platforms keep their existing Avalonia input paths.
 - Touchscreen: two-finger centroid movement orbits while finger separation zooms, simultaneously.
 - Arrow keys: orbit; Shift+arrow keys: pan.
 - `F`: frame the selected tree node.
@@ -237,3 +237,29 @@ The export dialog offers two glTF/GLB modes:
 - **Preserve editor chunks**: retains one exported mesh for each current top-level editor object. Use this only when the chunk organization is needed in another application.
 
 Optimized export does not alter the open `.lscene` document. It only changes the generated glTF/GLB package.
+
+### Renderer settings
+
+Composer has a general **Settings…** dialog next to the renderer selector. The same dialog is used for Raster, Vulkan raster, Vulkan compute, and CPU. Unsupported controls remain visible but disabled for the selected mode.
+
+- Raster: output width/height.
+- Vulkan raster: output width/height.
+- Vulkan compute: width/height, samples, bounces, FOV, exposure, ambient strength, shadows, and background colors.
+- CPU: width/height, samples, bounces, FOV, and exposure.
+
+During interactive Vulkan-compute camera movement, Composer temporarily uses one sample and zero bounces for responsiveness, then applies the configured quality to the idle render.
+
+### Menu bar
+
+The former top toolbar has been replaced with an application menu bar:
+
+- **File**: New, Open, Insert model, Save scene, Export package
+- **Edit**: Undo, Redo, Duplicate, Group, Ungroup, Delete
+- **Add**: Plane, Cube, Circle, UV Sphere, Icosphere, Cylinder, Cone, Torus, Grid
+- **Object**: Parameters, Material, Apply/Reset transform, Frame selected
+- **Mode**: Selection mode, transform gizmo, component move-axis lock
+- **Render**: renderer selection and renderer-specific Settings
+
+Renderer and mode entries are radio menu items and remain synchronized with the
+existing keyboard shortcuts and internal selection state. The current scene
+path is shown in the bottom status area.

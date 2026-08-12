@@ -180,6 +180,41 @@ internal sealed class ComposerWindow : Window
     private readonly Button applyButton;
     private readonly Button frameButton;
     private readonly Button resetTransformButton;
+    private readonly Button renderSettingsButton;
+
+    // Visible application menu. The old toolbar controls remain as internal
+    // state/action objects so existing selection logic and keyboard shortcuts
+    // do not need to be rewritten.
+    private MenuItem newMenuItem = null!;
+    private MenuItem openMenuItem = null!;
+    private MenuItem insertMenuItem = null!;
+    private MenuItem saveMenuItem = null!;
+    private MenuItem exportMenuItem = null!;
+    private MenuItem undoMenuItem = null!;
+    private MenuItem redoMenuItem = null!;
+    private MenuItem duplicateMenuItem = null!;
+    private MenuItem groupMenuItem = null!;
+    private MenuItem ungroupMenuItem = null!;
+    private MenuItem deleteMenuItem = null!;
+    private MenuItem parametersMenuItem = null!;
+    private MenuItem materialMenuItem = null!;
+    private MenuItem applyTransformMenuItem = null!;
+    private MenuItem frameSelectedMenuItem = null!;
+    private MenuItem resetTransformMenuItem = null!;
+    private MenuItem renderSettingsMenuItem = null!;
+    private MenuItem[] primitiveMenuItems = [];
+    private MenuItem[] rendererMenuItems = [];
+    private MenuItem[] selectionModeMenuItems = [];
+    private MenuItem[] gizmoModeMenuItems = [];
+    private MenuItem[] moveAxisMenuItems = [];
+
+    private readonly Dictionary<ComposerRendererKind, ComposerRenderOptions> renderOptions = new()
+    {
+        [ComposerRendererKind.Raster] = ComposerRenderOptions.DefaultsFor(ComposerRendererKind.Raster),
+        [ComposerRendererKind.VulkanRaster] = ComposerRenderOptions.DefaultsFor(ComposerRendererKind.VulkanRaster),
+        [ComposerRendererKind.VulkanCompute] = ComposerRenderOptions.DefaultsFor(ComposerRendererKind.VulkanCompute),
+        [ComposerRendererKind.Cpu] = ComposerRenderOptions.DefaultsFor(ComposerRendererKind.Cpu)
+    };
     private readonly TextBox nameBox;
     private readonly CheckBox visibleBox;
     private readonly TextBox positionX;
@@ -251,6 +286,7 @@ internal sealed class ComposerWindow : Window
         applyButton = NewButton("Apply transform");
         frameButton = NewButton("Frame selected");
         resetTransformButton = NewButton("Reset transform");
+        renderSettingsButton = NewButton("Settings…");
 
         pathText = new TextBlock
         {
@@ -393,41 +429,8 @@ internal sealed class ComposerWindow : Window
             RowDefinitions = new RowDefinitions("Auto,*,Auto")
         };
 
-        Grid toolbar = new()
-        {
-            ColumnDefinitions = new ColumnDefinitions("Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,*,Auto,Auto,Auto,Auto,Auto"),
-            ColumnSpacing = 8,
-            Margin = new Thickness(10)
-        };
-        toolbar.Children.Add(newButton);
-        Grid.SetColumn(newButton, 0);
-        toolbar.Children.Add(openButton);
-        Grid.SetColumn(openButton, 1);
-        toolbar.Children.Add(insertButton);
-        Grid.SetColumn(insertButton, 2);
-        toolbar.Children.Add(primitiveBox);
-        Grid.SetColumn(primitiveBox, 3);
-        toolbar.Children.Add(addPrimitiveButton);
-        Grid.SetColumn(addPrimitiveButton, 4);
-        toolbar.Children.Add(saveButton);
-        Grid.SetColumn(saveButton, 5);
-        toolbar.Children.Add(undoButton);
-        Grid.SetColumn(undoButton, 6);
-        toolbar.Children.Add(redoButton);
-        Grid.SetColumn(redoButton, 7);
-        toolbar.Children.Add(pathText);
-        Grid.SetColumn(pathText, 8);
-        toolbar.Children.Add(exportButton);
-        Grid.SetColumn(exportButton, 9);
-        toolbar.Children.Add(selectionModeBox);
-        Grid.SetColumn(selectionModeBox, 10);
-        toolbar.Children.Add(gizmoModeBox);
-        Grid.SetColumn(gizmoModeBox, 11);
-        toolbar.Children.Add(moveAxisBox);
-        Grid.SetColumn(moveAxisBox, 12);
-        toolbar.Children.Add(rendererBox);
-        Grid.SetColumn(rendererBox, 13);
-        root.Children.Add(toolbar);
+        Menu menuBar = BuildMenuBar();
+        root.Children.Add(menuBar);
 
         Grid content = new()
         {
@@ -462,12 +465,300 @@ internal sealed class ComposerWindow : Window
             Child = new StackPanel
             {
                 Spacing = 2,
-                Children = { statusText, detailsText }
+                Children = { pathText, statusText, detailsText }
             }
         };
         root.Children.Add(statusBar);
         Grid.SetRow(statusBar, 2);
         return root;
+    }
+
+
+    private Menu BuildMenuBar()
+    {
+        newMenuItem = MenuCommand("_New", async () => await NewSceneAsync());
+        openMenuItem = MenuCommand("_Open…", async () => await BrowseAndOpenAsync());
+        insertMenuItem = MenuCommand("_Insert model…", async () => await BrowseAndInsertAsync());
+        saveMenuItem = MenuCommand("_Save scene…", async () => await SaveSceneAsync());
+        exportMenuItem = MenuCommand("_Export package…", async () => await ExportPackageAsync());
+
+        MenuItem fileMenu = new()
+        {
+            Header = "_File",
+            ItemsSource = new object[]
+            {
+                newMenuItem,
+                openMenuItem,
+                insertMenuItem,
+                new Separator(),
+                saveMenuItem,
+                exportMenuItem
+            }
+        };
+
+        undoMenuItem = MenuCommand("_Undo", async () => await UndoAsync());
+        redoMenuItem = MenuCommand("_Redo", async () => await RedoAsync());
+        duplicateMenuItem = MenuCommand("_Duplicate", async () => await DuplicateSelectedAsync());
+        groupMenuItem = MenuCommand("_Group", async () => await GroupSelectedAsync());
+        ungroupMenuItem = MenuCommand("_Ungroup", async () => await UngroupSelectedAsync());
+        deleteMenuItem = MenuCommand("_Delete", async () => await DeleteSelectedAsync());
+
+        MenuItem editMenu = new()
+        {
+            Header = "_Edit",
+            ItemsSource = new object[]
+            {
+                undoMenuItem,
+                redoMenuItem,
+                new Separator(),
+                duplicateMenuItem,
+                groupMenuItem,
+                ungroupMenuItem,
+                deleteMenuItem
+            }
+        };
+
+        primitiveMenuItems = new MenuItem[primitiveChoices.Length];
+        object[] primitiveEntries = new object[primitiveChoices.Length];
+        for (int i = 0; i < primitiveChoices.Length; i++)
+        {
+            int index = i;
+            MenuItem item = MenuCommand(primitiveChoices[i], async () =>
+            {
+                primitiveBox.SelectedIndex = index;
+                await AddPrimitiveAsync();
+            });
+            primitiveMenuItems[i] = item;
+            primitiveEntries[i] = item;
+        }
+
+        MenuItem addMenu = new()
+        {
+            Header = "_Add",
+            ItemsSource = primitiveEntries
+        };
+
+        parametersMenuItem = MenuCommand("_Parameters…", () =>
+        {
+            OpenPrimitiveParameters();
+            return Task.CompletedTask;
+        });
+        materialMenuItem = MenuCommand("_Material…", () =>
+        {
+            OpenMaterialEditor();
+            return Task.CompletedTask;
+        });
+        applyTransformMenuItem = MenuCommand("_Apply transform", async () => await ApplyInspectorAsync());
+        resetTransformMenuItem = MenuCommand("_Reset transform", async () => await ResetSelectedTransformAsync());
+        frameSelectedMenuItem = MenuCommand("_Frame selected", () =>
+        {
+            FrameSelected();
+            return Task.CompletedTask;
+        });
+
+        MenuItem objectMenu = new()
+        {
+            Header = "_Object",
+            ItemsSource = new object[]
+            {
+                parametersMenuItem,
+                materialMenuItem,
+                new Separator(),
+                applyTransformMenuItem,
+                resetTransformMenuItem,
+                frameSelectedMenuItem
+            }
+        };
+
+        selectionModeMenuItems = new MenuItem[selectionModeChoices.Length];
+        object[] selectionEntries = new object[selectionModeChoices.Length];
+        for (int i = 0; i < selectionModeChoices.Length; i++)
+        {
+            int index = i;
+            MenuItem item = RadioMenuItem(
+                selectionModeChoices[i].Label,
+                "SelectionMode",
+                () => selectionModeBox.SelectedIndex = index);
+            selectionModeMenuItems[i] = item;
+            selectionEntries[i] = item;
+        }
+
+        gizmoModeMenuItems = new MenuItem[gizmoModeChoices.Length];
+        object[] gizmoEntries = new object[gizmoModeChoices.Length];
+        for (int i = 0; i < gizmoModeChoices.Length; i++)
+        {
+            int index = i;
+            MenuItem item = RadioMenuItem(
+                gizmoModeChoices[i].Label,
+                "GizmoMode",
+                () => gizmoModeBox.SelectedIndex = index);
+            gizmoModeMenuItems[i] = item;
+            gizmoEntries[i] = item;
+        }
+
+        moveAxisMenuItems = new MenuItem[moveAxisChoices.Length];
+        object[] axisEntries = new object[moveAxisChoices.Length];
+        for (int i = 0; i < moveAxisChoices.Length; i++)
+        {
+            int index = i;
+            MenuItem item = RadioMenuItem(
+                moveAxisChoices[i].Label,
+                "MoveAxis",
+                () => moveAxisBox.SelectedIndex = index);
+            moveAxisMenuItems[i] = item;
+            axisEntries[i] = item;
+        }
+
+        MenuItem selectionMenu = new()
+        {
+            Header = "_Selection mode",
+            ItemsSource = selectionEntries
+        };
+        MenuItem gizmoMenu = new()
+        {
+            Header = "_Transform gizmo",
+            ItemsSource = gizmoEntries
+        };
+        MenuItem axisMenu = new()
+        {
+            Header = "Move _axis lock",
+            ItemsSource = axisEntries
+        };
+        MenuItem modeMenu = new()
+        {
+            Header = "_Mode",
+            ItemsSource = new object[]
+            {
+                selectionMenu,
+                gizmoMenu,
+                axisMenu
+            }
+        };
+
+        rendererMenuItems = new MenuItem[rendererChoices.Length];
+        object[] rendererEntries = new object[rendererChoices.Length];
+        for (int i = 0; i < rendererChoices.Length; i++)
+        {
+            int index = i;
+            MenuItem item = RadioMenuItem(
+                rendererChoices[i].Label,
+                "Renderer",
+                () => rendererBox.SelectedIndex = index);
+            rendererMenuItems[i] = item;
+            rendererEntries[i] = item;
+        }
+
+        MenuItem rendererMenu = new()
+        {
+            Header = "_Renderer",
+            ItemsSource = rendererEntries
+        };
+        renderSettingsMenuItem = MenuCommand("_Settings…", async () => await OpenRenderSettingsAsync());
+
+        MenuItem renderMenu = new()
+        {
+            Header = "_Render",
+            ItemsSource = new object[]
+            {
+                rendererMenu,
+                new Separator(),
+                renderSettingsMenuItem
+            }
+        };
+
+        Menu menu = new()
+        {
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            ItemsSource = new object[]
+            {
+                fileMenu,
+                editMenu,
+                addMenu,
+                objectMenu,
+                modeMenu,
+                renderMenu
+            }
+        };
+
+        SyncMenuChecks();
+        SyncMenuEnabledState();
+        return menu;
+    }
+
+    private static MenuItem MenuCommand(string header, Func<Task> action)
+    {
+        MenuItem item = new() { Header = header };
+        item.Click += async (_, _) => await action();
+        return item;
+    }
+
+    private static MenuItem RadioMenuItem(string header, string groupName, Action action)
+    {
+        MenuItem item = new()
+        {
+            Header = header,
+            ToggleType = MenuItemToggleType.Radio,
+            GroupName = groupName
+        };
+        item.Click += (_, _) => action();
+        return item;
+    }
+
+    private void SyncMenuChecks()
+    {
+        for (int i = 0; i < rendererMenuItems.Length; i++)
+            rendererMenuItems[i].IsChecked = rendererBox.SelectedIndex == i;
+
+        for (int i = 0; i < selectionModeMenuItems.Length; i++)
+            selectionModeMenuItems[i].IsChecked = selectionModeBox.SelectedIndex == i;
+
+        for (int i = 0; i < gizmoModeMenuItems.Length; i++)
+            gizmoModeMenuItems[i].IsChecked = gizmoModeBox.SelectedIndex == i;
+
+        for (int i = 0; i < moveAxisMenuItems.Length; i++)
+            moveAxisMenuItems[i].IsChecked = moveAxisBox.SelectedIndex == i;
+    }
+
+    private void SyncMenuEnabledState()
+    {
+        // Guard construction-time calls before BuildMenuBar has populated fields.
+        if (newMenuItem is null)
+            return;
+
+        newMenuItem.IsEnabled = newButton.IsEnabled;
+        openMenuItem.IsEnabled = openButton.IsEnabled;
+        insertMenuItem.IsEnabled = insertButton.IsEnabled;
+        saveMenuItem.IsEnabled = saveButton.IsEnabled;
+        exportMenuItem.IsEnabled = exportButton.IsEnabled;
+        undoMenuItem.IsEnabled = undoButton.IsEnabled;
+        redoMenuItem.IsEnabled = redoButton.IsEnabled;
+
+        duplicateMenuItem.IsEnabled = duplicateButton.IsEnabled;
+        groupMenuItem.IsEnabled = groupButton.IsEnabled;
+        ungroupMenuItem.IsEnabled = ungroupButton.IsEnabled;
+        deleteMenuItem.IsEnabled = deleteButton.IsEnabled;
+
+        parametersMenuItem.IsEnabled = parametersButton.IsEnabled;
+        materialMenuItem.IsEnabled = materialButton.IsEnabled;
+        applyTransformMenuItem.IsEnabled = applyButton.IsEnabled;
+        frameSelectedMenuItem.IsEnabled = frameButton.IsEnabled;
+        resetTransformMenuItem.IsEnabled = resetTransformButton.IsEnabled;
+
+        foreach (MenuItem item in primitiveMenuItems)
+            item.IsEnabled = addPrimitiveButton.IsEnabled;
+
+        foreach (MenuItem item in rendererMenuItems)
+            item.IsEnabled = rendererBox.IsEnabled;
+
+        bool objectMode = SelectedSelectionMode == ComposerSelectionMode.Object;
+        foreach (MenuItem item in selectionModeMenuItems)
+            item.IsEnabled = selectionModeBox.IsEnabled;
+        foreach (MenuItem item in gizmoModeMenuItems)
+            item.IsEnabled = gizmoModeBox.IsEnabled && objectMode;
+        foreach (MenuItem item in moveAxisMenuItems)
+            item.IsEnabled = moveAxisBox.IsEnabled && !objectMode;
+
+        renderSettingsMenuItem.IsEnabled = renderSettingsButton.IsEnabled;
     }
 
     private Control BuildScenePanel()
@@ -537,7 +828,7 @@ internal sealed class ComposerWindow : Window
         stack.Children.Add(resetTransformButton);
         stack.Children.Add(new TextBlock
         {
-            Text = "Hierarchy: ▸/▾ expands groups and … show faces reveals logical polygon faces (a Cube has six). Ctrl-click objects to multi-select; Group/Ctrl+G wraps sibling objects and Ctrl+Shift+G ungroups. Standard primitives: Plane, Cube, Circle, UV Sphere, Icosphere, Cylinder, Cone, Torus, and Grid. Use Parameters… for real dimensions in meters and Material… for PBR/color/textures. Face mode (3): right-click a polygon for Extrude or Inset; Extrude uses signed distance (+ outward, - inward), while inset depth uses + inward / - outward and offers Square or Sloped (Blender-style) depth profiles. Object/Vertex/Edge/Face modes use 4/1/2/3. Gizmos: G move, R rotate, S scale; Shift is precision and Ctrl snaps. Viewport: right drag orbits, middle drag pans, and mouse wheel zooms. On Windows Precision Touchpads, two-finger translation orbits, pinch/spread zooms, and two-finger twist rolls the scene around the view center.",
+            Text = "Hierarchy: ▸/▾ expands groups and … show faces reveals logical polygon faces (a Cube has six). Ctrl-click objects to multi-select; Group/Ctrl+G wraps sibling objects and Ctrl+Shift+G ungroups. Standard primitives: Plane, Cube, Circle, UV Sphere, Icosphere, Cylinder, Cone, Torus, and Grid. Use Parameters… for real dimensions in meters and Material… for PBR/color/textures. Face mode (3): right-click a polygon for Extrude or Inset; Extrude uses signed distance (+ outward, - inward), while inset depth uses + inward / - outward and offers Square or Sloped (Blender-style) depth profiles. Object/Vertex/Edge/Face modes use 4/1/2/3. Gizmos: G move, R rotate, S scale; Shift is precision and Ctrl snaps. Viewport: right drag orbits, middle drag pans, and mouse wheel zooms. On Windows Precision Touchpads, two-finger translation orbits, pinch/spread zooms, and two-finger twist turns the scene around its center. Use Render > Settings… for renderer-specific controls. Unsupported settings stay visible but disabled. Vulkan compute supports resolution, samples, bounces, field of view, exposure, ambient strength, shadows, and background colors; CPU supports resolution, samples, bounces, field of view, and exposure.",
             TextWrapping = TextWrapping.Wrap,
             Opacity = 0.68,
             FontSize = 12,
@@ -570,14 +861,19 @@ internal sealed class ComposerWindow : Window
         applyButton.Click += async (_, _) => await ApplyInspectorAsync();
         frameButton.Click += (_, _) => FrameSelected();
         resetTransformButton.Click += async (_, _) => await ResetSelectedTransformAsync();
+        renderSettingsButton.Click += async (_, _) => await OpenRenderSettingsAsync();
 
         rendererBox.SelectionChanged += (_, _) =>
         {
-            detailsText.Text = SelectedRenderer.Description;
+            SyncMenuChecks();
+            SyncMenuEnabledState();
+            ComposerRendererKind kind = SelectedRenderer.Kind;
+            detailsText.Text = $"{SelectedRenderer.Description} {renderOptions[kind].Describe(kind)}";
             _ = RequestRenderAsync(interactive: false);
         };
         selectionModeBox.SelectionChanged += (_, _) =>
         {
+            SyncMenuChecks();
             ComposerSelectionMode mode = SelectedSelectionMode;
             if (mode != ComposerSelectionMode.Object)
             {
@@ -603,6 +899,7 @@ internal sealed class ComposerWindow : Window
             gizmoModeBox.IsEnabled = mode == ComposerSelectionMode.Object;
             moveAxisBox.IsEnabled = mode != ComposerSelectionMode.Object;
             session.SetMeshMoveAxisLock(SelectedMoveAxisLock);
+            SyncMenuEnabledState();
             statusText.Text = mode == ComposerSelectionMode.Object
                 ? "Object selection mode."
                 : $"{mode} mode: move near a component to preview it, click to select, then drag an axis. X/Y/Z lock movement.";
@@ -610,11 +907,13 @@ internal sealed class ComposerWindow : Window
         };
         gizmoModeBox.SelectionChanged += (_, _) =>
         {
+            SyncMenuChecks();
             statusText.Text = $"{SelectedGizmoMode} gizmo selected.";
             _ = RequestRenderAsync(interactive: false);
         };
         moveAxisBox.SelectionChanged += (_, _) =>
         {
+            SyncMenuChecks();
             session.SetMeshMoveAxisLock(SelectedMoveAxisLock);
             if (SelectedSelectionMode != ComposerSelectionMode.Object)
             {
@@ -668,6 +967,36 @@ internal sealed class ComposerWindow : Window
         (selectionModeBox.SelectedItem as SelectionModeChoice)?.Mode ?? ComposerSelectionMode.Object;
     private ComposerGizmoAxis SelectedMoveAxisLock =>
         (moveAxisBox.SelectedItem as MoveAxisChoice)?.Axis ?? ComposerGizmoAxis.None;
+
+
+private async Task OpenRenderSettingsAsync()
+{
+    RendererChoice renderer = SelectedRenderer;
+    ComposerRendererKind kind = renderer.Kind;
+    RenderSettingsDialog dialog = new(kind, renderer.Label, renderOptions[kind]);
+    renderSettingsButton.IsEnabled = false;
+    renderSettingsMenuItem.IsEnabled = false;
+    try
+    {
+        ComposerRenderOptions? updated = await dialog.ShowForResultAsync(this);
+        if (updated == null)
+            return;
+
+        renderOptions[kind] = updated;
+        detailsText.Text = $"{renderer.Label} settings: {updated.Describe(kind)}";
+
+        if (SelectedRenderer.Kind == kind && session.HasRenderableScene)
+        {
+            CancelCurrentRender();
+            await RequestRenderAsync(interactive: false);
+        }
+    }
+    finally
+    {
+        renderSettingsButton.IsEnabled = true;
+        renderSettingsMenuItem.IsEnabled = true;
+    }
+}
 
     private async Task NewSceneAsync()
     {
@@ -1616,6 +1945,7 @@ internal sealed class ComposerWindow : Window
             : selectedObjectId is int id ? new[] { id } : Array.Empty<int>();
         ungroupButton.IsEnabled = enabled && session.CanUngroupObjects(ungroupTargets);
         deleteButton.IsEnabled = enabled;
+        SyncMenuEnabledState();
     }
 
     private void OnViewportPointerPressed(object? sender, PointerPressedEventArgs e)
@@ -2875,8 +3205,12 @@ internal sealed class ComposerWindow : Window
         RendererChoice renderer = SelectedRenderer;
         ComposerGizmoMode gizmoMode = SelectedGizmoMode;
         bool objectGizmoOnly = gizmoDrag is { MeshComponent: false };
-        (int width, int height) = ChooseRenderSize(renderer.Kind, interactive);
+        ComposerRenderOptions options = renderOptions[renderer.Kind];
+        (int width, int height) = ChooseRenderSize(renderer.Kind, interactive, options);
         CameraDefinition camera = session.Camera.Snapshot();
+        if (ComposerRenderOptions.SupportsFieldOfView(renderer.Kind))
+            camera.FieldOfViewDegrees = options.FieldOfViewDegrees;
+
         RenderOptions.SetBitmapInterpolationMode(
             image,
             interactive ? BitmapInterpolationMode.LowQuality : BitmapInterpolationMode.HighQuality);
@@ -2895,7 +3229,8 @@ internal sealed class ComposerWindow : Window
                     interactive,
                     token,
                     gizmoMode,
-                    objectGizmoOnly),
+                    objectGizmoOnly,
+                    options),
                 token);
 
             if (token.IsCancellationRequested || (!interactive && requestVersion != renderVersion))
@@ -2925,35 +3260,30 @@ internal sealed class ComposerWindow : Window
         }
     }
 
-    private (int Width, int Height) ChooseRenderSize(ComposerRendererKind renderer, bool interactive)
-    {
-        double renderScaling = Math.Clamp(RenderScaling, 1.0, 4.0);
-        double viewWidth = Math.Max(320.0, viewport.Bounds.Width * renderScaling);
-        double viewHeight = Math.Max(180.0, viewport.Bounds.Height * renderScaling);
 
-        int maxWidth = renderer switch
-        {
-            ComposerRendererKind.Cpu => 640,
-            ComposerRendererKind.VulkanCompute when interactive => 640,
-            ComposerRendererKind.VulkanCompute => 960,
-            _ when interactive => 960,
-            _ => 1280
-        };
-        int maxHeight = renderer switch
-        {
-            ComposerRendererKind.Cpu => 360,
-            ComposerRendererKind.VulkanCompute when interactive => 360,
-            ComposerRendererKind.VulkanCompute => 540,
-            _ when interactive => 540,
-            _ => 720
-        };
+private static (int Width, int Height) ChooseRenderSize(
+    ComposerRendererKind renderer,
+    bool interactive,
+    ComposerRenderOptions options)
+{
+    options.Validate();
 
-        double scale = Math.Min(maxWidth / viewWidth, maxHeight / viewHeight);
-        scale = Math.Min(1.0, scale);
-        int width = AlignToEight(Math.Max(160, (int)Math.Round(viewWidth * scale)));
-        int height = AlignToEight(Math.Max(96, (int)Math.Round(viewHeight * scale)));
-        return (width, height);
-    }
+    if (!interactive || renderer == ComposerRendererKind.Cpu)
+        return (AlignToEight(Math.Max(8, options.Width)), AlignToEight(Math.Max(8, options.Height)));
+
+    int maxWidth = renderer == ComposerRendererKind.VulkanCompute ? 640 : 960;
+    int maxHeight = renderer == ComposerRendererKind.VulkanCompute ? 360 : 540;
+
+    double scale = Math.Min(
+        1.0,
+        Math.Min(
+            maxWidth / (double)Math.Max(1, options.Width),
+            maxHeight / (double)Math.Max(1, options.Height)));
+
+    int width = AlignToEight(Math.Max(160, (int)Math.Round(options.Width * scale)));
+    int height = AlignToEight(Math.Max(96, (int)Math.Round(options.Height * scale)));
+    return (width, height);
+}
 
     private unsafe void ShowImage(RenderImage rendered)
     {
@@ -3051,6 +3381,14 @@ internal sealed class ComposerWindow : Window
         redoButton.Content = session.RedoDescription is string redoDescription
             ? $"Redo {redoDescription}"
             : "Redo";
+
+        if (undoMenuItem is not null)
+        {
+            undoMenuItem.IsEnabled = undoButton.IsEnabled;
+            redoMenuItem.IsEnabled = redoButton.IsEnabled;
+            undoMenuItem.Header = undoButton.Content?.ToString() ?? "Undo";
+            redoMenuItem.Header = redoButton.Content?.ToString() ?? "Redo";
+        }
     }
 
     private void CancelCurrentRender()
@@ -3069,6 +3407,7 @@ internal sealed class ComposerWindow : Window
         saveButton.IsEnabled = !busy;
         exportButton.IsEnabled = !busy;
         rendererBox.IsEnabled = !busy;
+        renderSettingsButton.IsEnabled = !busy;
         selectionModeBox.IsEnabled = !busy;
         gizmoModeBox.IsEnabled = !busy && SelectedSelectionMode == ComposerSelectionMode.Object;
         moveAxisBox.IsEnabled = !busy && SelectedSelectionMode != ComposerSelectionMode.Object;
@@ -3088,6 +3427,7 @@ internal sealed class ComposerWindow : Window
         }
         if (!string.IsNullOrWhiteSpace(message))
             statusText.Text = message;
+        SyncMenuEnabledState();
     }
 
     private void ReportOperationFailure(string operation, Exception exception)

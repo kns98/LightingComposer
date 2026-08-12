@@ -13,38 +13,62 @@ internal static class CpuComposerRenderer
         CameraDefinition camera,
         int width,
         int height,
+        ComposerRenderOptions options,
         CancellationToken cancellationToken,
         out string details)
     {
+        ArgumentNullException.ThrowIfNull(scene);
+        ArgumentNullException.ThrowIfNull(camera);
+        ArgumentNullException.ThrowIfNull(options);
+        options.Validate();
+
         RayTracer tracer = new(scene, new LightingState());
         CameraBasis basis = camera.ToBasis();
         uint[] pixels = new uint[checked(width * height)];
-        ParallelOptions options = new() { CancellationToken = cancellationToken };
+        int sampleCount = options.Samples;
+        double sampleWeight = 1.0 / sampleCount;
+        ParallelOptions parallelOptions = new() { CancellationToken = cancellationToken };
 
-        Parallel.For(0, height, options, y =>
+        Parallel.For(0, height, parallelOptions, y =>
         {
             for (int x = 0; x < width; x++)
             {
-                cancellationToken.ThrowIfCancellationRequested();
-                Vec3 direction = RayTracer.RayDirection(
-                    x + 0.5,
-                    y + 0.5,
-                    width,
-                    height,
-                    basis,
-                    camera.FieldOfViewDegrees);
-                Vec3 linear = tracer.TracePath(new Ray(camera.Position, direction), 1, x, y, 0);
-                pixels[y * width + x] = PackDisplayColor(linear);
+                Vec3 accumulated = Vec3.Zero;
+                for (int sampleIndex = 0; sampleIndex < sampleCount; sampleIndex++)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+
+                    double jitterX = sampleCount == 1 ? 0.5 : Jitter01(x, y, sampleIndex, 0);
+                    double jitterY = sampleCount == 1 ? 0.5 : Jitter01(x, y, sampleIndex, 1);
+                    Vec3 direction = RayTracer.RayDirection(
+                        x + jitterX,
+                        y + jitterY,
+                        width,
+                        height,
+                        basis,
+                        options.FieldOfViewDegrees);
+
+                    Ray ray = new(camera.Position, direction);
+                    Vec3 sample = options.Bounces <= 0
+                        ? tracer.Trace(ray, RenderMode.Lit)
+                        : tracer.TracePath(ray, options.Bounces, x, y, sampleIndex);
+                    accumulated += sample;
+                }
+
+                Vec3 linear = accumulated * sampleWeight;
+                Vec3 display = RayTracer.ToDisplayColor(linear, options.Exposure);
+                pixels[y * width + x] = PackDisplayColor(display);
             }
         });
 
-        details = $"CPU preview - {width}x{height}, samples=1, bounces=1";
+        details =
+            $"CPU ray/path tracer - {width}x{height}, samples={options.Samples}, " +
+            $"bounces={options.Bounces}, fov={options.FieldOfViewDegrees:0.##}°, exposure={options.Exposure:0.###}";
         return new RenderImage(width, height, pixels);
     }
 
-    private static uint PackDisplayColor(Vec3 linear)
+    private static uint PackDisplayColor(Vec3 display)
     {
-        Vec3 display = RayTracer.ToDisplayColor(linear);
         byte red = ToByte(display.X);
         byte green = ToByte(display.Y);
         byte blue = ToByte(display.Z);
@@ -55,5 +79,21 @@ internal static class CpuComposerRenderer
     {
         if (!double.IsFinite(value)) return 0;
         return (byte)Math.Clamp((int)Math.Round(Math.Clamp(value, 0.0, 1.0) * 255.0), 0, 255);
+    }
+
+    private static double Jitter01(int x, int y, int sampleIndex, int axis)
+    {
+        unchecked
+        {
+            uint hash = 2166136261u;
+            hash = (hash ^ (uint)x) * 16777619u;
+            hash = (hash ^ (uint)y) * 16777619u;
+            hash = (hash ^ (uint)sampleIndex) * 16777619u;
+            hash = (hash ^ (uint)(axis * 374761393)) * 16777619u;
+            hash ^= hash >> 13;
+            hash *= 1274126177u;
+            hash ^= hash >> 16;
+            return (hash & 0x00ffffffu) / 16777216.0;
+        }
     }
 }
