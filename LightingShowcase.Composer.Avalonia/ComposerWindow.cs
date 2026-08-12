@@ -4,14 +4,9 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
-using Avalonia.Media.Imaging;
-using Avalonia.Platform;
-using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using LightingShowcase.CameraSystem;
-using LightingShowcase.Composer.Navigation.Windows;
 using LightingShowcase.Math3D;
-using LightingShowcase.Rendering;
 using LightingShowcase.SceneGraph;
 
 namespace LightingShowcase.Composer;
@@ -38,66 +33,6 @@ internal sealed class ComposerWindow : Window
         public override string ToString() => Label;
     }
 
-    private enum ViewportDragMode
-    {
-        None,
-        Orbit,
-        Pan
-    }
-
-    private sealed class GizmoDragState
-    {
-        public GizmoDragState(
-            int selectedId,
-            ComposerGizmoMode mode,
-            ComposerGizmoAxis axis,
-            Point startImagePoint,
-            Vec3 startPosition,
-            Vec3 startRotation,
-            Vec3 startScale,
-            ComposerGizmoHit hit,
-            bool meshComponent = false)
-        {
-            SelectedId = selectedId;
-            Mode = mode;
-            Axis = axis;
-            StartImagePoint = startImagePoint;
-            StartPosition = startPosition;
-            StartRotation = startRotation;
-            StartScale = startScale;
-            ScreenDirectionX = hit.ScreenDirectionX;
-            ScreenDirectionY = hit.ScreenDirectionY;
-            WorldUnitsPerPixel = hit.WorldUnitsPerPixel;
-            CenterX = hit.CenterX;
-            CenterY = hit.CenterY;
-            GestureSign = hit.GestureSign;
-            WorldCenter = hit.WorldCenter;
-            LastRotationVector = hit.RotationStartVector;
-            LastPointerAngle = PointerAngle(startImagePoint.X, startImagePoint.Y, CenterX, CenterY);
-            LastImagePoint = startImagePoint;
-            MeshComponent = meshComponent;
-        }
-
-        public int SelectedId { get; }
-        public bool MeshComponent { get; }
-        public ComposerGizmoMode Mode { get; }
-        public ComposerGizmoAxis Axis { get; }
-        public Point StartImagePoint { get; }
-        public Vec3 StartPosition { get; }
-        public Vec3 StartRotation { get; }
-        public Vec3 StartScale { get; }
-        public double ScreenDirectionX { get; }
-        public double ScreenDirectionY { get; }
-        public double WorldUnitsPerPixel { get; }
-        public double CenterX { get; }
-        public double CenterY { get; }
-        public double GestureSign { get; }
-        public Vec3 WorldCenter { get; }
-        public Vec3 LastRotationVector { get; set; }
-        public Point LastImagePoint { get; set; }
-        public double LastPointerAngle { get; set; }
-        public double AccumulatedGesture { get; set; }
-    }
 
     private readonly RendererChoice[] rendererChoices =
     [
@@ -145,7 +80,15 @@ internal sealed class ComposerWindow : Window
 
     private readonly ComposerSceneSession session = new();
     private readonly CancellationTokenSource lifetimeCancellation = new();
-    private readonly Dictionary<ComposerRendererKind, double> lastFrameTimes = new();
+    private readonly ComposerRenderController renderController;
+    private readonly ComposerDialogController dialogController;
+    private readonly ComposerFileController fileController;
+    private readonly ComposerSceneCommandController sceneCommandController;
+    private readonly ViewportNavigationController navigationController;
+    private readonly ComposerMenuController menuController;
+    private readonly ComposerSelectionController selectionController;
+    private readonly ComposerTransformController transformController;
+    private readonly ComposerCommandCoordinator commandCoordinator;
 
     private readonly TextBlock pathText;
     private readonly TextBlock statusText;
@@ -157,10 +100,6 @@ internal sealed class ComposerWindow : Window
     private readonly ComboBox primitiveBox;
     private readonly ScrollViewer objectTree;
     private readonly StackPanel objectTreePanel;
-    private readonly HashSet<int> expandedObjectIds = new();
-    private readonly Dictionary<int, int> trianglePageOffsets = new();
-    private const int TrianglePageSize = 200;
-    private bool treeExpansionInitialized;
     private readonly Border viewport;
     private readonly Image image;
     private readonly Button newButton;
@@ -182,39 +121,7 @@ internal sealed class ComposerWindow : Window
     private readonly Button resetTransformButton;
     private readonly Button renderSettingsButton;
 
-    // Visible application menu. The old toolbar controls remain as internal
-    // state/action objects so existing selection logic and keyboard shortcuts
-    // do not need to be rewritten.
-    private MenuItem newMenuItem = null!;
-    private MenuItem openMenuItem = null!;
-    private MenuItem insertMenuItem = null!;
-    private MenuItem saveMenuItem = null!;
-    private MenuItem exportMenuItem = null!;
-    private MenuItem undoMenuItem = null!;
-    private MenuItem redoMenuItem = null!;
-    private MenuItem duplicateMenuItem = null!;
-    private MenuItem groupMenuItem = null!;
-    private MenuItem ungroupMenuItem = null!;
-    private MenuItem deleteMenuItem = null!;
-    private MenuItem parametersMenuItem = null!;
-    private MenuItem materialMenuItem = null!;
-    private MenuItem applyTransformMenuItem = null!;
-    private MenuItem frameSelectedMenuItem = null!;
-    private MenuItem resetTransformMenuItem = null!;
-    private MenuItem renderSettingsMenuItem = null!;
-    private MenuItem[] primitiveMenuItems = [];
-    private MenuItem[] rendererMenuItems = [];
-    private MenuItem[] selectionModeMenuItems = [];
-    private MenuItem[] gizmoModeMenuItems = [];
-    private MenuItem[] moveAxisMenuItems = [];
 
-    private readonly Dictionary<ComposerRendererKind, ComposerRenderOptions> renderOptions = new()
-    {
-        [ComposerRendererKind.Raster] = ComposerRenderOptions.DefaultsFor(ComposerRendererKind.Raster),
-        [ComposerRendererKind.VulkanRaster] = ComposerRenderOptions.DefaultsFor(ComposerRendererKind.VulkanRaster),
-        [ComposerRendererKind.VulkanCompute] = ComposerRenderOptions.DefaultsFor(ComposerRendererKind.VulkanCompute),
-        [ComposerRendererKind.Cpu] = ComposerRenderOptions.DefaultsFor(ComposerRendererKind.Cpu)
-    };
     private readonly TextBox nameBox;
     private readonly CheckBox visibleBox;
     private readonly TextBox positionX;
@@ -227,38 +134,9 @@ internal sealed class ComposerWindow : Window
     private readonly TextBox scaleY;
     private readonly TextBox scaleZ;
 
-    private WriteableBitmap? bitmap;
-    private int? selectedObjectId;
-    private readonly HashSet<int> selectedObjectIds = new();
-    private int? selectedTriangleGroupId;
-    private int? selectedTriangleIndex;
-    private ViewportDragMode viewportDragMode;
     private bool leftPressed;
-    private bool rightPressed;
-    private Point rightPressPoint;
-    private GizmoDragState? gizmoDrag;
-    private Point previousPointer;
     private Point leftPressPoint;
-    private bool rendering;
-    private bool renderAgain;
-    private bool pendingInteractive;
-    private long renderVersion;
-    private int lastRenderWidth = 1;
-    private int lastRenderHeight = 1;
-    private CancellationTokenSource? activeRenderCancellation;
-    private CancellationTokenSource? resizeDebounceCancellation;
     private readonly DispatcherTimer hoverPulseTimer;
-    private readonly DispatcherTimer windowsTrackpadFrameTimer;
-    private readonly DispatcherTimer windowsTrackpadIdleRenderTimer;
-    private WindowsPrecisionTouchpadGestureSource? windowsTrackpadInput;
-    private Win32Properties.CustomWndProcHookCallback? windowsTrackpadWndProcHook;
-    private bool windowsTrackpadGestureCapturedByViewport;
-    private double pendingWindowsTrackpadOrbitX;
-    private double pendingWindowsTrackpadOrbitY;
-    private double pendingWindowsTrackpadZoom;
-    private double pendingWindowsTrackpadTurn;
-    private PrimitiveParametersWindow? primitiveParametersWindow;
-    private MaterialEditorWindow? materialEditorWindow;
     private long lastHoverProbeTimestamp;
 
     public ComposerWindow(string[] startupArguments)
@@ -374,22 +252,7 @@ internal sealed class ComposerWindow : Window
             ClipToBounds = true
         };
 
-        windowsTrackpadFrameTimer = new DispatcherTimer
-        {
-            Interval = TimeSpan.FromMilliseconds(16)
-        };
-        windowsTrackpadFrameTimer.Tick += (_, _) => ApplyPendingWindowsTrackpadNavigation();
 
-        windowsTrackpadIdleRenderTimer = new DispatcherTimer
-        {
-            Interval = TimeSpan.FromMilliseconds(140)
-        };
-        windowsTrackpadIdleRenderTimer.Tick += (_, _) =>
-        {
-            windowsTrackpadIdleRenderTimer.Stop();
-            if (session.HasRenderableScene && !lifetimeCancellation.IsCancellationRequested)
-                _ = RequestRenderAsync(interactive: false);
-        };
 
         hoverPulseTimer = new DispatcherTimer
         {
@@ -403,443 +266,110 @@ internal sealed class ComposerWindow : Window
                 return;
             }
             if (session.ToggleMeshHoverPulse())
-                _ = RequestRenderAsync(interactive: true);
+                _ = renderController.RequestRenderAsync(interactive: true);
         };
         hoverPulseTimer.Start();
 
-        Content = BuildLayout();
+        renderController = new ComposerRenderController(
+            session,
+            image,
+            statusText,
+            detailsText,
+            () => SelectedRenderer.Kind,
+            () => SelectedRenderer.Label,
+            () => SelectedGizmoMode,
+            lifetimeCancellation.Token);
+
+        dialogController = new ComposerDialogController(this, session);
+        fileController = new ComposerFileController(this, session, lifetimeCancellation.Token);
+        sceneCommandController = new ComposerSceneCommandController(session, lifetimeCancellation.Token);
+
+        navigationController = new ViewportNavigationController(
+            this,
+            viewport,
+            session,
+            renderController,
+            statusText,
+            () => SelectedRenderer.Kind,
+            () => SelectedRenderer.Label,
+            requestRender => ClearMeshHoverOverlay(requestRender),
+            ShowFaceContextMenuAsync,
+            lifetimeCancellation.Token);
+
+        menuController = new ComposerMenuController(
+            rendererBox, selectionModeBox, gizmoModeBox, moveAxisBox,
+            newButton, openButton, insertButton, addPrimitiveButton, saveButton, exportButton,
+            undoButton, redoButton, duplicateButton, groupButton, ungroupButton, deleteButton,
+            parametersButton, materialButton, applyButton, frameButton, resetTransformButton, renderSettingsButton,
+            primitiveChoices,
+            rendererChoices.Select(choice => choice.Label).ToArray(),
+            selectionModeChoices.Select(choice => choice.Label).ToArray(),
+            gizmoModeChoices.Select(choice => choice.Label).ToArray(),
+            moveAxisChoices.Select(choice => choice.Label).ToArray(),
+            () => SelectedSelectionMode == ComposerSelectionMode.Object,
+            NewSceneAsync, BrowseAndOpenAsync, BrowseAndInsertAsync, SaveSceneAsync, ExportPackageAsync,
+            UndoAsync, RedoAsync, DuplicateSelectedAsync, GroupSelectedAsync, UngroupSelectedAsync, DeleteSelectedAsync,
+            () => { OpenPrimitiveParameters(); return Task.CompletedTask; },
+            () => { OpenMaterialEditor(); return Task.CompletedTask; },
+            ApplyInspectorAsync, ResetSelectedTransformAsync,
+            () => { FrameSelected(); return Task.CompletedTask; },
+            async index => { primitiveBox.SelectedIndex = index; await AddPrimitiveAsync(); },
+            index => rendererBox.SelectedIndex = index,
+            index => selectionModeBox.SelectedIndex = index,
+            index => gizmoModeBox.SelectedIndex = index,
+            index => moveAxisBox.SelectedIndex = index,
+            OpenRenderSettingsAsync);
+
+        selectionController = new ComposerSelectionController(
+            session, renderController, dialogController, menuController,
+            objectTreePanel, selectionModeBox, statusText,
+            nameBox, visibleBox,
+            positionX, positionY, positionZ,
+            rotationX, rotationY, rotationZ,
+            scaleX, scaleY, scaleZ,
+            parametersButton, materialButton, applyButton, frameButton, resetTransformButton,
+            duplicateButton, groupButton, ungroupButton, deleteButton,
+            () => SelectedSelectionMode,
+            SelectSelectionMode,
+            UpdateHistoryButtons);
+
+        transformController = new ComposerTransformController(
+            session, renderController, selectionController, dialogController, viewport, pathText, statusText,
+            nameBox, visibleBox,
+            positionX, positionY, positionZ, rotationX, rotationY, rotationZ, scaleX, scaleY, scaleZ,
+            () => SelectedSelectionMode, () => SelectedGizmoMode, () => SelectedMoveAxisLock,
+            () => SelectedRenderer.Kind, () => SelectedRenderer.Label,
+            SetBusy, UpdateHistoryButtons, ReportOperationFailure, lifetimeCancellation.Token);
+        renderController.ObjectGizmoOnlyProvider = () => transformController.ObjectGizmoOnly;
+
+        commandCoordinator = new ComposerCommandCoordinator(
+            session, fileController, sceneCommandController, renderController, dialogController, selectionController,
+            pathText, statusText, detailsText, selectionModeBox, primitiveBox, primitiveChoices,
+            () => SelectedRenderer.Description,
+            SetBusy, UpdateHistoryButtons, transformController.ClearTransformTextBoxes, OpenPrimitiveParameters,
+            ReportOperationFailure, lifetimeCancellation.Token);
+
+        Content = ComposerWindowLayout.Build(new ComposerWindowLayout.Controls(
+            menuController.Menu, viewport, objectTree,
+            duplicateButton, groupButton, ungroupButton, deleteButton,
+            nameBox, visibleBox, parametersButton, materialButton,
+            positionX, positionY, positionZ,
+            rotationX, rotationY, rotationZ,
+            scaleX, scaleY, scaleZ,
+            applyButton, frameButton, resetTransformButton,
+            pathText, statusText, detailsText));
         WireEvents();
-        RefreshObjectTree();
-        SetInspectorEnabled(false);
+        selectionController.RefreshObjectTree();
+        selectionController.SetInspectorEnabled(false);
 
         Opened += async (_, _) =>
         {
-            AttachWindowsTrackpadInput();
+            navigationController.AttachWindowsTrackpadInput();
             string? startupPath = startupArguments.FirstOrDefault(argument => !argument.StartsWith("--", StringComparison.Ordinal));
             if (!string.IsNullOrWhiteSpace(startupPath))
                 await LoadSceneAsync(startupPath);
         };
         Closed += (_, _) => DisposeWindowResources();
-    }
-
-    private Control BuildLayout()
-    {
-        Grid root = new()
-        {
-            RowDefinitions = new RowDefinitions("Auto,*,Auto")
-        };
-
-        Menu menuBar = BuildMenuBar();
-        root.Children.Add(menuBar);
-
-        Grid content = new()
-        {
-            ColumnDefinitions = new ColumnDefinitions("280,5,*,5,310"),
-            Margin = new Thickness(10, 0, 10, 8)
-        };
-        Control scenePanel = BuildScenePanel();
-        content.Children.Add(scenePanel);
-        Grid.SetColumn(scenePanel, 0);
-
-        GridSplitter leftSplitter = new() { Width = 5, ResizeDirection = GridResizeDirection.Columns };
-        content.Children.Add(leftSplitter);
-        Grid.SetColumn(leftSplitter, 1);
-
-        content.Children.Add(viewport);
-        Grid.SetColumn(viewport, 2);
-
-        GridSplitter rightSplitter = new() { Width = 5, ResizeDirection = GridResizeDirection.Columns };
-        content.Children.Add(rightSplitter);
-        Grid.SetColumn(rightSplitter, 3);
-
-        Control inspector = BuildInspectorPanel();
-        content.Children.Add(inspector);
-        Grid.SetColumn(inspector, 4);
-
-        root.Children.Add(content);
-        Grid.SetRow(content, 1);
-
-        Border statusBar = new()
-        {
-            Padding = new Thickness(10, 6),
-            Child = new StackPanel
-            {
-                Spacing = 2,
-                Children = { pathText, statusText, detailsText }
-            }
-        };
-        root.Children.Add(statusBar);
-        Grid.SetRow(statusBar, 2);
-        return root;
-    }
-
-
-    private Menu BuildMenuBar()
-    {
-        newMenuItem = MenuCommand("_New", async () => await NewSceneAsync());
-        openMenuItem = MenuCommand("_Open…", async () => await BrowseAndOpenAsync());
-        insertMenuItem = MenuCommand("_Insert model…", async () => await BrowseAndInsertAsync());
-        saveMenuItem = MenuCommand("_Save scene…", async () => await SaveSceneAsync());
-        exportMenuItem = MenuCommand("_Export package…", async () => await ExportPackageAsync());
-
-        MenuItem fileMenu = new()
-        {
-            Header = "_File",
-            ItemsSource = new object[]
-            {
-                newMenuItem,
-                openMenuItem,
-                insertMenuItem,
-                new Separator(),
-                saveMenuItem,
-                exportMenuItem
-            }
-        };
-
-        undoMenuItem = MenuCommand("_Undo", async () => await UndoAsync());
-        redoMenuItem = MenuCommand("_Redo", async () => await RedoAsync());
-        duplicateMenuItem = MenuCommand("_Duplicate", async () => await DuplicateSelectedAsync());
-        groupMenuItem = MenuCommand("_Group", async () => await GroupSelectedAsync());
-        ungroupMenuItem = MenuCommand("_Ungroup", async () => await UngroupSelectedAsync());
-        deleteMenuItem = MenuCommand("_Delete", async () => await DeleteSelectedAsync());
-
-        MenuItem editMenu = new()
-        {
-            Header = "_Edit",
-            ItemsSource = new object[]
-            {
-                undoMenuItem,
-                redoMenuItem,
-                new Separator(),
-                duplicateMenuItem,
-                groupMenuItem,
-                ungroupMenuItem,
-                deleteMenuItem
-            }
-        };
-
-        primitiveMenuItems = new MenuItem[primitiveChoices.Length];
-        object[] primitiveEntries = new object[primitiveChoices.Length];
-        for (int i = 0; i < primitiveChoices.Length; i++)
-        {
-            int index = i;
-            MenuItem item = MenuCommand(primitiveChoices[i], async () =>
-            {
-                primitiveBox.SelectedIndex = index;
-                await AddPrimitiveAsync();
-            });
-            primitiveMenuItems[i] = item;
-            primitiveEntries[i] = item;
-        }
-
-        MenuItem addMenu = new()
-        {
-            Header = "_Add",
-            ItemsSource = primitiveEntries
-        };
-
-        parametersMenuItem = MenuCommand("_Parameters…", () =>
-        {
-            OpenPrimitiveParameters();
-            return Task.CompletedTask;
-        });
-        materialMenuItem = MenuCommand("_Material…", () =>
-        {
-            OpenMaterialEditor();
-            return Task.CompletedTask;
-        });
-        applyTransformMenuItem = MenuCommand("_Apply transform", async () => await ApplyInspectorAsync());
-        resetTransformMenuItem = MenuCommand("_Reset transform", async () => await ResetSelectedTransformAsync());
-        frameSelectedMenuItem = MenuCommand("_Frame selected", () =>
-        {
-            FrameSelected();
-            return Task.CompletedTask;
-        });
-
-        MenuItem objectMenu = new()
-        {
-            Header = "_Object",
-            ItemsSource = new object[]
-            {
-                parametersMenuItem,
-                materialMenuItem,
-                new Separator(),
-                applyTransformMenuItem,
-                resetTransformMenuItem,
-                frameSelectedMenuItem
-            }
-        };
-
-        selectionModeMenuItems = new MenuItem[selectionModeChoices.Length];
-        object[] selectionEntries = new object[selectionModeChoices.Length];
-        for (int i = 0; i < selectionModeChoices.Length; i++)
-        {
-            int index = i;
-            MenuItem item = RadioMenuItem(
-                selectionModeChoices[i].Label,
-                "SelectionMode",
-                () => selectionModeBox.SelectedIndex = index);
-            selectionModeMenuItems[i] = item;
-            selectionEntries[i] = item;
-        }
-
-        gizmoModeMenuItems = new MenuItem[gizmoModeChoices.Length];
-        object[] gizmoEntries = new object[gizmoModeChoices.Length];
-        for (int i = 0; i < gizmoModeChoices.Length; i++)
-        {
-            int index = i;
-            MenuItem item = RadioMenuItem(
-                gizmoModeChoices[i].Label,
-                "GizmoMode",
-                () => gizmoModeBox.SelectedIndex = index);
-            gizmoModeMenuItems[i] = item;
-            gizmoEntries[i] = item;
-        }
-
-        moveAxisMenuItems = new MenuItem[moveAxisChoices.Length];
-        object[] axisEntries = new object[moveAxisChoices.Length];
-        for (int i = 0; i < moveAxisChoices.Length; i++)
-        {
-            int index = i;
-            MenuItem item = RadioMenuItem(
-                moveAxisChoices[i].Label,
-                "MoveAxis",
-                () => moveAxisBox.SelectedIndex = index);
-            moveAxisMenuItems[i] = item;
-            axisEntries[i] = item;
-        }
-
-        MenuItem selectionMenu = new()
-        {
-            Header = "_Selection mode",
-            ItemsSource = selectionEntries
-        };
-        MenuItem gizmoMenu = new()
-        {
-            Header = "_Transform gizmo",
-            ItemsSource = gizmoEntries
-        };
-        MenuItem axisMenu = new()
-        {
-            Header = "Move _axis lock",
-            ItemsSource = axisEntries
-        };
-        MenuItem modeMenu = new()
-        {
-            Header = "_Mode",
-            ItemsSource = new object[]
-            {
-                selectionMenu,
-                gizmoMenu,
-                axisMenu
-            }
-        };
-
-        rendererMenuItems = new MenuItem[rendererChoices.Length];
-        object[] rendererEntries = new object[rendererChoices.Length];
-        for (int i = 0; i < rendererChoices.Length; i++)
-        {
-            int index = i;
-            MenuItem item = RadioMenuItem(
-                rendererChoices[i].Label,
-                "Renderer",
-                () => rendererBox.SelectedIndex = index);
-            rendererMenuItems[i] = item;
-            rendererEntries[i] = item;
-        }
-
-        MenuItem rendererMenu = new()
-        {
-            Header = "_Renderer",
-            ItemsSource = rendererEntries
-        };
-        renderSettingsMenuItem = MenuCommand("_Settings…", async () => await OpenRenderSettingsAsync());
-
-        MenuItem renderMenu = new()
-        {
-            Header = "_Render",
-            ItemsSource = new object[]
-            {
-                rendererMenu,
-                new Separator(),
-                renderSettingsMenuItem
-            }
-        };
-
-        Menu menu = new()
-        {
-            HorizontalAlignment = HorizontalAlignment.Stretch,
-            ItemsSource = new object[]
-            {
-                fileMenu,
-                editMenu,
-                addMenu,
-                objectMenu,
-                modeMenu,
-                renderMenu
-            }
-        };
-
-        SyncMenuChecks();
-        SyncMenuEnabledState();
-        return menu;
-    }
-
-    private static MenuItem MenuCommand(string header, Func<Task> action)
-    {
-        MenuItem item = new() { Header = header };
-        item.Click += async (_, _) => await action();
-        return item;
-    }
-
-    private static MenuItem RadioMenuItem(string header, string groupName, Action action)
-    {
-        MenuItem item = new()
-        {
-            Header = header,
-            ToggleType = MenuItemToggleType.Radio,
-            GroupName = groupName
-        };
-        item.Click += (_, _) => action();
-        return item;
-    }
-
-    private void SyncMenuChecks()
-    {
-        for (int i = 0; i < rendererMenuItems.Length; i++)
-            rendererMenuItems[i].IsChecked = rendererBox.SelectedIndex == i;
-
-        for (int i = 0; i < selectionModeMenuItems.Length; i++)
-            selectionModeMenuItems[i].IsChecked = selectionModeBox.SelectedIndex == i;
-
-        for (int i = 0; i < gizmoModeMenuItems.Length; i++)
-            gizmoModeMenuItems[i].IsChecked = gizmoModeBox.SelectedIndex == i;
-
-        for (int i = 0; i < moveAxisMenuItems.Length; i++)
-            moveAxisMenuItems[i].IsChecked = moveAxisBox.SelectedIndex == i;
-    }
-
-    private void SyncMenuEnabledState()
-    {
-        // Guard construction-time calls before BuildMenuBar has populated fields.
-        if (newMenuItem is null)
-            return;
-
-        newMenuItem.IsEnabled = newButton.IsEnabled;
-        openMenuItem.IsEnabled = openButton.IsEnabled;
-        insertMenuItem.IsEnabled = insertButton.IsEnabled;
-        saveMenuItem.IsEnabled = saveButton.IsEnabled;
-        exportMenuItem.IsEnabled = exportButton.IsEnabled;
-        undoMenuItem.IsEnabled = undoButton.IsEnabled;
-        redoMenuItem.IsEnabled = redoButton.IsEnabled;
-
-        duplicateMenuItem.IsEnabled = duplicateButton.IsEnabled;
-        groupMenuItem.IsEnabled = groupButton.IsEnabled;
-        ungroupMenuItem.IsEnabled = ungroupButton.IsEnabled;
-        deleteMenuItem.IsEnabled = deleteButton.IsEnabled;
-
-        parametersMenuItem.IsEnabled = parametersButton.IsEnabled;
-        materialMenuItem.IsEnabled = materialButton.IsEnabled;
-        applyTransformMenuItem.IsEnabled = applyButton.IsEnabled;
-        frameSelectedMenuItem.IsEnabled = frameButton.IsEnabled;
-        resetTransformMenuItem.IsEnabled = resetTransformButton.IsEnabled;
-
-        foreach (MenuItem item in primitiveMenuItems)
-            item.IsEnabled = addPrimitiveButton.IsEnabled;
-
-        foreach (MenuItem item in rendererMenuItems)
-            item.IsEnabled = rendererBox.IsEnabled;
-
-        bool objectMode = SelectedSelectionMode == ComposerSelectionMode.Object;
-        foreach (MenuItem item in selectionModeMenuItems)
-            item.IsEnabled = selectionModeBox.IsEnabled;
-        foreach (MenuItem item in gizmoModeMenuItems)
-            item.IsEnabled = gizmoModeBox.IsEnabled && objectMode;
-        foreach (MenuItem item in moveAxisMenuItems)
-            item.IsEnabled = moveAxisBox.IsEnabled && !objectMode;
-
-        renderSettingsMenuItem.IsEnabled = renderSettingsButton.IsEnabled;
-    }
-
-    private Control BuildScenePanel()
-    {
-        Grid panel = new()
-        {
-            RowDefinitions = new RowDefinitions("Auto,*,Auto"),
-            RowSpacing = 8
-        };
-
-        TextBlock heading = Heading("Scene objects");
-        panel.Children.Add(heading);
-        panel.Children.Add(objectTree);
-        Grid.SetRow(objectTree, 1);
-
-        Grid objectButtons = new()
-        {
-            ColumnDefinitions = new ColumnDefinitions("*,*,*"),
-            RowDefinitions = new RowDefinitions("Auto,Auto"),
-            ColumnSpacing = 8,
-            RowSpacing = 6
-        };
-        objectButtons.Children.Add(duplicateButton);
-        objectButtons.Children.Add(groupButton);
-        Grid.SetColumn(groupButton, 1);
-        objectButtons.Children.Add(ungroupButton);
-        Grid.SetColumn(ungroupButton, 2);
-        objectButtons.Children.Add(deleteButton);
-        Grid.SetRow(deleteButton, 1);
-        Grid.SetColumnSpan(deleteButton, 3);
-        panel.Children.Add(objectButtons);
-        Grid.SetRow(objectButtons, 2);
-
-        return panel;
-    }
-
-    private Control BuildInspectorPanel()
-    {
-        StackPanel stack = new() { Spacing = 9, Margin = new Thickness(8, 0, 0, 0) };
-        stack.Children.Add(Heading("Inspector"));
-        stack.Children.Add(LabeledControl("Name", nameBox));
-        stack.Children.Add(visibleBox);
-        Grid editButtons = new()
-        {
-            ColumnDefinitions = new ColumnDefinitions("*,*"),
-            ColumnSpacing = 8
-        };
-        editButtons.Children.Add(parametersButton);
-        editButtons.Children.Add(materialButton);
-        Grid.SetColumn(materialButton, 1);
-        stack.Children.Add(editButtons);
-        stack.Children.Add(new TextBlock
-        {
-            Text = "Scene length unit: meter (m). Primitive dimensions and object positions use meters.",
-            TextWrapping = TextWrapping.Wrap,
-            Opacity = 0.72,
-            FontSize = 12
-        });
-        stack.Children.Add(Heading("Position (m)"));
-        stack.Children.Add(VectorRow(positionX, positionY, positionZ));
-        stack.Children.Add(Heading("Rotation (degrees)"));
-        stack.Children.Add(VectorRow(rotationX, rotationY, rotationZ));
-        stack.Children.Add(Heading("Scale"));
-        stack.Children.Add(VectorRow(scaleX, scaleY, scaleZ));
-        stack.Children.Add(applyButton);
-        stack.Children.Add(frameButton);
-        stack.Children.Add(resetTransformButton);
-        stack.Children.Add(new TextBlock
-        {
-            Text = "Hierarchy: ▸/▾ expands groups and … show faces reveals logical polygon faces (a Cube has six). Ctrl-click objects to multi-select; Group/Ctrl+G wraps sibling objects and Ctrl+Shift+G ungroups. Standard primitives: Plane, Cube, Circle, UV Sphere, Icosphere, Cylinder, Cone, Torus, and Grid. Use Parameters… for real dimensions in meters and Material… for PBR/color/textures. Face mode (3): right-click a polygon for Extrude or Inset; Extrude uses signed distance (+ outward, - inward), while inset depth uses + inward / - outward and offers Square or Sloped (Blender-style) depth profiles. Object/Vertex/Edge/Face modes use 4/1/2/3. Gizmos: G move, R rotate, S scale; Shift is precision and Ctrl snaps. Viewport: right drag orbits, middle drag pans, and mouse wheel zooms. On Windows Precision Touchpads, two-finger translation orbits, pinch/spread zooms, and two-finger twist turns the scene around its center. Use Render > Settings… for renderer-specific controls. Unsupported settings stay visible but disabled. Vulkan compute supports resolution, samples, bounces, field of view, exposure, ambient strength, shadows, and background colors; CPU supports resolution, samples, bounces, field of view, and exposure.",
-            TextWrapping = TextWrapping.Wrap,
-            Opacity = 0.68,
-            FontSize = 12,
-            Margin = new Thickness(0, 10, 0, 0)
-        });
-
-        return new ScrollViewer
-        {
-            Content = stack,
-            VerticalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto
-        };
     }
 
     private void WireEvents()
@@ -865,32 +395,32 @@ internal sealed class ComposerWindow : Window
 
         rendererBox.SelectionChanged += (_, _) =>
         {
-            SyncMenuChecks();
-            SyncMenuEnabledState();
+            menuController.SyncChecks();
+            menuController.SyncEnabledState();
             ComposerRendererKind kind = SelectedRenderer.Kind;
-            detailsText.Text = $"{SelectedRenderer.Description} {renderOptions[kind].Describe(kind)}";
-            _ = RequestRenderAsync(interactive: false);
+            detailsText.Text = $"{SelectedRenderer.Description} {renderController.GetOptions(kind).Describe(kind)}";
+            _ = renderController.RequestRenderAsync(interactive: false);
         };
         selectionModeBox.SelectionChanged += (_, _) =>
         {
-            SyncMenuChecks();
+            menuController.SyncChecks();
             ComposerSelectionMode mode = SelectedSelectionMode;
             if (mode != ComposerSelectionMode.Object)
             {
-                ClosePrimitiveParametersWindow();
-                CloseMaterialEditorWindow();
+                dialogController.ClosePrimitiveParameters();
+                dialogController.CloseMaterialEditor();
             }
             session.SetSelectionMode(mode);
             if (mode != ComposerSelectionMode.Object)
             {
                 // Component editing has one mesh owner. Collapse any Object-mode
                 // Ctrl multi-selection to the active object before editing faces.
-                if (selectedObjectId is int activeId &&
-                    (selectedObjectIds.Count != 1 || !selectedObjectIds.Contains(activeId)))
+                if (selectionController.ActiveObjectId is int activeId &&
+                    (selectionController.SelectedObjectIds.Count != 1 || !selectionController.SelectedObjectIds.Contains(activeId)))
                 {
-                    selectedObjectIds.Clear();
-                    selectedObjectIds.Add(activeId);
-                    RefreshObjectTree(activeId, syncSessionSelection: false);
+                    selectionController.SelectedObjectIds.Clear();
+                    selectionController.SelectedObjectIds.Add(activeId);
+                    selectionController.RefreshObjectTree(activeId, syncSessionSelection: false);
                 }
                 SelectGizmoMode(ComposerGizmoMode.Translate);
             }
@@ -899,28 +429,28 @@ internal sealed class ComposerWindow : Window
             gizmoModeBox.IsEnabled = mode == ComposerSelectionMode.Object;
             moveAxisBox.IsEnabled = mode != ComposerSelectionMode.Object;
             session.SetMeshMoveAxisLock(SelectedMoveAxisLock);
-            SyncMenuEnabledState();
+            menuController.SyncEnabledState();
             statusText.Text = mode == ComposerSelectionMode.Object
                 ? "Object selection mode."
                 : $"{mode} mode: move near a component to preview it, click to select, then drag an axis. X/Y/Z lock movement.";
-            _ = RequestRenderAsync(interactive: false);
+            _ = renderController.RequestRenderAsync(interactive: false);
         };
         gizmoModeBox.SelectionChanged += (_, _) =>
         {
-            SyncMenuChecks();
+            menuController.SyncChecks();
             statusText.Text = $"{SelectedGizmoMode} gizmo selected.";
-            _ = RequestRenderAsync(interactive: false);
+            _ = renderController.RequestRenderAsync(interactive: false);
         };
         moveAxisBox.SelectionChanged += (_, _) =>
         {
-            SyncMenuChecks();
+            menuController.SyncChecks();
             session.SetMeshMoveAxisLock(SelectedMoveAxisLock);
             if (SelectedSelectionMode != ComposerSelectionMode.Object)
             {
                 statusText.Text = SelectedMoveAxisLock == ComposerGizmoAxis.None
                     ? "Move axis unlocked. Click the X, Y, or Z gizmo axis."
                     : $"Movement locked to {SelectedMoveAxisLock}. Only that gizmo axis is active.";
-                _ = RequestRenderAsync(interactive: false);
+                _ = renderController.RequestRenderAsync(interactive: false);
             }
         };
 
@@ -930,32 +460,14 @@ internal sealed class ComposerWindow : Window
         viewport.PointerExited += (_, _) => ClearMeshHoverOverlay(requestRender: true);
         viewport.PointerCaptureLost += (_, _) =>
         {
-            viewportDragMode = ViewportDragMode.None;
+            navigationController.HandleCaptureLost();
             leftPressed = false;
-            rightPressed = false;
-            if (gizmoDrag is GizmoDragState pending)
-            {
-                if (pending.MeshComponent)
-                    session.CancelMeshElementMovePreview(pending.SelectedId);
-                else
-                {
-                    session.CancelPendingTransform(pending.SelectedId);
-                    LoadInspectorFromSelection();
-                }
-            }
-            gizmoDrag = null;
-            _ = RequestRenderAsync(interactive: false);
+            transformController.CancelActiveDrag();
+            _ = renderController.RequestRenderAsync(interactive: false);
         };
-        viewport.PointerWheelChanged += (_, e) =>
-        {
-            if (!session.HasRenderableScene) return;
-            ClearMeshHoverOverlay(requestRender: false);
-            session.Camera.Zoom(e.Delta.Y);
-            _ = RequestRenderAsync(interactive: false);
-            e.Handled = true;
-        };
-        viewport.SizeChanged += (_, _) => ScheduleResizeRender();
-        foreach (TextBox box in TransformTextBoxes())
+        viewport.PointerWheelChanged += (_, e) => navigationController.HandleWheel(e);
+        viewport.SizeChanged += (_, _) => renderController.ScheduleResizeRender();
+        foreach (TextBox box in transformController.TransformTextBoxes())
             box.KeyDown += OnTransformBoxKeyDown;
         KeyDown += OnWindowKeyDown;
     }
@@ -973,354 +485,46 @@ private async Task OpenRenderSettingsAsync()
 {
     RendererChoice renderer = SelectedRenderer;
     ComposerRendererKind kind = renderer.Kind;
-    RenderSettingsDialog dialog = new(kind, renderer.Label, renderOptions[kind]);
     renderSettingsButton.IsEnabled = false;
-    renderSettingsMenuItem.IsEnabled = false;
+    menuController.SetRenderSettingsEnabled(false);
     try
     {
-        ComposerRenderOptions? updated = await dialog.ShowForResultAsync(this);
+        ComposerRenderOptions? updated = await dialogController.ShowRenderSettingsAsync(
+            kind, renderer.Label, renderController.GetOptions(kind));
         if (updated == null)
             return;
 
-        renderOptions[kind] = updated;
+        renderController.SetOptions(kind, updated);
         detailsText.Text = $"{renderer.Label} settings: {updated.Describe(kind)}";
 
         if (SelectedRenderer.Kind == kind && session.HasRenderableScene)
         {
-            CancelCurrentRender();
-            await RequestRenderAsync(interactive: false);
+            renderController.CancelCurrentRender();
+            await renderController.RequestRenderAsync(interactive: false);
         }
     }
     finally
     {
         renderSettingsButton.IsEnabled = true;
-        renderSettingsMenuItem.IsEnabled = true;
+        menuController.SetRenderSettingsEnabled(true);
     }
 }
 
-    private async Task NewSceneAsync()
-    {
-        ClosePrimitiveParametersWindow();
-        CloseMaterialEditorWindow();
-        CancelCurrentRender();
-        SetBusy(true, "Creating a new composition…");
-        try
-        {
-            await Task.Run(() => session.NewScene(lifetimeCancellation.Token), lifetimeCancellation.Token);
-            bitmap?.Dispose();
-            bitmap = null;
-            image.Source = null;
-            pathText.Text = "Untitled composition";
-            selectedObjectId = null;
-            ClearVirtualTriangleSelection();
-            selectionModeBox.SelectedIndex = 0;
-            expandedObjectIds.Clear();
-            trianglePageOffsets.Clear();
-            treeExpansionInitialized = false;
-            RefreshObjectTree();
-            SetInspectorEnabled(false);
-            statusText.Text = "New empty composition. Add a primitive or insert a model to begin.";
-            detailsText.Text = SelectedRenderer.Description;
-        }
-        catch (Exception ex)
-        {
-            statusText.Text = $"Could not create scene: {ex.Message}";
-        }
-        finally
-        {
-            SetBusy(false);
-        }
-    }
+    private Task NewSceneAsync() => commandCoordinator.NewSceneAsync();
 
-    private async Task BrowseAndOpenAsync()
-    {
-        string? path = await PickOpenPathAsync("Open scene or model", ComposerFileTypes.OpenPickerTypes);
-        if (!string.IsNullOrWhiteSpace(path))
-            await LoadSceneAsync(path);
-    }
+    private Task BrowseAndOpenAsync() => commandCoordinator.BrowseAndOpenAsync();
 
-    private async Task BrowseAndInsertAsync()
-    {
-        string? path = await PickOpenPathAsync("Insert 3D model", ComposerFileTypes.InsertPickerTypes);
-        if (!string.IsNullOrWhiteSpace(path))
-            await InsertModelAsync(path);
-    }
+    private Task BrowseAndInsertAsync() => commandCoordinator.BrowseAndInsertAsync();
 
-    private async Task<string?> PickOpenPathAsync(string title, IReadOnlyList<FilePickerFileType> types)
-    {
-        if (!StorageProvider.CanOpen)
-        {
-            statusText.Text = "The desktop file picker is unavailable.";
-            return null;
-        }
+    private Task LoadSceneAsync(string path) => commandCoordinator.LoadSceneAsync(path);
 
-        try
-        {
-            IReadOnlyList<IStorageFile> files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
-            {
-                Title = title,
-                AllowMultiple = false,
-                FileTypeFilter = types
-            });
-            return files.Count == 0 ? null : files[0].TryGetLocalPath();
-        }
-        catch (Exception ex)
-        {
-            statusText.Text = $"File picker failed: {ex.Message}";
-            return null;
-        }
-    }
+    private Task InsertModelAsync(string path) => commandCoordinator.InsertModelAsync(path);
 
-    private async Task LoadSceneAsync(string path)
-    {
-        ClosePrimitiveParametersWindow();
-        CloseMaterialEditorWindow();
-        CancelCurrentRender();
-        SetBusy(true, $"Loading {Path.GetFileName(path)}…");
-        try
-        {
-            await Task.Run(() => session.Load(path, lifetimeCancellation.Token), lifetimeCancellation.Token);
-            pathText.Text = session.ScenePath ?? Path.GetFileName(path);
-            selectedObjectId = null;
-            ClearVirtualTriangleSelection();
-            selectionModeBox.SelectedIndex = 0;
-            expandedObjectIds.Clear();
-            trianglePageOffsets.Clear();
-            treeExpansionInitialized = false;
-            RefreshObjectTree();
-            statusText.Text = $"Loaded {Path.GetFileName(path)} — {session.ObjectCount:N0} objects, {session.TriangleCount:N0} triangles{FormatImportDetails()}.";
-            await RequestRenderAsync(interactive: false);
-        }
-        catch (OperationCanceledException) when (lifetimeCancellation.IsCancellationRequested)
-        {
-        }
-        catch (Exception ex)
-        {
-            statusText.Text = $"Load failed: {ex.Message}";
-        }
-        finally
-        {
-            SetBusy(false);
-        }
-    }
+    private Task AddPrimitiveAsync() => commandCoordinator.AddPrimitiveAsync();
 
-    private async Task InsertModelAsync(string path)
-    {
-        ClosePrimitiveParametersWindow();
-        CloseMaterialEditorWindow();
-        CancelCurrentRender();
-        SetBusy(true, $"Inserting {Path.GetFileName(path)}…");
-        try
-        {
-            int insertedId = await Task.Run(
-                () => session.Insert(path, lifetimeCancellation.Token),
-                lifetimeCancellation.Token);
-            pathText.Text = "Untitled composition (modified)";
-            selectedObjectId = insertedId;
-            ClearVirtualTriangleSelection();
-            selectionModeBox.SelectedIndex = 0;
-            expandedObjectIds.Add(insertedId);
-            RefreshObjectTree(insertedId);
-            statusText.Text = $"Inserted {Path.GetFileName(path)} — {session.ObjectCount:N0} objects, {session.TriangleCount:N0} triangles{FormatImportDetails()}.";
-            await RequestRenderAsync(interactive: false);
-        }
-        catch (Exception ex)
-        {
-            statusText.Text = $"Insert failed: {ex.Message}";
-        }
-        finally
-        {
-            SetBusy(false);
-        }
-    }
+    private Task SaveSceneAsync() => commandCoordinator.SaveSceneAsync();
 
-    private async Task AddPrimitiveAsync()
-    {
-        string primitiveName = primitiveBox.SelectedItem as string ?? primitiveChoices[0];
-        int? insertedId = null;
-        try
-        {
-            ClosePrimitiveParametersWindow();
-            CloseMaterialEditorWindow();
-            await StopCurrentRenderAsync();
-            SetBusy(true, $"Adding {primitiveName}…");
-            insertedId = await Task.Run(
-                () => session.InsertPrimitive(primitiveName),
-                lifetimeCancellation.Token);
-            selectedObjectId = insertedId;
-            ClearVirtualTriangleSelection();
-            selectionModeBox.SelectedIndex = 0;
-            expandedObjectIds.Add(insertedId.Value);
-            RefreshObjectTree(insertedId);
-            pathText.Text = "Untitled composition (modified)";
-            statusText.Text = $"Added {primitiveName}. Edit its procedural dimensions in meters in the Parameters window.";
-            await RequestRenderAsync(interactive: false);
-        }
-        catch (Exception ex)
-        {
-            ReportOperationFailure("Could not add primitive", ex);
-        }
-        finally
-        {
-            SetBusy(false);
-        }
-
-        if (insertedId.HasValue && selectedObjectId == insertedId)
-            OpenPrimitiveParameters();
-    }
-
-    private string FormatImportDetails() =>
-        string.IsNullOrWhiteSpace(session.LastImportDetails)
-            ? string.Empty
-            : $"; {session.LastImportDetails}";
-
-    private async Task SaveSceneAsync()
-    {
-        if (!StorageProvider.CanSave)
-        {
-            statusText.Text = "The desktop save picker is unavailable.";
-            return;
-        }
-
-        try
-        {
-            IStorageFile? file = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
-            {
-                Title = "Save composition",
-                SuggestedFileName = session.ScenePath is null
-                    ? "composition.lscene"
-                    : Path.GetFileNameWithoutExtension(session.ScenePath) + ".lscene",
-                DefaultExtension = "lscene",
-                FileTypeChoices = [ComposerFileTypes.ComposerScene]
-            });
-            string? path = file?.TryGetLocalPath();
-            if (string.IsNullOrWhiteSpace(path))
-                return;
-
-            await StopCurrentRenderAsync();
-            SetBusy(true, "Saving composition…");
-
-            int triangleCountAtSave = session.TriangleCount;
-            Stopwatch saveStopwatch = Stopwatch.StartNew();
-            Task saveTask = Task.Run(
-                () => session.Save(path, lifetimeCancellation.Token),
-                lifetimeCancellation.Token);
-
-            while (!saveTask.IsCompleted)
-            {
-                Task completed = await Task.WhenAny(saveTask, Task.Delay(500, lifetimeCancellation.Token));
-                if (ReferenceEquals(completed, saveTask))
-                    break;
-
-                statusText.Text = $"Saving composition… {saveStopwatch.Elapsed.TotalSeconds:0.0}s " +
-                                  $"({triangleCountAtSave:N0} triangles).";
-            }
-
-            await saveTask;
-            saveStopwatch.Stop();
-            pathText.Text = session.ScenePath ?? path;
-            statusText.Text = $"Saved {Path.GetFileName(session.ScenePath ?? path)} in {saveStopwatch.Elapsed.TotalSeconds:0.0}s.";
-        }
-        catch (OperationCanceledException) when (lifetimeCancellation.IsCancellationRequested)
-        {
-        }
-        catch (Exception ex)
-        {
-            statusText.Text = $"Save failed: {ex.Message}";
-            Console.Error.WriteLine($"Save failed: {ex}");
-        }
-        finally
-        {
-            SetBusy(false);
-        }
-    }
-
-    private async Task ExportPackageAsync()
-    {
-        if (!session.HasRenderableScene)
-        {
-            statusText.Text = "There is no renderable scene to export.";
-            return;
-        }
-        if (!StorageProvider.CanPickFolder)
-        {
-            statusText.Text = "The desktop folder picker is unavailable.";
-            return;
-        }
-
-        try
-        {
-            SceneExportFormat? format = await new ExportFormatDialog().ShowDialog<SceneExportFormat?>(this);
-            if (format == null)
-                return;
-
-            IReadOnlyList<IStorageFolder> folders = await StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
-            {
-                Title = $"Choose parent folder for {format.DisplayName}",
-                AllowMultiple = false
-            });
-            string? parentDirectory = folders.Count == 0 ? null : folders[0].TryGetLocalPath();
-            if (string.IsNullOrWhiteSpace(parentDirectory))
-                return;
-
-            SetBusy(true, $"Exporting {format.DisplayName} package…");
-            SceneExportPackageResult result = await Task.Run(
-                () => session.ExportPackage(parentDirectory, format, lifetimeCancellation.Token),
-                lifetimeCancellation.Token);
-            statusText.Text = $"Exported {Path.GetFileName(result.PrimaryFilePath)} with {result.Files.Count:N0} files to {result.DirectoryPath}.";
-        }
-        catch (OperationCanceledException) when (lifetimeCancellation.IsCancellationRequested)
-        {
-        }
-        catch (Exception ex)
-        {
-            statusText.Text = $"Export failed: {ex.Message}";
-            Console.Error.WriteLine($"Export failed: {ex}");
-        }
-        finally
-        {
-            SetBusy(false);
-        }
-    }
-
-    private async Task UpdateSelectionPreviewAsync()
-    {
-        if (lifetimeCancellation.IsCancellationRequested)
-            return;
-
-        try
-        {
-            int? requestedSelection = selectedObjectId;
-            CancelCurrentRender();
-            bool changed = await Task.Run(
-                () => session.SetSelectedObject(requestedSelection),
-                lifetimeCancellation.Token);
-            if (requestedSelection != selectedObjectId)
-                return;
-            if (changed && session.HasRenderableScene)
-                await RequestRenderAsync(interactive: false);
-        }
-        catch (OperationCanceledException) when (lifetimeCancellation.IsCancellationRequested)
-        {
-        }
-        catch (Exception ex)
-        {
-            statusText.Text = $"Selection update failed: {ex.Message}";
-        }
-    }
-
-    private IEnumerable<TextBox> TransformTextBoxes()
-    {
-        yield return positionX;
-        yield return positionY;
-        yield return positionZ;
-        yield return rotationX;
-        yield return rotationY;
-        yield return rotationZ;
-        yield return scaleX;
-        yield return scaleY;
-        yield return scaleZ;
-    }
+    private Task ExportPackageAsync() => commandCoordinator.ExportPackageAsync();
 
     private void OnTransformBoxKeyDown(object? sender, KeyEventArgs e)
     {
@@ -1331,659 +535,39 @@ private async Task OpenRenderSettingsAsync()
         e.Handled = true;
     }
 
-    private async Task ApplyInspectorAsync()
-    {
-        if (selectedObjectId is not int id)
-            return;
+    private Task ApplyInspectorAsync() => transformController.ApplyInspectorAsync();
 
-        ClosePrimitiveParametersWindow();
+    private Task ResetSelectedTransformAsync() => transformController.ResetSelectedTransformAsync();
 
-        try
-        {
-            // Capture every Avalonia control value while still on the UI thread.
-            // The background worker must receive plain immutable data only; reading
-            // nameBox/visibleBox inside Task.Run throws "Call from invalid thread".
-            ComposerTransformRequest request = ComposerTransformRequest.Parse(
-                positionX.Text, positionY.Text, positionZ.Text,
-                rotationX.Text, rotationY.Text, rotationZ.Text,
-                scaleX.Text, scaleY.Text, scaleZ.Text);
-            ComposerTransformWorkItem workItem = new(
-                id,
-                nameBox.Text ?? string.Empty,
-                visibleBox.IsChecked ?? true,
-                request);
+    private Task UndoAsync() => commandCoordinator.UndoAsync();
 
-            ComposerModelEvidence? beforeEvidence = session.GetModelEvidence(id);
-            await StopCurrentRenderAsync();
-            SetBusy(true, "Baking transform into the selected geometry…");
-            bool updated = await Task.Run(
-                () => workItem.Apply(session),
-                lifetimeCancellation.Token);
-            if (!updated)
-                throw new InvalidOperationException("The selected scene node no longer exists.");
+    private Task RedoAsync() => commandCoordinator.RedoAsync();
 
-            pathText.Text = "Untitled composition (modified)";
-            ComposerObjectState? appliedState = session.GetObjectState(id);
-            ComposerModelEvidence? afterEvidence = session.GetModelEvidence(id);
-            if (appliedState == null || afterEvidence == null)
-                throw new InvalidOperationException("The transformed scene node could not be verified.");
+    private Task GroupSelectedAsync() => commandCoordinator.GroupSelectedAsync();
 
-            // Baked transforms leave the node transform fields at identity. The
-            // authoritative proof is that the underlying world geometry changed.
-            if (!NearlyEqual(appliedState.Position, Vec3.Zero) ||
-                !NearlyEqual(appliedState.Rotation, Vec3.Zero) ||
-                !NearlyEqual(appliedState.Scale, new Vec3(1, 1, 1)))
-            {
-                throw new InvalidOperationException("The transform was not fully baked into geometry.");
-            }
-            if (beforeEvidence != null && afterEvidence.SceneRevision <= beforeEvidence.SceneRevision)
-                throw new InvalidOperationException("The scene revision did not advance after the transform.");
+    private Task UngroupSelectedAsync() => commandCoordinator.UngroupSelectedAsync();
 
-            bool nonIdentity = request.Position.Length() > 1e-12 ||
-                               request.RotationRadians.Length() > 1e-12 ||
-                               Math.Abs(request.Scale.X - 1.0) > 1e-12 ||
-                               Math.Abs(request.Scale.Y - 1.0) > 1e-12 ||
-                               Math.Abs(request.Scale.Z - 1.0) > 1e-12;
-            if (nonIdentity && beforeEvidence != null && beforeEvidence.WorldGeometryHash == afterEvidence.WorldGeometryHash)
-                throw new InvalidOperationException("The underlying triangle geometry did not change.");
+    private Task DuplicateSelectedAsync() => commandCoordinator.DuplicateSelectedAsync();
 
-            ClearVirtualTriangleSelection();
-            RefreshObjectTree(id);
-            ClearTransformTextBoxes();
-            UpdateHistoryButtons();
-            bool retainedParameters = session.CanEditPrimitiveParameters(id);
-            statusText.Text = retainedParameters
-                ? $"Applied transform to {appliedState.Name}; procedural parameters were preserved. Scene revision {afterEvidence.SceneRevision}. {session.LastGeometryRefreshDetails}"
-                : $"Baked transform into {appliedState.Name}; scene revision {afterEvidence.SceneRevision}. {session.LastGeometryRefreshDetails}";
-            await RequestRenderAsync(interactive: false);
-        }
-        catch (Exception ex)
-        {
-            ReportOperationFailure("Transform update failed", ex);
-        }
-        finally
-        {
-            SetBusy(false);
-        }
-    }
+    private Task DeleteSelectedAsync() => commandCoordinator.DeleteSelectedAsync();
 
-    private async Task ResetSelectedTransformAsync()
-    {
-        if (selectedObjectId is not int id)
-            return;
-
-        await StopCurrentRenderAsync();
-        SetBusy(true, "Resetting the selected node transform…");
-        try
-        {
-            bool reset = await Task.Run(
-                () => session.ResetObjectTransform(id),
-                lifetimeCancellation.Token);
-            if (!reset)
-                throw new InvalidOperationException("The selected scene node no longer exists.");
-
-            ClearVirtualTriangleSelection();
-            RefreshObjectTree(id);
-            LoadInspectorFromSelection();
-            pathText.Text = "Untitled composition (modified)";
-            statusText.Text = "Selected node transform reset.";
-            await RequestRenderAsync(interactive: false);
-        }
-        catch (Exception ex)
-        {
-            statusText.Text = $"Transform reset failed: {ex.Message}";
-        }
-        finally
-        {
-            SetBusy(false);
-        }
-    }
-
-    private async Task UndoAsync()
-    {
-        ClosePrimitiveParametersWindow();
-        CloseMaterialEditorWindow();
-        if (!session.CanUndo)
-            return;
-
-        await StopCurrentRenderAsync();
-        SetBusy(true, "Undoing edit…");
-        try
-        {
-            int? preferred = await Task.Run(session.Undo, lifetimeCancellation.Token);
-            selectedObjectIds.Clear();
-            if (preferred.HasValue)
-                selectedObjectIds.Add(preferred.Value);
-            selectedObjectId = preferred;
-            pathText.Text = "Untitled composition (modified)";
-            ClearVirtualTriangleSelection();
-            selectionModeBox.SelectedIndex = 0;
-            RefreshObjectTree(preferred);
-            ClearTransformTextBoxes();
-            UpdateHistoryButtons();
-            statusText.Text = $"Undo complete. {session.LastGeometryRefreshDetails}";
-            if (session.HasRenderableScene)
-                await RequestRenderAsync(interactive: false);
-        }
-        catch (Exception ex)
-        {
-            statusText.Text = $"Undo failed: {ex.Message}";
-        }
-        finally
-        {
-            SetBusy(false);
-        }
-    }
-
-    private async Task RedoAsync()
-    {
-        ClosePrimitiveParametersWindow();
-        CloseMaterialEditorWindow();
-        if (!session.CanRedo)
-            return;
-
-        await StopCurrentRenderAsync();
-        SetBusy(true, "Redoing edit…");
-        try
-        {
-            int? preferred = await Task.Run(session.Redo, lifetimeCancellation.Token);
-            selectedObjectIds.Clear();
-            if (preferred.HasValue)
-                selectedObjectIds.Add(preferred.Value);
-            selectedObjectId = preferred;
-            pathText.Text = "Untitled composition (modified)";
-            ClearVirtualTriangleSelection();
-            selectionModeBox.SelectedIndex = 0;
-            RefreshObjectTree(preferred);
-            ClearTransformTextBoxes();
-            UpdateHistoryButtons();
-            statusText.Text = $"Redo complete. {session.LastGeometryRefreshDetails}";
-            if (session.HasRenderableScene)
-                await RequestRenderAsync(interactive: false);
-        }
-        catch (Exception ex)
-        {
-            statusText.Text = $"Redo failed: {ex.Message}";
-        }
-        finally
-        {
-            SetBusy(false);
-        }
-    }
-
-    private async Task GroupSelectedAsync()
-    {
-        ClosePrimitiveParametersWindow();
-        CloseMaterialEditorWindow();
-        if (selectedObjectIds.Count < 2 || !session.CanGroupObjects(selectedObjectIds))
-        {
-            statusText.Text = "Ctrl-click at least two sibling objects before grouping.";
-            return;
-        }
-
-        int[] ids = selectedObjectIds.ToArray();
-        await StopCurrentRenderAsync();
-        SetBusy(true, "Grouping selected objects…");
-        try
-        {
-            int? groupId = await Task.Run(() => session.GroupObjects(ids), lifetimeCancellation.Token);
-            if (!groupId.HasValue)
-            {
-                statusText.Text = "The selected objects could not be grouped. They must share the same parent.";
-                return;
-            }
-            selectedObjectIds.Clear();
-            selectedObjectIds.Add(groupId.Value);
-            selectedObjectId = groupId.Value;
-            pathText.Text = "Untitled composition (modified)";
-            ClearVirtualTriangleSelection();
-            selectionModeBox.SelectedIndex = 0;
-            RefreshObjectTree(groupId.Value);
-            UpdateHistoryButtons();
-            statusText.Text = $"Grouped {ids.Length} objects. Ctrl-click can build another multi-selection.";
-            await RequestRenderAsync(interactive: false);
-        }
-        catch (Exception ex)
-        {
-            statusText.Text = $"Group failed: {ex.Message}";
-        }
-        finally
-        {
-            SetBusy(false);
-        }
-    }
-
-    private async Task UngroupSelectedAsync()
-    {
-        ClosePrimitiveParametersWindow();
-        CloseMaterialEditorWindow();
-        int[] ids = selectedObjectIds.Count > 0
-            ? selectedObjectIds.ToArray()
-            : selectedObjectId is int id ? new[] { id } : Array.Empty<int>();
-        if (ids.Length == 0 || !session.CanUngroupObjects(ids))
-        {
-            statusText.Text = "None of the selected objects can be ungrouped further.";
-            return;
-        }
-
-        await StopCurrentRenderAsync();
-        SetBusy(true, ids.Length > 1 ? "Ungrouping selected objects…" : "Ungrouping selected node…");
-        try
-        {
-            IReadOnlyList<int> promoted = await Task.Run(() => session.UngroupObjects(ids), lifetimeCancellation.Token);
-            foreach (int oldId in ids)
-            {
-                trianglePageOffsets.Remove(oldId);
-                expandedObjectIds.Remove(oldId);
-            }
-            selectedObjectIds.Clear();
-            foreach (int promotedId in promoted)
-                selectedObjectIds.Add(promotedId);
-            selectedObjectId = promoted.Count > 0 ? promoted[0] : null;
-            pathText.Text = "Untitled composition (modified)";
-            ClearVirtualTriangleSelection();
-            selectionModeBox.SelectedIndex = 0;
-            RefreshObjectTree(selectedObjectId);
-            UpdateHistoryButtons();
-            statusText.Text = $"Ungrouped into {promoted.Count:N0} node(s).";
-            if (session.HasRenderableScene)
-                await RequestRenderAsync(interactive: false);
-        }
-        catch (Exception ex)
-        {
-            statusText.Text = $"Ungroup failed: {ex.Message}";
-        }
-        finally
-        {
-            SetBusy(false);
-        }
-    }
-
-    private async Task DuplicateSelectedAsync()
-    {
-        ClosePrimitiveParametersWindow();
-        CloseMaterialEditorWindow();
-        if (selectedObjectId is not int id)
-            return;
-
-        CancelCurrentRender();
-        SetBusy(true, "Duplicating object…");
-        try
-        {
-            int? duplicateId = await Task.Run(() => session.DuplicateObject(id), lifetimeCancellation.Token);
-            pathText.Text = "Untitled composition (modified)";
-            ClearVirtualTriangleSelection();
-            RefreshObjectTree(duplicateId);
-            statusText.Text = $"Duplicated object — {session.ObjectCount:N0} objects, {session.TriangleCount:N0} triangles.";
-            await RequestRenderAsync(interactive: false);
-        }
-        catch (Exception ex)
-        {
-            statusText.Text = $"Duplicate failed: {ex.Message}";
-        }
-        finally
-        {
-            SetBusy(false);
-        }
-    }
-
-    private async Task DeleteSelectedAsync()
-    {
-        ClosePrimitiveParametersWindow();
-        CloseMaterialEditorWindow();
-        if (selectedObjectId is not int id)
-            return;
-
-        CancelCurrentRender();
-        await Task.Run(() => session.DeleteObject(id));
-        selectedObjectId = null;
-        selectedObjectIds.Clear();
-        ClearVirtualTriangleSelection();
-        pathText.Text = "Untitled composition (modified)";
-        RefreshObjectTree();
-        statusText.Text = $"Deleted object — {session.ObjectCount:N0} objects, {session.TriangleCount:N0} triangles.";
-        if (session.HasRenderableScene)
-            await RequestRenderAsync(interactive: false);
-        else
-        {
-            image.Source = null;
-            SetInspectorEnabled(false);
-        }
-    }
-
-    private void FrameSelected()
-    {
-        if (selectedObjectId is not int id || !session.FrameObject(id))
-            return;
-        _ = RequestRenderAsync(interactive: false);
-    }
-
-    private void RefreshObjectTree(int? preferredSelection = null, bool syncSessionSelection = true)
-    {
-        IReadOnlyList<SceneObjectInfo> infos = session.GetObjectInfos();
-        List<ObjectTreeNode> roots = ComposerObjectTree.Build(infos);
-        HashSet<int> validIds = infos.Select(info => info.Id).ToHashSet();
-        selectedObjectIds.RemoveWhere(id => !validIds.Contains(id));
-
-        int? target = preferredSelection ?? selectedObjectId;
-        if (target.HasValue && ComposerObjectTree.Find(roots, target.Value) == null)
-            target = null;
-        selectedObjectId = target;
-        if (preferredSelection.HasValue && selectedObjectId.HasValue && selectedObjectIds.Count <= 1)
-        {
-            selectedObjectIds.Clear();
-            selectedObjectIds.Add(selectedObjectId.Value);
-        }
-        else if (selectedObjectId.HasValue && selectedObjectIds.Count == 0)
-        {
-            selectedObjectIds.Add(selectedObjectId.Value);
-        }
-
-        if (!treeExpansionInitialized)
-            treeExpansionInitialized = true;
-
-        expandedObjectIds.RemoveWhere(id => !validIds.Contains(id));
-        foreach (int staleId in trianglePageOffsets.Keys.Where(id => !validIds.Contains(id)).ToList())
-            trianglePageOffsets.Remove(staleId);
-
-        objectTreePanel.Children.Clear();
-        foreach (ObjectTreeNode root in roots)
-            objectTreePanel.Children.Add(BuildObjectTreeControl(root, depth: 0));
-
-        if (syncSessionSelection)
-        {
-            if (selectedTriangleGroupId is int triangleGroupId &&
-                selectedTriangleIndex is int triangleIndex &&
-                selectedObjectId == triangleGroupId &&
-                session.SetSelectedTriangle(triangleGroupId, triangleIndex))
-            {
-                // Virtual triangle selection is restored after rebuilding the UI tree.
-            }
-            else if (session.SelectionMode == ComposerSelectionMode.Object || !session.HasMeshComponentSelection)
-            {
-                selectedTriangleGroupId = null;
-                selectedTriangleIndex = null;
-                session.SetSelectedObject(selectedObjectId);
-            }
-        }
-        LoadInspectorFromSelection();
-        UpdateHistoryButtons();
-    }
-
-    private Control BuildObjectTreeControl(ObjectTreeNode node, int depth)
-    {
-        StackPanel branch = new() { Spacing = 2 };
-        Grid row = new()
-        {
-            ColumnDefinitions = new ColumnDefinitions("24,*"),
-            ColumnSpacing = 2,
-            Margin = new Thickness(depth * 14, 0, 0, 0)
-        };
-
-        bool hasTriangleDetails = node.LocalTriangleCount > 0;
-        bool hasExpandableContent = node.Children.Count > 0 || hasTriangleDetails;
-        if (hasExpandableContent)
-        {
-            bool expanded = expandedObjectIds.Contains(node.Id);
-            Button toggle = new()
-            {
-                Content = expanded ? "▾" : "▸",
-                Width = 22,
-                Height = 26,
-                Padding = new Thickness(0)
-            };
-            toggle.Click += (_, _) =>
-            {
-                ComposerObjectTree.ToggleExpanded(expandedObjectIds, node.Id);
-                RefreshObjectTree(selectedObjectId);
-            };
-            row.Children.Add(toggle);
-        }
-        else
-        {
-            row.Children.Add(new TextBlock
-            {
-                Text = "△",
-                Width = 22,
-                TextAlignment = TextAlignment.Center,
-                VerticalAlignment = VerticalAlignment.Center,
-                Opacity = 0.55
-            });
-        }
-
-        Button select = new()
-        {
-            Content = new TextBlock
-            {
-                Text = node.Label,
-                TextTrimming = TextTrimming.CharacterEllipsis,
-                HorizontalAlignment = HorizontalAlignment.Left
-            },
-            HorizontalAlignment = HorizontalAlignment.Stretch,
-            MinHeight = 28,
-            Padding = new Thickness(6, 3),
-            BorderThickness = new Thickness(0),
-            Background = selectedObjectIds.Contains(node.Id)
-                ? new SolidColorBrush(Color.FromArgb(110, 255, 125, 40))
-                : Brushes.Transparent
-        };
-        select.PointerPressed += (_, args) =>
-        {
-            if (!args.GetCurrentPoint(select).Properties.IsLeftButtonPressed)
-                return;
-            SelectObject(node.Id, args.KeyModifiers.HasFlag(KeyModifiers.Control));
-            args.Handled = true;
-        };
-        row.Children.Add(select);
-        Grid.SetColumn(select, 1);
-        branch.Children.Add(row);
-
-        if (hasExpandableContent && expandedObjectIds.Contains(node.Id))
-        {
-            foreach (ObjectTreeNode child in node.Children)
-                branch.Children.Add(BuildObjectTreeControl(child, depth + 1));
-
-            if (hasTriangleDetails)
-                AddLazyFaceRows(branch, node, depth + 1);
-        }
-
-        return branch;
-    }
-
-    private void AddLazyFaceRows(StackPanel branch, ObjectTreeNode node, int depth)
-    {
-        int faceCount = session.GetFaceCount(node.Id);
-        if (faceCount <= 0)
-            return;
-
-        bool open = trianglePageOffsets.TryGetValue(node.Id, out int pageOffset);
-        pageOffset = Math.Clamp(pageOffset, 0, Math.Max(0, faceCount - 1));
-
-        if (!open)
-        {
-            Button show = new()
-            {
-                Content = $"… show faces ({faceCount:N0})",
-                HorizontalAlignment = HorizontalAlignment.Stretch,
-                HorizontalContentAlignment = HorizontalAlignment.Left,
-                Margin = new Thickness(depth * 14 + 20, 2, 4, 2),
-                Padding = new Thickness(8, 3),
-                MinHeight = 26
-            };
-            show.Click += (_, _) =>
-            {
-                trianglePageOffsets[node.Id] = 0;
-                RefreshObjectTree(selectedObjectId);
-            };
-            branch.Children.Add(show);
-            return;
-        }
-
-        IReadOnlyList<ComposerFaceInfo> page = session.GetFaceInfos(
-            node.Id,
-            pageOffset,
-            TrianglePageSize);
-        foreach (ComposerFaceInfo face in page)
-        {
-            bool selectedFace = selectedTriangleGroupId == node.Id &&
-                                selectedTriangleIndex == face.PrimaryTriangleIndex;
-            Button faceRow = new()
-            {
-                Content = new TextBlock
-                {
-                    Text = $"▱ {face.Label}",
-                    TextTrimming = TextTrimming.CharacterEllipsis,
-                    FontSize = 12
-                },
-                HorizontalAlignment = HorizontalAlignment.Stretch,
-                HorizontalContentAlignment = HorizontalAlignment.Left,
-                Margin = new Thickness(depth * 14 + 20, 1, 4, 1),
-                Padding = new Thickness(8, 2),
-                MinHeight = 24,
-                BorderThickness = new Thickness(0),
-                Background = selectedFace
-                    ? new SolidColorBrush(Color.FromArgb(95, 255, 125, 40))
-                    : Brushes.Transparent
-            };
-            faceRow.Click += (_, _) => SelectTriangle(node.Id, face.PrimaryTriangleIndex);
-            branch.Children.Add(faceRow);
-        }
-
-        int pageEnd = pageOffset + page.Count;
-        Grid controls = new()
-        {
-            ColumnDefinitions = new ColumnDefinitions("Auto,Auto,*"),
-            ColumnSpacing = 6,
-            Margin = new Thickness(depth * 14 + 20, 2, 4, 2)
-        };
-
-        Button previous = new()
-        {
-            Content = "… previous",
-            IsEnabled = pageOffset > 0,
-            Padding = new Thickness(8, 3)
-        };
-        previous.Click += (_, _) =>
-        {
-            trianglePageOffsets[node.Id] = Math.Max(0, pageOffset - TrianglePageSize);
-            RefreshObjectTree(selectedObjectId);
-        };
-        controls.Children.Add(previous);
-
-        Button next = new()
-        {
-            Content = $"… next ({pageEnd:N0}/{faceCount:N0})",
-            IsEnabled = pageEnd < faceCount,
-            Padding = new Thickness(8, 3)
-        };
-        next.Click += (_, _) =>
-        {
-            trianglePageOffsets[node.Id] = Math.Min(
-                Math.Max(0, faceCount - 1),
-                pageOffset + TrianglePageSize);
-            RefreshObjectTree(selectedObjectId);
-        };
-        controls.Children.Add(next);
-        Grid.SetColumn(next, 1);
-
-        Button hide = new()
-        {
-            Content = "… hide faces",
-            HorizontalAlignment = HorizontalAlignment.Right,
-            Padding = new Thickness(8, 3)
-        };
-        hide.Click += (_, _) =>
-        {
-            trianglePageOffsets.Remove(node.Id);
-            if (selectedTriangleGroupId == node.Id)
-                ClearVirtualTriangleSelection();
-            RefreshObjectTree(selectedObjectId);
-        };
-        controls.Children.Add(hide);
-        Grid.SetColumn(hide, 2);
-        branch.Children.Add(controls);
-    }
-
-    private void LoadInspectorFromSelection()
-    {
-        if (selectedObjectId is not int id || session.GetObjectState(id) is not ComposerObjectState state)
-        {
-            SetInspectorEnabled(false);
-            return;
-        }
-
-        ComposerObjectState transformState = session.GetTransformTargetState(id) ?? state;
-
-        SetInspectorEnabled(true);
-        nameBox.Text = state.Name;
-        visibleBox.IsChecked = state.Visible;
-        WriteVector(transformState.Position, positionX, positionY, positionZ);
-        WriteVector(transformState.Rotation * (180.0 / Math.PI), rotationX, rotationY, rotationZ);
-        WriteVector(transformState.Scale, scaleX, scaleY, scaleZ);
-    }
-
-    private void SetInspectorEnabled(bool enabled)
-    {
-        nameBox.IsEnabled = enabled;
-        visibleBox.IsEnabled = enabled;
-        parametersButton.IsEnabled = enabled && selectedObjectId is int parameterId && session.CanEditPrimitiveParameters(parameterId);
-        materialButton.IsEnabled = enabled && selectedObjectId is int materialId && session.GetMaterialModel(materialId) != null;
-        foreach (TextBox box in new[]
-                 {
-                     positionX, positionY, positionZ,
-                     rotationX, rotationY, rotationZ,
-                     scaleX, scaleY, scaleZ
-                 })
-            box.IsEnabled = enabled;
-        applyButton.IsEnabled = enabled;
-        frameButton.IsEnabled = enabled;
-        resetTransformButton.IsEnabled = enabled;
-        duplicateButton.IsEnabled = enabled && selectedObjectIds.Count <= 1;
-        groupButton.IsEnabled = enabled && !rendering && selectedObjectIds.Count >= 2 && session.CanGroupObjects(selectedObjectIds);
-        IEnumerable<int> ungroupTargets = selectedObjectIds.Count > 0
-            ? selectedObjectIds
-            : selectedObjectId is int id ? new[] { id } : Array.Empty<int>();
-        ungroupButton.IsEnabled = enabled && session.CanUngroupObjects(ungroupTargets);
-        deleteButton.IsEnabled = enabled;
-        SyncMenuEnabledState();
-    }
+    private void FrameSelected() => selectionController.FrameSelected();
 
     private void OnViewportPointerPressed(object? sender, PointerPressedEventArgs e)
     {
         if (!session.HasRenderableScene)
             return;
 
-        PointerPoint point = e.GetCurrentPoint(viewport);
         Point position = e.GetPosition(viewport);
         viewport.Focus();
 
-        if (point.Properties.IsMiddleButtonPressed ||
-            (point.Properties.IsRightButtonPressed && e.KeyModifiers.HasFlag(KeyModifiers.Shift)))
-        {
-            ClearMeshHoverOverlay(requestRender: false);
-            viewportDragMode = ViewportDragMode.Pan;
-            previousPointer = position;
-            e.Pointer.Capture(viewport);
-            e.Handled = true;
+        if (navigationController.TryHandlePointerPressed(e))
             return;
-        }
 
-        if (point.Properties.IsRightButtonPressed)
-        {
-            // Delay orbit until the pointer actually moves. A stationary right
-            // click is reserved for the face context menu.
-            ClearMeshHoverOverlay(requestRender: false);
-            rightPressed = true;
-            rightPressPoint = position;
-            previousPointer = position;
-            e.Pointer.Capture(viewport);
-            e.Handled = true;
-            return;
-        }
-
+        PointerPoint point = e.GetCurrentPoint(viewport);
         if (point.Properties.IsLeftButtonPressed)
         {
-            if (TryBeginGizmoDrag(position))
+            if (transformController.TryBeginGizmoDrag(position))
             {
                 ClearMeshHoverOverlay(requestRender: false);
                 e.Pointer.Capture(viewport);
@@ -2000,245 +584,26 @@ private async Task OpenRenderSettingsAsync()
 
     private void OnViewportPointerMoved(object? sender, PointerEventArgs e)
     {
+        if (navigationController.TryHandlePointerMoved(e))
+            return;
+
         Point current = e.GetPosition(viewport);
-        if (rightPressed && viewportDragMode == ViewportDragMode.None)
+        if (transformController.HasActiveDrag)
         {
-            Vector rightMovement = current - rightPressPoint;
-            if (rightMovement.Length > 5.0)
-            {
-                viewportDragMode = ViewportDragMode.Orbit;
-                previousPointer = current;
-            }
-            e.Handled = true;
-            return;
-        }
-        if (gizmoDrag != null)
-        {
-            UpdateGizmoDrag(current, e.KeyModifiers);
+            transformController.UpdateGizmoDrag(current, e.KeyModifiers);
             e.Handled = true;
             return;
         }
 
-        if (viewportDragMode == ViewportDragMode.None)
-        {
-            UpdateMeshHover(current);
-            return;
-        }
-
-        Vector delta = current - previousPointer;
-        previousPointer = current;
-
-        if (viewportDragMode == ViewportDragMode.Orbit)
-            session.Camera.Orbit(delta.X, delta.Y);
-        else
-            session.Camera.Pan(delta.X, delta.Y, viewport.Bounds.Height);
-
-        if (CanRenderContinuously(SelectedRenderer.Kind))
-            _ = RequestRenderAsync(interactive: true);
-        else
-            statusText.Text = $"{SelectedRenderer.Label}: release the mouse to render the new view.";
-
-        e.Handled = true;
-    }
-
-    private void AttachWindowsTrackpadInput()
-    {
-        if (!OperatingSystem.IsWindows() || windowsTrackpadInput is not null)
-            return;
-
-        IPlatformHandle? handle = TryGetPlatformHandle();
-        if (handle is null || handle.Handle == 0)
-            return;
-
-        var source = new WindowsPrecisionTouchpadGestureSource();
-        source.Orbit += OnWindowsTrackpadOrbit;
-        source.Zoom += OnWindowsTrackpadZoom;
-        source.Turn += OnWindowsTrackpadTurn;
-
-        Win32Properties.CustomWndProcHookCallback hook = OnWindowsTrackpadWndProc;
-        try
-        {
-            // Hook before opting into touchpad-capable WM_POINTER delivery.
-            Win32Properties.AddWndProcHookCallback(this, hook);
-            source.Attach(handle.Handle);
-            windowsTrackpadInput = source;
-            windowsTrackpadWndProcHook = hook;
-
-            if (Environment.GetEnvironmentVariable("LIGHTINGSHOWCASE_NAV_DIAGNOSTICS") == "1")
-                Console.WriteLine($"[NAV-WIN32] attached {source.BackendName} to HWND 0x{handle.Handle:X}");
-        }
-        catch (Exception ex)
-        {
-            try
-            {
-                Win32Properties.RemoveWndProcHookCallback(this, hook);
-            }
-            catch
-            {
-            }
-
-            source.Orbit -= OnWindowsTrackpadOrbit;
-            source.Zoom -= OnWindowsTrackpadZoom;
-            source.Turn -= OnWindowsTrackpadTurn;
-            source.Dispose();
-
-            if (Environment.GetEnvironmentVariable("LIGHTINGSHOWCASE_NAV_DIAGNOSTICS") == "1")
-                Console.WriteLine($"[NAV-WIN32] unavailable: {ex.Message}");
-        }
-    }
-
-    private void DetachWindowsTrackpadInput()
-    {
-        windowsTrackpadGestureCapturedByViewport = false;
-
-        if (windowsTrackpadInput is not null)
-        {
-            windowsTrackpadInput.Orbit -= OnWindowsTrackpadOrbit;
-            windowsTrackpadInput.Zoom -= OnWindowsTrackpadZoom;
-            windowsTrackpadInput.Turn -= OnWindowsTrackpadTurn;
-            windowsTrackpadInput.Dispose();
-            windowsTrackpadInput = null;
-        }
-
-        if (windowsTrackpadWndProcHook is not null)
-        {
-            try
-            {
-                Win32Properties.RemoveWndProcHookCallback(this, windowsTrackpadWndProcHook);
-            }
-            catch
-            {
-                // Window handle destruction can race teardown.
-            }
-            windowsTrackpadWndProcHook = null;
-        }
-    }
-
-    private nint OnWindowsTrackpadWndProc(
-        nint hwnd,
-        uint message,
-        nint wParam,
-        nint lParam,
-        ref bool handled)
-    {
-        if (windowsTrackpadInput is null ||
-            (message != WindowsPrecisionTouchpadGestureSource.WmPointerDown &&
-             message != WindowsPrecisionTouchpadGestureSource.WmPointerUpdate &&
-             message != WindowsPrecisionTouchpadGestureSource.WmPointerUp))
-        {
-            return 0;
-        }
-
-        // Start ownership only over the viewport, then retain it for the whole
-        // two-finger sequence because the mouse cursor itself does not move.
-        if (!windowsTrackpadGestureCapturedByViewport && !viewport.IsPointerOver)
-            return 0;
-
-        bool consumed = windowsTrackpadInput.TryProcessWindowMessage(message, wParam, lParam);
-        if (consumed)
-        {
-            windowsTrackpadGestureCapturedByViewport =
-                windowsTrackpadInput.IsGestureActive ||
-                message != WindowsPrecisionTouchpadGestureSource.WmPointerUp;
-
-            // Critical: do not let DefWindowProc turn the same native touchpad
-            // frame into WM_MOUSEWHEEL/WM_MOUSEHWHEEL after we already used its
-            // two physical contacts for orbit/zoom/circular roll.
-            handled = true;
-        }
-
-        if (message == WindowsPrecisionTouchpadGestureSource.WmPointerUp &&
-            !windowsTrackpadInput.IsGestureActive)
-        {
-            windowsTrackpadGestureCapturedByViewport = false;
-        }
-
-        return 0;
-    }
-
-    private void OnWindowsTrackpadOrbit(object? sender, NativeTrackpadOrbit e)
-    {
-        if (!session.HasRenderableScene)
-            return;
-
-        pendingWindowsTrackpadOrbitX += e.X;
-        pendingWindowsTrackpadOrbitY += e.Y;
-        if (!windowsTrackpadFrameTimer.IsEnabled)
-            windowsTrackpadFrameTimer.Start();
-    }
-
-    private void OnWindowsTrackpadZoom(object? sender, NativeTrackpadZoom e)
-    {
-        if (!session.HasRenderableScene)
-            return;
-
-        pendingWindowsTrackpadZoom += e.Amount;
-        if (!windowsTrackpadFrameTimer.IsEnabled)
-            windowsTrackpadFrameTimer.Start();
-    }
-
-    private void OnWindowsTrackpadTurn(object? sender, NativeTrackpadTurn e)
-    {
-        if (!session.HasRenderableScene)
-            return;
-
-        pendingWindowsTrackpadTurn += e.Radians;
-        if (!windowsTrackpadFrameTimer.IsEnabled)
-            windowsTrackpadFrameTimer.Start();
-    }
-
-    private void ApplyPendingWindowsTrackpadNavigation()
-    {
-        double orbitX = pendingWindowsTrackpadOrbitX;
-        double orbitY = pendingWindowsTrackpadOrbitY;
-        double zoom = pendingWindowsTrackpadZoom;
-        double turn = pendingWindowsTrackpadTurn;
-
-        pendingWindowsTrackpadOrbitX = 0.0;
-        pendingWindowsTrackpadOrbitY = 0.0;
-        pendingWindowsTrackpadZoom = 0.0;
-        pendingWindowsTrackpadTurn = 0.0;
-
-        bool hasOrbit = Math.Abs(orbitX) >= 1e-9 || Math.Abs(orbitY) >= 1e-9;
-        bool hasZoom = Math.Abs(zoom) >= 1e-9;
-        bool hasTurn = Math.Abs(turn) >= 1e-9;
-
-        if (!hasOrbit && !hasZoom && !hasTurn)
-        {
-            windowsTrackpadFrameTimer.Stop();
-            return;
-        }
-
-        if (!session.HasRenderableScene || lifetimeCancellation.IsCancellationRequested)
-        {
-            windowsTrackpadFrameTimer.Stop();
-            return;
-        }
-
-        ClearMeshHoverOverlay(requestRender: false);
-        if (hasOrbit)
-            session.Camera.Orbit(orbitX, orbitY);
-        if (hasZoom)
-            session.Camera.Zoom(Math.Clamp(zoom, -8.0, 8.0));
-        if (hasTurn)
-            session.Camera.Turn(turn);
-
-        // Fast preview while active; always finish with one full-quality frame
-        // after the gesture has been quiet for a short time.
-        if (CanRenderContinuously(SelectedRenderer.Kind))
-            _ = RequestRenderAsync(interactive: true);
-
-        windowsTrackpadIdleRenderTimer.Stop();
-        windowsTrackpadIdleRenderTimer.Start();
+        UpdateMeshHover(current);
     }
 
     private void UpdateMeshHover(Point viewportPoint)
     {
         if (SelectedSelectionMode == ComposerSelectionMode.Object ||
             leftPressed ||
-            rightPressed ||
-            gizmoDrag != null ||
-            viewportDragMode != ViewportDragMode.None)
+            transformController.HasActiveDrag ||
+            navigationController.IsNavigating)
         {
             ClearMeshHoverOverlay(requestRender: false);
             return;
@@ -2250,20 +615,20 @@ private async Task OpenRenderSettingsAsync()
             return;
         lastHoverProbeTimestamp = now;
 
-        if (!TryViewportToImagePoint(viewportPoint, out Point imagePoint))
+        if (!transformController.TryViewportToImagePoint(viewportPoint, out Point imagePoint))
         {
             ClearMeshHoverOverlay(requestRender: true);
             return;
         }
 
-        double normalizedX = imagePoint.X / Math.Max(1, lastRenderWidth);
-        double normalizedY = imagePoint.Y / Math.Max(1, lastRenderHeight);
+        double normalizedX = imagePoint.X / Math.Max(1, renderController.LastRenderWidth);
+        double normalizedY = imagePoint.Y / Math.Max(1, renderController.LastRenderHeight);
         ComposerMeshPickResult? hover = session.UpdateMeshHover(
             session.Camera.Snapshot(),
             normalizedX,
             normalizedY,
-            lastRenderWidth,
-            lastRenderHeight,
+            renderController.LastRenderWidth,
+            renderController.LastRenderHeight,
             SelectedSelectionMode,
             out bool changed);
         if (!changed)
@@ -2280,7 +645,7 @@ private async Task OpenRenderSettingsAsync()
         {
             statusText.Text = $"{SelectedSelectionMode} mode: move near a component to preview it.";
         }
-        _ = RequestRenderAsync(interactive: true);
+        _ = renderController.RequestRenderAsync(interactive: true);
     }
 
     private void ClearMeshHoverOverlay(bool requestRender)
@@ -2288,79 +653,24 @@ private async Task OpenRenderSettingsAsync()
         if (!session.ClearMeshHover())
             return;
         if (requestRender && session.HasRenderableScene)
-            _ = RequestRenderAsync(interactive: true);
+            _ = renderController.RequestRenderAsync(interactive: true);
     }
 
     private async void OnViewportPointerReleased(object? sender, PointerReleasedEventArgs e)
     {
-        Point releasePoint = e.GetPosition(viewport);
-        if (rightPressed)
-        {
-            rightPressed = false;
-            e.Pointer.Capture(null);
-            Vector movement = releasePoint - rightPressPoint;
-            if (viewportDragMode == ViewportDragMode.Orbit)
-            {
-                viewportDragMode = ViewportDragMode.None;
-                await RequestRenderAsync(interactive: false);
-            }
-            else if (movement.Length <= 5.0)
-            {
-                await ShowFaceContextMenuAsync(releasePoint);
-            }
-            e.Handled = true;
+        if (await navigationController.TryHandlePointerReleasedAsync(e))
             return;
-        }
-        if (gizmoDrag != null)
+
+        Point releasePoint = e.GetPosition(viewport);
+        if (transformController.HasActiveDrag)
         {
-            UpdateGizmoDrag(releasePoint, e.KeyModifiers);
-            int commitId = gizmoDrag.SelectedId;
-            ComposerGizmoMode committedMode = gizmoDrag.Mode;
-            bool meshComponent = gizmoDrag.MeshComponent;
-            gizmoDrag = null;
+            bool handledTransform = await transformController.CommitActiveDragAsync(releasePoint, e.KeyModifiers);
             e.Pointer.Capture(null);
-            await StopCurrentRenderAsync();
-            bool committed = await Task.Run(
-                () => meshComponent
-                    ? session.CommitMeshElementMove(commitId)
-                    : session.CommitPendingTransform(commitId),
-                lifetimeCancellation.Token);
-            if (!committed)
+            if (handledTransform)
             {
-                statusText.Text = "The transform target no longer exists.";
                 e.Handled = true;
                 return;
             }
-
-            if (!meshComponent)
-            {
-                ClearVirtualTriangleSelection();
-                ClearTransformTextBoxes();
-            }
-            bool retainedParameters = !meshComponent && session.CanEditPrimitiveParameters(commitId);
-            if (retainedParameters && primitiveParametersWindow?.ObjectId == commitId)
-                primitiveParametersWindow.RebaseAfterExternalTransform();
-
-            RefreshObjectTree(commitId);
-            UpdateHistoryButtons();
-            pathText.Text = "Untitled composition (modified)";
-            statusText.Text = meshComponent
-                ? $"Moved the selected {SelectedSelectionMode.ToString().ToLowerInvariant()} and baked shared welded vertices once. {session.LastGeometryRefreshDetails}"
-                : retainedParameters
-                    ? $"Applied {committedMode.ToString().ToLowerInvariant()} transform; procedural parameters were preserved. {session.LastGeometryRefreshDetails}"
-                    : $"Baked {committedMode.ToString().ToLowerInvariant()} transform into mesh geometry. {session.LastGeometryRefreshDetails}";
-            await RequestRenderAsync(interactive: false);
-            e.Handled = true;
-            return;
-        }
-
-        if (viewportDragMode != ViewportDragMode.None)
-        {
-            viewportDragMode = ViewportDragMode.None;
-            e.Pointer.Capture(null);
-            await RequestRenderAsync(interactive: false);
-            e.Handled = true;
-            return;
         }
 
         if (leftPressed)
@@ -2370,18 +680,18 @@ private async Task OpenRenderSettingsAsync()
             Vector movement = releasePoint - leftPressPoint;
             if (movement.Length <= 5.0)
             {
-                if (!TryViewportToImagePoint(releasePoint, out Point imagePoint))
+                if (!transformController.TryViewportToImagePoint(releasePoint, out Point imagePoint))
                 {
                     if (SelectedSelectionMode == ComposerSelectionMode.Object)
                     {
-                        DeselectObjectFromViewport();
-                        await RequestRenderAsync(interactive: false);
+                        selectionController.DeselectObjectFromViewport();
+                        await renderController.RequestRenderAsync(interactive: false);
                     }
                 }
                 else
                 {
-                    double normalizedX = imagePoint.X / Math.Max(1, lastRenderWidth);
-                    double normalizedY = imagePoint.Y / Math.Max(1, lastRenderHeight);
+                    double normalizedX = imagePoint.X / Math.Max(1, renderController.LastRenderWidth);
+                    double normalizedY = imagePoint.Y / Math.Max(1, renderController.LastRenderHeight);
                     CameraDefinition camera = session.Camera.Snapshot();
                     if (SelectedSelectionMode == ComposerSelectionMode.Object)
                     {
@@ -2389,18 +699,18 @@ private async Task OpenRenderSettingsAsync()
                             camera,
                             normalizedX,
                             normalizedY,
-                            lastRenderWidth,
-                            lastRenderHeight));
+                            renderController.LastRenderWidth,
+                            renderController.LastRenderHeight));
                         if (hitId.HasValue)
                         {
-                            SelectObject(hitId.Value, e.KeyModifiers.HasFlag(KeyModifiers.Control));
+                            selectionController.SelectObject(hitId.Value, e.KeyModifiers.HasFlag(KeyModifiers.Control));
                         }
                         else
                         {
                             // A normal viewport click on empty space clears object
                             // selection, matching common DCC viewport behavior.
-                            DeselectObjectFromViewport();
-                            await RequestRenderAsync(interactive: false);
+                            selectionController.DeselectObjectFromViewport();
+                            await renderController.RequestRenderAsync(interactive: false);
                         }
                     }
                     else
@@ -2410,26 +720,25 @@ private async Task OpenRenderSettingsAsync()
                             camera,
                             normalizedX,
                             normalizedY,
-                            lastRenderWidth,
-                            lastRenderHeight,
+                            renderController.LastRenderWidth,
+                            renderController.LastRenderHeight,
                             mode));
                         if (picked != null)
                         {
-                            selectedObjectId = picked.GroupId;
-                            selectedObjectIds.Clear();
-                            selectedObjectIds.Add(picked.GroupId);
+                            selectionController.ActiveObjectId = picked.GroupId;
+                            selectionController.SelectedObjectIds.Clear();
+                            selectionController.SelectedObjectIds.Add(picked.GroupId);
                             // Viewport face selection now targets a polygon face group, not a
                             // raw render triangle. Keep the virtual triangle-tree selection clear.
-                            selectedTriangleGroupId = null;
-                            selectedTriangleIndex = null;
-                            RefreshObjectTree(picked.GroupId);
+                            selectionController.ClearVirtualTriangleSelection();
+                            selectionController.RefreshObjectTree(picked.GroupId);
                             string axisHint = SelectedMoveAxisLock == ComposerGizmoAxis.None
                                 ? "drag X, Y, or Z; press X/Y/Z to lock"
                                 : $"movement is locked to {SelectedMoveAxisLock}";
                             statusText.Text = picked.Mode == ComposerSelectionMode.Face
                                 ? $"Selected {picked.Label}; right-click for Extrude/Inset, or {axisHint}."
                                 : $"Selected {picked.Label}; {axisHint}. Shift is precise and Ctrl snaps.";
-                            await RequestRenderAsync(interactive: false);
+                            await renderController.RequestRenderAsync(interactive: false);
                         }
                     }
                 }
@@ -2441,29 +750,29 @@ private async Task OpenRenderSettingsAsync()
     private async Task ShowFaceContextMenuAsync(Point viewportPoint)
     {
         if (SelectedSelectionMode != ComposerSelectionMode.Face ||
-            !TryViewportToImagePoint(viewportPoint, out Point imagePoint))
+            !transformController.TryViewportToImagePoint(viewportPoint, out Point imagePoint))
         {
             return;
         }
 
-        double normalizedX = imagePoint.X / Math.Max(1, lastRenderWidth);
-        double normalizedY = imagePoint.Y / Math.Max(1, lastRenderHeight);
+        double normalizedX = imagePoint.X / Math.Max(1, renderController.LastRenderWidth);
+        double normalizedY = imagePoint.Y / Math.Max(1, renderController.LastRenderHeight);
         ComposerMeshPickResult? picked = await Task.Run(() => session.PickMeshElement(
             session.Camera.Snapshot(),
             normalizedX,
             normalizedY,
-            lastRenderWidth,
-            lastRenderHeight,
+            renderController.LastRenderWidth,
+            renderController.LastRenderHeight,
             ComposerSelectionMode.Face));
         if (picked == null)
             return;
 
-        selectedObjectId = picked.GroupId;
-        selectedObjectIds.Clear();
-        selectedObjectIds.Add(picked.GroupId);
-        ClearVirtualTriangleSelection();
-        RefreshObjectTree(picked.GroupId);
-        _ = RequestRenderAsync(interactive: true);
+        selectionController.ActiveObjectId = picked.GroupId;
+        selectionController.SelectedObjectIds.Clear();
+        selectionController.SelectedObjectIds.Add(picked.GroupId);
+        selectionController.ClearVirtualTriangleSelection();
+        selectionController.RefreshObjectTree(picked.GroupId);
+        _ = renderController.RequestRenderAsync(interactive: true);
 
         MenuItem extrude = new() { Header = "Extrude Face…" };
         MenuItem inset = new() { Header = "Inset Face…" };
@@ -2481,7 +790,7 @@ private async Task OpenRenderSettingsAsync()
 
     private async Task RunFaceOperationAsync(bool insetOperation)
     {
-        if (selectedObjectId is not int id || !session.CanEditSelectedFace(id))
+        if (selectionController.ActiveObjectId is not int id || !session.CanEditSelectedFace(id))
             return;
 
         FaceOperationDialog dialog = insetOperation
@@ -2503,7 +812,7 @@ private async Task OpenRenderSettingsAsync()
         double amount = operation.Value.AmountMeters;
         double recessDepth = operation.Value.SecondaryMeters;
         ComposerInsetProfile insetProfile = operation.Value.InsetProfile;
-        await StopCurrentRenderAsync();
+        await renderController.StopCurrentRenderAsync();
         SetBusy(true, insetOperation ? "Insetting face…" : "Extruding face…");
         try
         {
@@ -2516,12 +825,12 @@ private async Task OpenRenderSettingsAsync()
                 return;
             }
 
-            ClearVirtualTriangleSelection();
-            selectedObjectIds.Clear();
-            selectedObjectIds.Add(id);
-            selectedObjectId = id;
+            selectionController.ClearVirtualTriangleSelection();
+            selectionController.SelectedObjectIds.Clear();
+            selectionController.SelectedObjectIds.Add(id);
+            selectionController.ActiveObjectId = id;
             pathText.Text = "Untitled composition (modified)";
-            RefreshObjectTree(id);
+            selectionController.RefreshObjectTree(id);
             UpdateHistoryButtons();
             string profileLabel = insetProfile == ComposerInsetProfile.Sloped
                 ? "sloped Blender-style profile"
@@ -2535,7 +844,7 @@ private async Task OpenRenderSettingsAsync()
                 : amount > 1e-9
                     ? $"Extruded face outward by {amount:0.###} m. The object is now an editable mesh."
                     : $"Extruded face inward by {Math.Abs(amount):0.###} m. The object is now an editable mesh.";
-            await RequestRenderAsync(interactive: false);
+            await renderController.RequestRenderAsync(interactive: false);
         }
         catch (Exception ex)
         {
@@ -2547,436 +856,37 @@ private async Task OpenRenderSettingsAsync()
         }
     }
 
-    private bool TryBeginGizmoDrag(Point viewportPoint)
-    {
-        if (selectedObjectId is not int selectedId ||
-            session.GetActiveSelectionBounds() is not Aabb bounds ||
-            !TryViewportToImagePoint(viewportPoint, out Point imagePoint))
-        {
-            return false;
-        }
-
-        bool meshComponent = SelectedSelectionMode != ComposerSelectionMode.Object && session.HasMeshComponentSelection;
-        ComposerObjectState? state = session.GetTransformTargetState(selectedId);
-        if (!meshComponent && state == null)
-            return false;
-
-        CameraDefinition camera = session.Camera.Snapshot();
-        ComposerGizmoMode mode = meshComponent ? ComposerGizmoMode.Translate : SelectedGizmoMode;
-        if (!ComposerOverlayRenderer.TryHitGizmo(
-                mode,
-                camera,
-                bounds,
-                lastRenderWidth,
-                lastRenderHeight,
-                imagePoint.X,
-                imagePoint.Y,
-                meshComponent ? SelectedMoveAxisLock : ComposerGizmoAxis.None,
-                out ComposerGizmoHit hit))
-        {
-            return false;
-        }
-
-        gizmoDrag = new GizmoDragState(
-            selectedId,
-            mode,
-            hit.Axis,
-            imagePoint,
-            meshComponent ? Vec3.Zero : state!.Position,
-            meshComponent ? Vec3.Zero : state!.Rotation,
-            meshComponent ? new Vec3(1, 1, 1) : state!.Scale,
-            hit,
-            meshComponent);
-        statusText.Text = meshComponent
-            ? $"Moving selected {SelectedSelectionMode.ToString().ToLowerInvariant()} on {hit.Axis}…"
-            : $"Dragging {hit.Axis} {mode.ToString().ToLowerInvariant()} gizmo…";
-        return true;
-    }
-
-    private void UpdateGizmoDrag(Point viewportPoint, KeyModifiers modifiers)
-    {
-        GizmoDragState? drag = gizmoDrag;
-        if (drag == null || !TryViewportToImagePoint(viewportPoint, out Point imagePoint))
-            return;
-
-        Vec3 updatedPosition = drag.StartPosition;
-        Vec3 updatedRotation = drag.StartRotation;
-        Vec3 updatedScale = drag.StartScale;
-        double precision = modifiers.HasFlag(KeyModifiers.Shift) ? 0.20 : 1.0;
-        bool snap = modifiers.HasFlag(KeyModifiers.Control);
-
-        switch (drag.Mode)
-        {
-            case ComposerGizmoMode.Rotate:
-            {
-                double angle = PointerAngle(imagePoint.X, imagePoint.Y, drag.CenterX, drag.CenterY);
-                double angularStep;
-                CameraDefinition camera = session.Camera.Snapshot();
-                bool hasPlaneVector = ComposerOverlayRenderer.TryGetRotationPlaneVector(
-                    camera,
-                    lastRenderWidth,
-                    lastRenderHeight,
-                    imagePoint.X,
-                    imagePoint.Y,
-                    drag.WorldCenter,
-                    drag.Axis,
-                    out Vec3 currentVector);
-                if (hasPlaneVector && drag.LastRotationVector.Length() > 1e-8)
-                {
-                    Vec3 axis = AxisVector(drag.Axis);
-                    angularStep = Math.Atan2(
-                        axis.Dot(drag.LastRotationVector.Cross(currentVector)),
-                        Math.Clamp(drag.LastRotationVector.Dot(currentVector), -1.0, 1.0));
-                    drag.LastRotationVector = currentVector;
-                }
-                else
-                {
-                    angularStep = WrapAngle(angle - drag.LastPointerAngle) * drag.GestureSign;
-                    drag.LastRotationVector = hasPlaneVector ? currentVector : Vec3.Zero;
-                }
-
-                drag.LastPointerAngle = angle;
-                drag.AccumulatedGesture += angularStep * precision;
-                double rotationDelta = drag.AccumulatedGesture;
-                if (snap)
-                {
-                    double increment = Math.PI / 36.0; // five degrees
-                    rotationDelta = Math.Round(rotationDelta / increment) * increment;
-                }
-                updatedRotation = AddAxisComponent(drag.StartRotation, drag.Axis, rotationDelta);
-                break;
-            }
-            case ComposerGizmoMode.Scale:
-            {
-                double deltaX = imagePoint.X - drag.LastImagePoint.X;
-                double deltaY = imagePoint.Y - drag.LastImagePoint.Y;
-                double pixelStep = drag.Axis == ComposerGizmoAxis.Uniform
-                    ? deltaX - deltaY
-                    : deltaX * drag.ScreenDirectionX + deltaY * drag.ScreenDirectionY;
-                drag.AccumulatedGesture += pixelStep * precision;
-                drag.LastImagePoint = imagePoint;
-                double factor = Math.Exp(drag.AccumulatedGesture / 140.0);
-                factor = Math.Clamp(factor, 0.01, 100.0);
-                if (snap)
-                    factor = Math.Max(0.01, Math.Round(factor * 10.0) / 10.0);
-                updatedScale = ScaleAxis(drag.StartScale, drag.Axis, factor);
-                break;
-            }
-            default:
-            {
-                double deltaX = imagePoint.X - drag.LastImagePoint.X;
-                double deltaY = imagePoint.Y - drag.LastImagePoint.Y;
-                double pixelStep = deltaX * drag.ScreenDirectionX + deltaY * drag.ScreenDirectionY;
-                drag.AccumulatedGesture += pixelStep * precision;
-                drag.LastImagePoint = imagePoint;
-                double worldDistance = drag.AccumulatedGesture * drag.WorldUnitsPerPixel;
-                if (snap)
-                {
-                    double increment = Math.Max(0.01, drag.WorldUnitsPerPixel * 10.0);
-                    worldDistance = Math.Round(worldDistance / increment) * increment;
-                }
-                updatedPosition = drag.StartPosition + AxisVector(drag.Axis) * worldDistance;
-                break;
-            }
-        }
-
-        bool updated = drag.MeshComponent
-            ? session.UpdateMeshElementMovePreview(drag.SelectedId, updatedPosition)
-            : session.UpdateTransformTarget(
-                drag.SelectedId,
-                updatedPosition,
-                updatedRotation,
-                updatedScale);
-        if (!updated)
-        {
-            gizmoDrag = null;
-            statusText.Text = "The transform target no longer exists.";
-            return;
-        }
-
-        if (!drag.MeshComponent)
-            LoadInspectorFromSelection();
-        pathText.Text = "Untitled composition (modified)";
-
-        ComposerRendererKind renderer = SelectedRenderer.Kind;
-        if (renderer == ComposerRendererKind.VulkanRaster || CanRenderContinuously(renderer))
-        {
-            _ = RequestRenderAsync(interactive: true);
-            statusText.Text = drag.MeshComponent
-                ? renderer == ComposerRendererKind.VulkanRaster
-                    ? $"Live Vulkan mesh deformation preview; release to bake welded vertices once."
-                    : $"Pseudo-real-time component overlay; release to rebuild welded vertices once."
-                : renderer == ComposerRendererKind.VulkanRaster
-                    ? $"Live Vulkan {drag.Mode.ToString().ToLowerInvariant()} preview; release to bake once."
-                    : $"Pseudo-real-time {drag.Mode.ToString().ToLowerInvariant()} preview; release for the final frame.";
-        }
-        else
-        {
-            statusText.Text = drag.MeshComponent
-                ? $"{SelectedRenderer.Label}: release to bake the component move."
-                : $"{SelectedRenderer.Label}: release to render the {drag.Mode.ToString().ToLowerInvariant()} transform.";
-        }
-    }
-
-    private static Vec3 AxisVector(ComposerGizmoAxis axis) => axis switch
-    {
-        ComposerGizmoAxis.X => new Vec3(1, 0, 0),
-        ComposerGizmoAxis.Y => new Vec3(0, 1, 0),
-        ComposerGizmoAxis.Z => new Vec3(0, 0, 1),
-        _ => Vec3.Zero
-    };
-
-    private static Vec3 AddAxisComponent(Vec3 start, ComposerGizmoAxis axis, double delta) => axis switch
-    {
-        ComposerGizmoAxis.X => new Vec3(start.X + delta, start.Y, start.Z),
-        ComposerGizmoAxis.Y => new Vec3(start.X, start.Y + delta, start.Z),
-        ComposerGizmoAxis.Z => new Vec3(start.X, start.Y, start.Z + delta),
-        _ => start
-    };
-
-    private static Vec3 ScaleAxis(Vec3 start, ComposerGizmoAxis axis, double factor) => axis switch
-    {
-        ComposerGizmoAxis.X => new Vec3(start.X * factor, start.Y, start.Z),
-        ComposerGizmoAxis.Y => new Vec3(start.X, start.Y * factor, start.Z),
-        ComposerGizmoAxis.Z => new Vec3(start.X, start.Y, start.Z * factor),
-        _ => start * factor
-    };
-
-    private static double PointerAngle(double x, double y, double centerX, double centerY) =>
-        Math.Atan2(centerY - y, x - centerX);
-
-    private static double WrapAngle(double angle)
-    {
-        while (angle > Math.PI) angle -= Math.PI * 2.0;
-        while (angle < -Math.PI) angle += Math.PI * 2.0;
-        return angle;
-    }
-
-    private bool TryViewportToImagePoint(Point viewportPoint, out Point imagePoint)
-    {
-        double viewportWidth = viewport.Bounds.Width;
-        double viewportHeight = viewport.Bounds.Height;
-        if (lastRenderWidth <= 0 || lastRenderHeight <= 0 || viewportWidth <= 0 || viewportHeight <= 0)
-        {
-            imagePoint = default;
-            return false;
-        }
-
-        double scale = Math.Min(viewportWidth / lastRenderWidth, viewportHeight / lastRenderHeight);
-        double displayedWidth = lastRenderWidth * scale;
-        double displayedHeight = lastRenderHeight * scale;
-        double offsetX = (viewportWidth - displayedWidth) * 0.5;
-        double offsetY = (viewportHeight - displayedHeight) * 0.5;
-        double localX = viewportPoint.X - offsetX;
-        double localY = viewportPoint.Y - offsetY;
-        if (localX < 0 || localY < 0 || localX > displayedWidth || localY > displayedHeight)
-        {
-            imagePoint = default;
-            return false;
-        }
-
-        imagePoint = new Point(localX / scale, localY / scale);
-        return true;
-    }
-
     private void OpenPrimitiveParameters()
     {
-        if (selectedObjectId is not int id)
+        if (selectionController.ActiveObjectId is not int id)
             return;
 
-        if (primitiveParametersWindow != null)
-        {
-            if (primitiveParametersWindow.ObjectId == id)
-            {
-                primitiveParametersWindow.Activate();
-                return;
-            }
-            ClosePrimitiveParametersWindow();
-        }
-
-        selectionModeBox.SelectedIndex = 0;
-        ComposerPrimitiveParameterModel? model = session.BeginPrimitiveParameterEdit(id);
-        if (model == null)
-        {
-            statusText.Text = "The selected object is an ordinary mesh and has no procedural parameters.";
-            LoadInspectorFromSelection();
-            return;
-        }
-
-        PrimitiveParametersWindow? dialog = null;
-        dialog = new PrimitiveParametersWindow(
-            session,
-            model,
-            onPreviewChanged: () =>
-            {
-                pathText.Text = "Untitled composition (modified)";
-                _ = RequestRenderAsync(interactive: true);
-            },
-            onCommittedOrConverted: () =>
-            {
-                RefreshObjectTree(id);
-                LoadInspectorFromSelection();
-                UpdateHistoryButtons();
-                pathText.Text = "Untitled composition (modified)";
-                _ = RequestRenderAsync(interactive: false);
-            },
-            onClosed: () =>
-            {
-                if (ReferenceEquals(primitiveParametersWindow, dialog))
-                    primitiveParametersWindow = null;
-                LoadInspectorFromSelection();
-            });
-        primitiveParametersWindow = dialog;
-        dialog.Show(this);
-        statusText.Text = $"Editing {model.PrimitiveName} parameters. All length values are meters (m).";
-    }
-
-    private void ClosePrimitiveParametersWindow()
-    {
-        PrimitiveParametersWindow? dialog = primitiveParametersWindow;
-        if (dialog == null)
-            return;
-        primitiveParametersWindow = null;
-        try { dialog.Close(); } catch { }
+        dialogController.OpenPrimitiveParameters(
+            id,
+            () => selectionModeBox.SelectedIndex = 0,
+            message => statusText.Text = message,
+            () => pathText.Text = "Untitled composition (modified)",
+            () => _ = renderController.RequestRenderAsync(interactive: true),
+            () => _ = renderController.RequestRenderAsync(interactive: false),
+            selectionController.LoadInspectorFromSelection,
+            UpdateHistoryButtons,
+            objectId => selectionController.RefreshObjectTree(objectId));
     }
 
     private void OpenMaterialEditor()
     {
-        if (selectedObjectId is not int id)
+        if (selectionController.ActiveObjectId is not int id)
             return;
 
-        if (materialEditorWindow != null)
-        {
-            if (materialEditorWindow.ObjectId == id)
-            {
-                materialEditorWindow.Activate();
-                return;
-            }
-            CloseMaterialEditorWindow();
-        }
-
-        selectionModeBox.SelectedIndex = 0;
-        ComposerMaterialModel? model = session.GetMaterialModel(id);
-        if (model == null)
-        {
-            statusText.Text = "The selected object has no material-bearing mesh geometry.";
-            return;
-        }
-
-        MaterialEditorWindow? dialog = null;
-        dialog = new MaterialEditorWindow(
-            session,
-            model,
-            onMaterialChanged: () =>
-            {
-                if (primitiveParametersWindow?.ObjectId == id)
-                    primitiveParametersWindow.RebaseAfterExternalEdit("Material changed. Procedural geometry parameters remain editable.");
-                RefreshObjectTree(id);
-                LoadInspectorFromSelection();
-                UpdateHistoryButtons();
-                pathText.Text = "Untitled composition (modified)";
-                statusText.Text = "Material updated. Procedural geometry, when present, was preserved.";
-                _ = RequestRenderAsync(interactive: false);
-            },
-            onClosed: () =>
-            {
-                if (ReferenceEquals(materialEditorWindow, dialog))
-                    materialEditorWindow = null;
-            });
-        materialEditorWindow = dialog;
-        dialog.Show(this);
-        statusText.Text = "Material editor opened. Presets, direct PBR properties, exact RGB/hex color, and image textures apply to the selected object.";
-    }
-
-    private void CloseMaterialEditorWindow()
-    {
-        MaterialEditorWindow? dialog = materialEditorWindow;
-        if (dialog == null)
-            return;
-        materialEditorWindow = null;
-        try { dialog.Close(); } catch { }
-    }
-
-    private void DeselectObjectFromViewport()
-    {
-        ClosePrimitiveParametersWindow();
-        CloseMaterialEditorWindow();
-        selectedObjectId = null;
-        selectedObjectIds.Clear();
-        ClearVirtualTriangleSelection();
-        session.SetSelectedObject(null);
-        RefreshObjectTree();
-        statusText.Text = "Selection cleared.";
-    }
-
-    private void SelectObject(int id, bool toggle = false)
-    {
-        if (session.GetObjectState(id) == null)
-            return;
-
-        if (toggle)
-        {
-            if (!selectedObjectIds.Add(id))
-            {
-                selectedObjectIds.Remove(id);
-                if (selectedObjectId == id)
-                    selectedObjectId = selectedObjectIds.Count > 0 ? selectedObjectIds.Last() : null;
-            }
-            else
-            {
-                selectedObjectId = id;
-            }
-        }
-        else
-        {
-            selectedObjectIds.Clear();
-            selectedObjectIds.Add(id);
-            selectedObjectId = id;
-        }
-
-        if (selectedObjectId is not int activeId)
-        {
-            session.SetSelectedObject(null);
-            ClosePrimitiveParametersWindow();
-            CloseMaterialEditorWindow();
-            RefreshObjectTree();
-            statusText.Text = "Selection cleared.";
-            _ = RequestRenderAsync(interactive: false);
-            return;
-        }
-
-        if (primitiveParametersWindow != null && primitiveParametersWindow.ObjectId != activeId)
-            ClosePrimitiveParametersWindow();
-        if (materialEditorWindow != null && materialEditorWindow.ObjectId != activeId)
-            CloseMaterialEditorWindow();
-        selectionModeBox.SelectedIndex = 0;
-        ClearVirtualTriangleSelection();
-        session.SetSelectedObject(activeId);
-        RefreshObjectTree(activeId);
-        statusText.Text = selectedObjectIds.Count > 1
-            ? $"{selectedObjectIds.Count} objects selected. Ctrl-click toggles selection; Group combines sibling objects."
-            : "Object selected.";
-        _ = RequestRenderAsync(interactive: false);
-    }
-
-    private void SelectTriangle(int groupId, int triangleIndex)
-    {
-        if (!session.SetSelectedTriangle(groupId, triangleIndex))
-            return;
-
-        selectionModeBox.SelectedIndex = Array.FindIndex(selectionModeChoices, choice => choice.Mode == ComposerSelectionMode.Face);
-        selectedObjectId = groupId;
-        selectedTriangleGroupId = groupId;
-        selectedTriangleIndex = triangleIndex;
-        RefreshObjectTree(groupId);
-        statusText.Text = "Selected logical polygon face. Right-click it for Extrude/Inset, or drag the move gizmo to move the whole face.";
-        _ = RequestRenderAsync(interactive: false);
-    }
-
-    private void ClearVirtualTriangleSelection()
-    {
-        selectedTriangleGroupId = null;
-        selectedTriangleIndex = null;
+        dialogController.OpenMaterialEditor(
+            id,
+            () => selectionModeBox.SelectedIndex = 0,
+            message => statusText.Text = message,
+            () => pathText.Text = "Untitled composition (modified)",
+            () => _ = renderController.RequestRenderAsync(interactive: false),
+            selectionController.LoadInspectorFromSelection,
+            UpdateHistoryButtons,
+            objectId => selectionController.RefreshObjectTree(objectId));
     }
 
     private void OnWindowKeyDown(object? sender, KeyEventArgs e)
@@ -3110,7 +1020,7 @@ private async Task OpenRenderSettingsAsync()
 
         if (changed)
         {
-            _ = RequestRenderAsync(interactive: false);
+            _ = renderController.RequestRenderAsync(interactive: false);
             e.Handled = true;
         }
     }
@@ -3142,234 +1052,7 @@ private async Task OpenRenderSettingsAsync()
             gizmoModeBox.SelectedIndex = index;
     }
 
-    private bool CanRenderContinuously(ComposerRendererKind renderer)
-    {
-        if (renderer == ComposerRendererKind.Raster)
-            return true;
-        if (renderer == ComposerRendererKind.Cpu)
-            return false;
-        if (!lastFrameTimes.TryGetValue(renderer, out double milliseconds))
-            return false;
-        return milliseconds <= (renderer == ComposerRendererKind.VulkanRaster ? 160.0 : 220.0);
-    }
 
-    private async Task RequestRenderAsync(bool interactive)
-    {
-        if (!session.HasRenderableScene || lifetimeCancellation.IsCancellationRequested)
-            return;
-
-        pendingInteractive = interactive;
-        renderVersion++;
-        if (!interactive)
-            activeRenderCancellation?.Cancel();
-
-        if (rendering)
-        {
-            renderAgain = true;
-            return;
-        }
-
-        rendering = true;
-        try
-        {
-            do
-            {
-                renderAgain = false;
-                bool thisInteractive = pendingInteractive;
-                pendingInteractive = false;
-                long thisVersion = renderVersion;
-
-                using CancellationTokenSource frameCancellation =
-                    CancellationTokenSource.CreateLinkedTokenSource(lifetimeCancellation.Token);
-                activeRenderCancellation = frameCancellation;
-                try
-                {
-                    await RenderOneFrameAsync(thisInteractive, thisVersion, frameCancellation.Token);
-                }
-                finally
-                {
-                    if (ReferenceEquals(activeRenderCancellation, frameCancellation))
-                        activeRenderCancellation = null;
-                }
-            }
-            while (renderAgain && !lifetimeCancellation.IsCancellationRequested);
-        }
-        finally
-        {
-            rendering = false;
-        }
-    }
-
-    private async Task RenderOneFrameAsync(bool interactive, long requestVersion, CancellationToken token)
-    {
-        RendererChoice renderer = SelectedRenderer;
-        ComposerGizmoMode gizmoMode = SelectedGizmoMode;
-        bool objectGizmoOnly = gizmoDrag is { MeshComponent: false };
-        ComposerRenderOptions options = renderOptions[renderer.Kind];
-        (int width, int height) = ChooseRenderSize(renderer.Kind, interactive, options);
-        CameraDefinition camera = session.Camera.Snapshot();
-        if (ComposerRenderOptions.SupportsFieldOfView(renderer.Kind))
-            camera.FieldOfViewDegrees = options.FieldOfViewDegrees;
-
-        RenderOptions.SetBitmapInterpolationMode(
-            image,
-            interactive ? BitmapInterpolationMode.LowQuality : BitmapInterpolationMode.HighQuality);
-
-        if (!interactive)
-            statusText.Text = $"Rendering {renderer.Label} at {width}x{height}…";
-
-        try
-        {
-            ComposerFrame frame = await Task.Run(
-                () => session.Render(
-                    renderer.Kind,
-                    camera,
-                    width,
-                    height,
-                    interactive,
-                    token,
-                    gizmoMode,
-                    objectGizmoOnly,
-                    options),
-                token);
-
-            if (token.IsCancellationRequested || (!interactive && requestVersion != renderVersion))
-                return;
-
-            lastRenderWidth = frame.Image.Width;
-            lastRenderHeight = frame.Image.Height;
-            lastFrameTimes[renderer.Kind] = lastFrameTimes.TryGetValue(renderer.Kind, out double previous)
-                ? previous * 0.70 + frame.ElapsedMilliseconds * 0.30
-                : frame.ElapsedMilliseconds;
-
-            ShowImage(frame.Image);
-            double fps = frame.ElapsedMilliseconds > 0.001 ? 1000.0 / frame.ElapsedMilliseconds : 0.0;
-            long workingSet = Process.GetCurrentProcess().WorkingSet64;
-            statusText.Text = $"{renderer.Label}: {frame.ElapsedMilliseconds:0.0} ms ({fps:0.0} FPS) | " +
-                              $"{session.ObjectCount:N0} objects | {session.TriangleCount:N0} triangles | " +
-                              $"{FormatBytes(workingSet)} process memory";
-            detailsText.Text = frame.Details;
-        }
-        catch (OperationCanceledException) when (token.IsCancellationRequested)
-        {
-        }
-        catch (Exception ex)
-        {
-            if (requestVersion == renderVersion && !lifetimeCancellation.IsCancellationRequested)
-                statusText.Text = $"{renderer.Label} failed: {ex.Message}";
-        }
-    }
-
-
-private static (int Width, int Height) ChooseRenderSize(
-    ComposerRendererKind renderer,
-    bool interactive,
-    ComposerRenderOptions options)
-{
-    options.Validate();
-
-    if (!interactive || renderer == ComposerRendererKind.Cpu)
-        return (AlignToEight(Math.Max(8, options.Width)), AlignToEight(Math.Max(8, options.Height)));
-
-    int maxWidth = renderer == ComposerRendererKind.VulkanCompute ? 640 : 960;
-    int maxHeight = renderer == ComposerRendererKind.VulkanCompute ? 360 : 540;
-
-    double scale = Math.Min(
-        1.0,
-        Math.Min(
-            maxWidth / (double)Math.Max(1, options.Width),
-            maxHeight / (double)Math.Max(1, options.Height)));
-
-    int width = AlignToEight(Math.Max(160, (int)Math.Round(options.Width * scale)));
-    int height = AlignToEight(Math.Max(96, (int)Math.Round(options.Height * scale)));
-    return (width, height);
-}
-
-    private unsafe void ShowImage(RenderImage rendered)
-    {
-        bool sizeChanged = bitmap == null ||
-                           bitmap.PixelSize.Width != rendered.Width ||
-                           bitmap.PixelSize.Height != rendered.Height;
-        if (sizeChanged)
-        {
-            WriteableBitmap next = new(
-                new PixelSize(rendered.Width, rendered.Height),
-                new Vector(96, 96),
-                PixelFormats.Rgba8888,
-                AlphaFormat.Unpremul);
-            WriteableBitmap? old = bitmap;
-            bitmap = next;
-            image.Source = next;
-            old?.Dispose();
-        }
-
-        using ILockedFramebuffer framebuffer = bitmap!.Lock();
-        fixed (uint* sourceBase = rendered.PackedRgba32)
-        {
-            long sourceRowBytes = checked((long)rendered.Width * sizeof(uint));
-            for (int y = 0; y < rendered.Height; y++)
-            {
-                byte* source = (byte*)(sourceBase + y * rendered.Width);
-                byte* destination = (byte*)framebuffer.Address + y * framebuffer.RowBytes;
-                Buffer.MemoryCopy(source, destination, framebuffer.RowBytes, sourceRowBytes);
-            }
-        }
-        image.InvalidateVisual();
-    }
-
-    private void ScheduleResizeRender()
-    {
-        if (!session.HasRenderableScene || lifetimeCancellation.IsCancellationRequested)
-            return;
-
-        resizeDebounceCancellation?.Cancel();
-        CancellationTokenSource cancellation = CancellationTokenSource.CreateLinkedTokenSource(lifetimeCancellation.Token);
-        resizeDebounceCancellation = cancellation;
-        _ = RenderAfterResizeDelayAsync(cancellation);
-    }
-
-    private async Task RenderAfterResizeDelayAsync(CancellationTokenSource cancellation)
-    {
-        try
-        {
-            await Task.Delay(140, cancellation.Token);
-            await RequestRenderAsync(interactive: false);
-        }
-        catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
-        {
-        }
-        finally
-        {
-            if (ReferenceEquals(resizeDebounceCancellation, cancellation))
-                resizeDebounceCancellation = null;
-            cancellation.Dispose();
-        }
-    }
-
-    private async Task StopCurrentRenderAsync()
-    {
-        renderVersion++;
-        renderAgain = false;
-        pendingInteractive = false;
-        activeRenderCancellation?.Cancel();
-
-        while (rendering && !lifetimeCancellation.IsCancellationRequested)
-            await Task.Delay(8, lifetimeCancellation.Token);
-    }
-
-    private static bool NearlyEqual(Vec3 left, Vec3 right)
-    {
-        const double tolerance = 1e-8;
-        return Math.Abs(left.X - right.X) <= tolerance &&
-               Math.Abs(left.Y - right.Y) <= tolerance &&
-               Math.Abs(left.Z - right.Z) <= tolerance;
-    }
-
-    private void ClearTransformTextBoxes()
-    {
-        foreach (TextBox box in TransformTextBoxes())
-            box.Text = string.Empty;
-    }
 
     private void UpdateHistoryButtons()
     {
@@ -3382,20 +1065,13 @@ private static (int Width, int Height) ChooseRenderSize(
             ? $"Redo {redoDescription}"
             : "Redo";
 
-        if (undoMenuItem is not null)
-        {
-            undoMenuItem.IsEnabled = undoButton.IsEnabled;
-            redoMenuItem.IsEnabled = redoButton.IsEnabled;
-            undoMenuItem.Header = undoButton.Content?.ToString() ?? "Undo";
-            redoMenuItem.Header = redoButton.Content?.ToString() ?? "Redo";
-        }
+        menuController.UpdateHistory(
+            undoButton.Content?.ToString() ?? "Undo",
+            undoButton.IsEnabled,
+            redoButton.Content?.ToString() ?? "Redo",
+            redoButton.IsEnabled);
     }
 
-    private void CancelCurrentRender()
-    {
-        renderVersion++;
-        activeRenderCancellation?.Cancel();
-    }
 
     private void SetBusy(bool busy, string? message = null)
     {
@@ -3414,8 +1090,8 @@ private static (int Width, int Height) ChooseRenderSize(
         objectTree.IsEnabled = !busy;
         if (busy)
             parametersButton.IsEnabled = false;
-        if (selectedObjectId.HasValue)
-            SetInspectorEnabled(!busy);
+        if (selectionController.ActiveObjectId.HasValue)
+            selectionController.SetInspectorEnabled(!busy);
         if (busy)
         {
             undoButton.IsEnabled = false;
@@ -3427,7 +1103,7 @@ private static (int Width, int Height) ChooseRenderSize(
         }
         if (!string.IsNullOrWhiteSpace(message))
             statusText.Text = message;
-        SyncMenuEnabledState();
+        menuController.SyncEnabledState();
     }
 
     private void ReportOperationFailure(string operation, Exception exception)
@@ -3440,20 +1116,11 @@ private static (int Width, int Height) ChooseRenderSize(
 
     private void DisposeWindowResources()
     {
-        ClosePrimitiveParametersWindow();
-        CloseMaterialEditorWindow();
         hoverPulseTimer.Stop();
-        windowsTrackpadFrameTimer.Stop();
-        windowsTrackpadIdleRenderTimer.Stop();
-        pendingWindowsTrackpadOrbitX = 0.0;
-        pendingWindowsTrackpadOrbitY = 0.0;
-        pendingWindowsTrackpadZoom = 0.0;
-        pendingWindowsTrackpadTurn = 0.0;
-        DetachWindowsTrackpadInput();
+        dialogController.Dispose();
+        navigationController.Dispose();
         lifetimeCancellation.Cancel();
-        activeRenderCancellation?.Cancel();
-        resizeDebounceCancellation?.Cancel();
-        bitmap?.Dispose();
+        renderController.Dispose();
         session.Dispose();
         lifetimeCancellation.Dispose();
     }
@@ -3466,83 +1133,5 @@ private static (int Width, int Height) ChooseRenderSize(
         TextAlignment = TextAlignment.Right,
         MinWidth = 65
     };
-    private static TextBlock Heading(string text) => new()
-    {
-        Text = text,
-        FontWeight = FontWeight.SemiBold,
-        FontSize = 15
-    };
 
-    private static Control LabeledControl(string label, Control control)
-    {
-        Grid grid = new()
-        {
-            ColumnDefinitions = new ColumnDefinitions("Auto,*"),
-            ColumnSpacing = 8
-        };
-        TextBlock text = new() { Text = label, VerticalAlignment = VerticalAlignment.Center };
-        grid.Children.Add(text);
-        grid.Children.Add(control);
-        Grid.SetColumn(control, 1);
-        return grid;
-    }
-
-    private static Control VectorRow(TextBox x, TextBox y, TextBox z)
-    {
-        Grid grid = new()
-        {
-            ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto,*,Auto,*"),
-            ColumnSpacing = 5
-        };
-        Add("X", x, 0);
-        Add("Y", y, 2);
-        Add("Z", z, 4);
-        return grid;
-
-        void Add(string label, TextBox box, int column)
-        {
-            TextBlock text = new() { Text = label, VerticalAlignment = VerticalAlignment.Center };
-            grid.Children.Add(text);
-            Grid.SetColumn(text, column);
-            grid.Children.Add(box);
-            Grid.SetColumn(box, column + 1);
-        }
-    }
-
-    private static void WriteVector(Vec3 value, TextBox x, TextBox y, TextBox z)
-    {
-        x.Text = value.X.ToString("0.######", CultureInfo.InvariantCulture);
-        y.Text = value.Y.ToString("0.######", CultureInfo.InvariantCulture);
-        z.Text = value.Z.ToString("0.######", CultureInfo.InvariantCulture);
-    }
-
-    private static Vec3 ReadVector(TextBox x, TextBox y, TextBox z, string label) => new(
-        ParseDouble(x.Text, $"{label} X"),
-        ParseDouble(y.Text, $"{label} Y"),
-        ParseDouble(z.Text, $"{label} Z"));
-
-    private static double ParseDouble(string? text, string label)
-    {
-        if (double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out double invariant) && double.IsFinite(invariant))
-            return invariant;
-        if (double.TryParse(text, NumberStyles.Float, CultureInfo.CurrentCulture, out double current) && double.IsFinite(current))
-            return current;
-        throw new FormatException($"{label} must be a finite number.");
-    }
-
-
-    private static int AlignToEight(int value) => Math.Max(8, (value + 7) & ~7);
-
-    private static string FormatBytes(long bytes)
-    {
-        string[] suffixes = ["B", "KB", "MB", "GB", "TB"];
-        double value = bytes;
-        int suffix = 0;
-        while (value >= 1024.0 && suffix < suffixes.Length - 1)
-        {
-            value /= 1024.0;
-            suffix++;
-        }
-        return $"{value:0.0} {suffixes[suffix]}";
-    }
 }

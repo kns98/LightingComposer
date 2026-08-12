@@ -1,0 +1,55 @@
+Lighting Composer controller refactor - static validation
+=========================================================
+
+Base: previous working menubar + general render-settings + Windows native trackpad tree.
+
+Architecture
+------------
+ComposerWindow.cs: 1137 lines (previously approximately 3550 before extraction)
+No partial ComposerWindow classes.
+
+Extracted normal classes:
+- ComposerRenderController
+- ViewportNavigationController
+- ComposerMenuController
+- ComposerSelectionController
+- ComposerTransformController
+- ComposerFileController
+- ComposerSceneCommandController
+- ComposerDialogController
+- ComposerCommandCoordinator
+- ComposerWindowLayout
+
+Static validation
+-----------------
+PASS - 157 C# files scanned with comment/string-aware delimiter validation
+PASS - 12 .csproj files parse as XML
+PASS - all 12 project files retain net10.0
+PASS - Composer retains Avalonia 12.1.1
+PASS - ComposerWindow contains no WM_POINTER/native Win32 touchpad implementation
+PASS - ComposerWindow contains no WriteableBitmap/render implementation
+PASS - ComposerWindow contains no selectedObjectId/selectedObjectIds ownership
+PASS - ComposerWindow contains no GizmoDragState ownership
+PASS - Windows Precision Touchpad implementation remains under ViewportNavigationController
+PASS - general per-renderer settings implementation retained
+PASS - no bin/, obj/, or .git/ directories are intended in the package
+
+Build execution
+---------------
+NOT RUN: the packaging environment does not contain a .NET SDK/compiler.
+
+Recommended target-machine validation
+-------------------------------------
+dotnet restore .\LightingShowcase.Composer.sln
+dotnet build .\LightingShowcase.Composer.sln -c Debug --no-restore
+dotnet test .\LightingShowcase.Composer.Tests\LightingShowcase.Composer.Tests.csproj -c Debug --no-build
+
+Interactive smoke test
+----------------------
+1. Open/insert a model and exercise Save/Export.
+2. Test object + vertex + edge + face selection.
+3. Test G/R/S gizmos, axis locks, undo/redo, grouping, duplication and deletion.
+4. Test Parameters and Material modeless dialogs.
+5. Switch all renderer modes and open Render > Settings.
+6. On Windows Precision Touchpad: two-finger orbit, pinch zoom, circular turn.
+7. On Linux: verify ordinary mouse/navigation path and confirm no Windows-native code executes.
