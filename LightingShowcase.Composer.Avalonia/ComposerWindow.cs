@@ -9,6 +9,7 @@ using Avalonia.Platform;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using LightingShowcase.CameraSystem;
+using LightingShowcase.Composer.Navigation.Windows;
 using LightingShowcase.Math3D;
 using LightingShowcase.Rendering;
 using LightingShowcase.SceneGraph;
@@ -212,6 +213,15 @@ internal sealed class ComposerWindow : Window
     private CancellationTokenSource? activeRenderCancellation;
     private CancellationTokenSource? resizeDebounceCancellation;
     private readonly DispatcherTimer hoverPulseTimer;
+    private readonly DispatcherTimer windowsTrackpadFrameTimer;
+    private readonly DispatcherTimer windowsTrackpadIdleRenderTimer;
+    private WindowsPrecisionTouchpadGestureSource? windowsTrackpadInput;
+    private Win32Properties.CustomWndProcHookCallback? windowsTrackpadWndProcHook;
+    private bool windowsTrackpadGestureCapturedByViewport;
+    private double pendingWindowsTrackpadOrbitX;
+    private double pendingWindowsTrackpadOrbitY;
+    private double pendingWindowsTrackpadZoom;
+    private double pendingWindowsTrackpadTurn;
     private PrimitiveParametersWindow? primitiveParametersWindow;
     private MaterialEditorWindow? materialEditorWindow;
     private long lastHoverProbeTimestamp;
@@ -328,6 +338,23 @@ internal sealed class ComposerWindow : Window
             ClipToBounds = true
         };
 
+        windowsTrackpadFrameTimer = new DispatcherTimer
+        {
+            Interval = TimeSpan.FromMilliseconds(16)
+        };
+        windowsTrackpadFrameTimer.Tick += (_, _) => ApplyPendingWindowsTrackpadNavigation();
+
+        windowsTrackpadIdleRenderTimer = new DispatcherTimer
+        {
+            Interval = TimeSpan.FromMilliseconds(140)
+        };
+        windowsTrackpadIdleRenderTimer.Tick += (_, _) =>
+        {
+            windowsTrackpadIdleRenderTimer.Stop();
+            if (session.HasRenderableScene && !lifetimeCancellation.IsCancellationRequested)
+                _ = RequestRenderAsync(interactive: false);
+        };
+
         hoverPulseTimer = new DispatcherTimer
         {
             Interval = TimeSpan.FromMilliseconds(280)
@@ -351,6 +378,7 @@ internal sealed class ComposerWindow : Window
 
         Opened += async (_, _) =>
         {
+            AttachWindowsTrackpadInput();
             string? startupPath = startupArguments.FirstOrDefault(argument => !argument.StartsWith("--", StringComparison.Ordinal));
             if (!string.IsNullOrWhiteSpace(startupPath))
                 await LoadSceneAsync(startupPath);
@@ -509,7 +537,7 @@ internal sealed class ComposerWindow : Window
         stack.Children.Add(resetTransformButton);
         stack.Children.Add(new TextBlock
         {
-            Text = "Hierarchy: ▸/▾ expands groups and … show faces reveals logical polygon faces (a Cube has six). Ctrl-click objects to multi-select; Group/Ctrl+G wraps sibling objects and Ctrl+Shift+G ungroups. Standard primitives: Plane, Cube, Circle, UV Sphere, Icosphere, Cylinder, Cone, Torus, and Grid. Use Parameters… for real dimensions in meters and Material… for PBR/color/textures. Face mode (3): right-click a polygon for Extrude or Inset; Extrude uses signed distance (+ outward, - inward), while inset depth uses + inward / - outward and offers Square or Sloped (Blender-style) depth profiles. Object/Vertex/Edge/Face modes use 4/1/2/3. Gizmos: G move, R rotate, S scale; Shift is precision and Ctrl snaps. Viewport: right drag orbits, middle drag pans, and wheel zooms.",
+            Text = "Hierarchy: ▸/▾ expands groups and … show faces reveals logical polygon faces (a Cube has six). Ctrl-click objects to multi-select; Group/Ctrl+G wraps sibling objects and Ctrl+Shift+G ungroups. Standard primitives: Plane, Cube, Circle, UV Sphere, Icosphere, Cylinder, Cone, Torus, and Grid. Use Parameters… for real dimensions in meters and Material… for PBR/color/textures. Face mode (3): right-click a polygon for Extrude or Inset; Extrude uses signed distance (+ outward, - inward), while inset depth uses + inward / - outward and offers Square or Sloped (Blender-style) depth profiles. Object/Vertex/Edge/Face modes use 4/1/2/3. Gizmos: G move, R rotate, S scale; Shift is precision and Ctrl snaps. Viewport: right drag orbits, middle drag pans, and mouse wheel zooms. On Windows Precision Touchpads, two-finger translation orbits, pinch/spread zooms, and two-finger twist rolls the scene around the view center.",
             TextWrapping = TextWrapping.Wrap,
             Opacity = 0.68,
             FontSize = 12,
@@ -1681,6 +1709,197 @@ internal sealed class ComposerWindow : Window
             statusText.Text = $"{SelectedRenderer.Label}: release the mouse to render the new view.";
 
         e.Handled = true;
+    }
+
+    private void AttachWindowsTrackpadInput()
+    {
+        if (!OperatingSystem.IsWindows() || windowsTrackpadInput is not null)
+            return;
+
+        IPlatformHandle? handle = TryGetPlatformHandle();
+        if (handle is null || handle.Handle == 0)
+            return;
+
+        var source = new WindowsPrecisionTouchpadGestureSource();
+        source.Orbit += OnWindowsTrackpadOrbit;
+        source.Zoom += OnWindowsTrackpadZoom;
+        source.Turn += OnWindowsTrackpadTurn;
+
+        Win32Properties.CustomWndProcHookCallback hook = OnWindowsTrackpadWndProc;
+        try
+        {
+            // Hook before opting into touchpad-capable WM_POINTER delivery.
+            Win32Properties.AddWndProcHookCallback(this, hook);
+            source.Attach(handle.Handle);
+            windowsTrackpadInput = source;
+            windowsTrackpadWndProcHook = hook;
+
+            if (Environment.GetEnvironmentVariable("LIGHTINGSHOWCASE_NAV_DIAGNOSTICS") == "1")
+                Console.WriteLine($"[NAV-WIN32] attached {source.BackendName} to HWND 0x{handle.Handle:X}");
+        }
+        catch (Exception ex)
+        {
+            try
+            {
+                Win32Properties.RemoveWndProcHookCallback(this, hook);
+            }
+            catch
+            {
+            }
+
+            source.Orbit -= OnWindowsTrackpadOrbit;
+            source.Zoom -= OnWindowsTrackpadZoom;
+            source.Turn -= OnWindowsTrackpadTurn;
+            source.Dispose();
+
+            if (Environment.GetEnvironmentVariable("LIGHTINGSHOWCASE_NAV_DIAGNOSTICS") == "1")
+                Console.WriteLine($"[NAV-WIN32] unavailable: {ex.Message}");
+        }
+    }
+
+    private void DetachWindowsTrackpadInput()
+    {
+        windowsTrackpadGestureCapturedByViewport = false;
+
+        if (windowsTrackpadInput is not null)
+        {
+            windowsTrackpadInput.Orbit -= OnWindowsTrackpadOrbit;
+            windowsTrackpadInput.Zoom -= OnWindowsTrackpadZoom;
+            windowsTrackpadInput.Turn -= OnWindowsTrackpadTurn;
+            windowsTrackpadInput.Dispose();
+            windowsTrackpadInput = null;
+        }
+
+        if (windowsTrackpadWndProcHook is not null)
+        {
+            try
+            {
+                Win32Properties.RemoveWndProcHookCallback(this, windowsTrackpadWndProcHook);
+            }
+            catch
+            {
+                // Window handle destruction can race teardown.
+            }
+            windowsTrackpadWndProcHook = null;
+        }
+    }
+
+    private nint OnWindowsTrackpadWndProc(
+        nint hwnd,
+        uint message,
+        nint wParam,
+        nint lParam,
+        ref bool handled)
+    {
+        if (windowsTrackpadInput is null ||
+            (message != WindowsPrecisionTouchpadGestureSource.WmPointerDown &&
+             message != WindowsPrecisionTouchpadGestureSource.WmPointerUpdate &&
+             message != WindowsPrecisionTouchpadGestureSource.WmPointerUp))
+        {
+            return 0;
+        }
+
+        // Start ownership only over the viewport, then retain it for the whole
+        // two-finger sequence because the mouse cursor itself does not move.
+        if (!windowsTrackpadGestureCapturedByViewport && !viewport.IsPointerOver)
+            return 0;
+
+        bool consumed = windowsTrackpadInput.TryProcessWindowMessage(message, wParam, lParam);
+        if (consumed)
+        {
+            windowsTrackpadGestureCapturedByViewport =
+                windowsTrackpadInput.IsGestureActive ||
+                message != WindowsPrecisionTouchpadGestureSource.WmPointerUp;
+
+            // Critical: do not let DefWindowProc turn the same native touchpad
+            // frame into WM_MOUSEWHEEL/WM_MOUSEHWHEEL after we already used its
+            // two physical contacts for orbit/zoom/circular roll.
+            handled = true;
+        }
+
+        if (message == WindowsPrecisionTouchpadGestureSource.WmPointerUp &&
+            !windowsTrackpadInput.IsGestureActive)
+        {
+            windowsTrackpadGestureCapturedByViewport = false;
+        }
+
+        return 0;
+    }
+
+    private void OnWindowsTrackpadOrbit(object? sender, NativeTrackpadOrbit e)
+    {
+        if (!session.HasRenderableScene)
+            return;
+
+        pendingWindowsTrackpadOrbitX += e.X;
+        pendingWindowsTrackpadOrbitY += e.Y;
+        if (!windowsTrackpadFrameTimer.IsEnabled)
+            windowsTrackpadFrameTimer.Start();
+    }
+
+    private void OnWindowsTrackpadZoom(object? sender, NativeTrackpadZoom e)
+    {
+        if (!session.HasRenderableScene)
+            return;
+
+        pendingWindowsTrackpadZoom += e.Amount;
+        if (!windowsTrackpadFrameTimer.IsEnabled)
+            windowsTrackpadFrameTimer.Start();
+    }
+
+    private void OnWindowsTrackpadTurn(object? sender, NativeTrackpadTurn e)
+    {
+        if (!session.HasRenderableScene)
+            return;
+
+        pendingWindowsTrackpadTurn += e.Radians;
+        if (!windowsTrackpadFrameTimer.IsEnabled)
+            windowsTrackpadFrameTimer.Start();
+    }
+
+    private void ApplyPendingWindowsTrackpadNavigation()
+    {
+        double orbitX = pendingWindowsTrackpadOrbitX;
+        double orbitY = pendingWindowsTrackpadOrbitY;
+        double zoom = pendingWindowsTrackpadZoom;
+        double turn = pendingWindowsTrackpadTurn;
+
+        pendingWindowsTrackpadOrbitX = 0.0;
+        pendingWindowsTrackpadOrbitY = 0.0;
+        pendingWindowsTrackpadZoom = 0.0;
+        pendingWindowsTrackpadTurn = 0.0;
+
+        bool hasOrbit = Math.Abs(orbitX) >= 1e-9 || Math.Abs(orbitY) >= 1e-9;
+        bool hasZoom = Math.Abs(zoom) >= 1e-9;
+        bool hasTurn = Math.Abs(turn) >= 1e-9;
+
+        if (!hasOrbit && !hasZoom && !hasTurn)
+        {
+            windowsTrackpadFrameTimer.Stop();
+            return;
+        }
+
+        if (!session.HasRenderableScene || lifetimeCancellation.IsCancellationRequested)
+        {
+            windowsTrackpadFrameTimer.Stop();
+            return;
+        }
+
+        ClearMeshHoverOverlay(requestRender: false);
+        if (hasOrbit)
+            session.Camera.Orbit(orbitX, orbitY);
+        if (hasZoom)
+            session.Camera.Zoom(Math.Clamp(zoom, -8.0, 8.0));
+        if (hasTurn)
+            session.Camera.Turn(turn);
+
+        // Fast preview while active; always finish with one full-quality frame
+        // after the gesture has been quiet for a short time.
+        if (CanRenderContinuously(SelectedRenderer.Kind))
+            _ = RequestRenderAsync(interactive: true);
+
+        windowsTrackpadIdleRenderTimer.Stop();
+        windowsTrackpadIdleRenderTimer.Start();
     }
 
     private void UpdateMeshHover(Point viewportPoint)
@@ -2884,6 +3103,13 @@ internal sealed class ComposerWindow : Window
         ClosePrimitiveParametersWindow();
         CloseMaterialEditorWindow();
         hoverPulseTimer.Stop();
+        windowsTrackpadFrameTimer.Stop();
+        windowsTrackpadIdleRenderTimer.Stop();
+        pendingWindowsTrackpadOrbitX = 0.0;
+        pendingWindowsTrackpadOrbitY = 0.0;
+        pendingWindowsTrackpadZoom = 0.0;
+        pendingWindowsTrackpadTurn = 0.0;
+        DetachWindowsTrackpadInput();
         lifetimeCancellation.Cancel();
         activeRenderCancellation?.Cancel();
         resizeDebounceCancellation?.Cancel();

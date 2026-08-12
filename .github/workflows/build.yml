@@ -13,7 +13,7 @@ permissions:
 
 env:
   PROJECT: LightingShowcase.Composer.Avalonia/LightingShowcase.Composer.Avalonia.csproj
-  DOTNET_VERSION: 8.0.x
+  DOTNET_VERSION: 10.0.x
 
 jobs:
   build:
@@ -151,5 +151,5 @@ jobs:
             --repo "${GITHUB_REPOSITORY}" \
             --target "${GITHUB_SHA}" \
             --title "Lighting Composer — Latest Build" \
-            --notes "Automated framework-dependent build from commit ${GITHUB_SHA}. Requires the .NET 8 Desktop Runtime." \
+            --notes "Automated framework-dependent build from commit ${GITHUB_SHA}. Requires the .NET 10 Desktop Runtime." \
             --latest

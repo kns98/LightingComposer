@@ -86,6 +86,26 @@ internal sealed class ComposerCamera
         radius = Math.Clamp(radius, 0.05, 100000.0);
     }
 
+    /// <summary>
+    /// Turntable-style rotation around the scene target.
+    ///
+    /// Unlike camera roll, this keeps world-up fixed. A circular two-finger
+    /// gesture therefore makes the scene turn left/right on screen instead of
+    /// tilting or flipping the image plane.
+    /// </summary>
+    public void Turn(double deltaRadians)
+    {
+        if (!double.IsFinite(deltaRadians))
+            return;
+
+        yaw += deltaRadians;
+
+        while (yaw > Math.PI)
+            yaw -= Math.PI * 2.0;
+        while (yaw < -Math.PI)
+            yaw += Math.PI * 2.0;
+    }
+
     private static Aabb ComputeBounds(IReadOnlyList<Triangle> triangles)
     {
         Vec3 first = triangles[0].A;
