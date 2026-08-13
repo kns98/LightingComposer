@@ -242,6 +242,25 @@ internal sealed partial class ComposerSceneSession
         }
     }
 
+    public Vec3? GetObjectAimCenter(int objectId)
+    {
+        sceneGate.Wait();
+        try
+        {
+            SceneObjectGroup? group = scene.GroupById(objectId);
+            if (group == null || !group.SelfAndDescendants().Any(candidate => candidate.LocalTriangles.Count > 0))
+                return null;
+
+            Aabb bounds = group.GetWorldBounds(includeHidden: true);
+            Vec3 center = (bounds.Min + bounds.Max) * 0.5;
+            return IsFinite(center) ? center : null;
+        }
+        finally
+        {
+            sceneGate.Release();
+        }
+    }
+
     public int? PickLightMarker(
         CameraDefinition camera,
         double normalizedX,

@@ -128,7 +128,7 @@ Preset, direct-property, color, texture-slot, mapping, and clear-texture operati
 
 ## Lighting editor
 
-**Render → Lighting…** opens the scene-wide Lighting Editor. It lists and edits point, spot, and directional lights using the same `SceneLight` data consumed by the renderers. Available controls include ID, type, enabled/shadow state, world position, direction, RGB color, intensity, range, and spot cone angles. The editor can also add and delete lights.
+**Render → Lighting…** opens the scene-wide Lighting Editor. It lists and edits point, spot, and directional lights using the same `SceneLight` data consumed by the renderers. Available controls include ID, type, enabled/shadow state, world position, direction, RGB color, intensity, range, and spot cone angles. Spot lights can be aimed at a scene object: Composer calculates the normalized vector from the entered light position to that object's world-space bounds center and fills the direction fields. **Apply** commits the light properties and closes the editor. The editor can also add and delete lights.
 
 Composer draws editor-only light markers after the renderer output. A selected marker gets a translation gizmo; Shift gives precision and Ctrl snaps. Right-clicking a marker opens the editor. The **Show light markers and light move gizmo in preview** checkbox hides all marker/gizmo overlays while leaving illumination unchanged. See [`LIGHTING_EDITOR.md`](LIGHTING_EDITOR.md).
 
@@ -159,11 +159,6 @@ Show all command-line options:
 ./run.sh --help
 ```
 
-Run the built-in hierarchy and transform regression check:
-
-```bash
-./run.sh self-test-transforms
-```
 
 ## Publish for Linux
 
@@ -194,23 +189,6 @@ GPU ID picking and detailed benchmark export remain future extensions.
 
 For the implementation and performance strategy, see [`GIZMO_TRANSFORM_PREVIEW.md`](GIZMO_TRANSFORM_PREVIEW.md).
 
-
-## Automated tests
-
-Run the cross-platform test suite with:
-
-```bash
-./run-tests.sh
-```
-
-On Windows:
-
-```powershell
-.\run-tests.ps1
-```
-
-The suite verifies parameterized primitive registration and meter units, procedural regeneration/undo/redo/conversion, material-library/color/texture edits and texture persistence through procedural regeneration, baked local-geometry mutation, identity transform metadata after commit, exact undo/redo hashes, deferred move/rotation/scale commits, Vulkan cache revision handling, rendered-pixel changes, lazy triangle browsing without object growth, root/nested ungroup behavior, hierarchy expansion, and Visual Studio solution integrity.
-See `TESTING.md` for the optional Vulkan tests, including the live pending-transform preview.
 
 ## Self-contained scenes and portable exports
 

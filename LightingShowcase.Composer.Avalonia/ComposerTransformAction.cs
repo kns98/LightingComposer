@@ -4,8 +4,8 @@ using LightingShowcase.Math3D;
 namespace LightingShowcase.Composer;
 
 /// <summary>
-/// Testable transform action shared by the Avalonia Apply button and the test suite.
-/// It proves that text entered in the inspector reaches the authoritative scene model.
+/// Transform action used by the Avalonia Apply button to commit inspector values
+/// to the authoritative scene model.
 /// </summary>
 internal sealed record ComposerTransformRequest(Vec3 Position, Vec3 RotationRadians, Vec3 Scale)
 {

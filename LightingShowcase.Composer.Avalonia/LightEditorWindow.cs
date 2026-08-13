@@ -5,6 +5,7 @@ using Avalonia.Layout;
 using Avalonia.Media;
 using LightingShowcase.Lighting;
 using LightingShowcase.Math3D;
+using LightingShowcase.SceneGraph;
 
 namespace LightingShowcase.Composer;
 
@@ -33,6 +34,8 @@ internal sealed class LightEditorWindow : Window
     private readonly TextBox directionX;
     private readonly TextBox directionY;
     private readonly TextBox directionZ;
+    private readonly ComboBox aimObjectBox;
+    private readonly Button aimObjectButton;
     private readonly TextBox colorHexBox;
     private readonly TextBox intensityBox;
     private readonly TextBox rangeBox;
@@ -42,6 +45,7 @@ internal sealed class LightEditorWindow : Window
     private readonly TextBlock statusText;
     private readonly Button deleteButton;
     private readonly Button applyButton;
+    private IReadOnlyList<SceneObjectInfo> aimTargets = Array.Empty<SceneObjectInfo>();
     private bool synchronizing;
 
     public LightEditorWindow(
@@ -81,6 +85,8 @@ internal sealed class LightEditorWindow : Window
         directionX = NumberBox();
         directionY = NumberBox();
         directionZ = NumberBox();
+        aimObjectBox = new ComboBox { MinWidth = 190 };
+        aimObjectButton = NewButton("Aim at object");
         colorHexBox = new TextBox { MinWidth = 110, Watermark = "#FFFFFF", TextAlignment = TextAlignment.Center };
         intensityBox = NumberBox();
         rangeBox = NumberBox();
@@ -95,7 +101,7 @@ internal sealed class LightEditorWindow : Window
             TextWrapping = TextWrapping.Wrap
         };
         deleteButton = NewButton("Delete light");
-        applyButton = NewButton("Apply light properties");
+        applyButton = NewButton("Apply");
 
         lightList.SelectionChanged += (_, _) => OnListSelectionChanged();
         showMarkersBox.Click += (_, _) =>
@@ -106,6 +112,7 @@ internal sealed class LightEditorWindow : Window
             onPreviewChanged();
         };
         kindBox.SelectionChanged += (_, _) => UpdateKindFieldState();
+        aimObjectButton.Click += (_, _) => AimAtObject();
         applyButton.Click += async (_, _) => await ApplyAsync();
         deleteButton.Click += async (_, _) => await DeleteAsync();
 
@@ -128,6 +135,7 @@ internal sealed class LightEditorWindow : Window
         {
             lightList.ItemsSource = lights.Select(light => light.DisplayLabel).ToArray();
             showMarkersBox.IsChecked = session.ShowLightMarkers;
+            RefreshAimTargets();
             int index = preferredIndex ?? session.SelectedLightIndex ?? -1;
             if (index >= lights.Count)
                 index = lights.Count - 1;
@@ -223,6 +231,13 @@ internal sealed class LightEditorWindow : Window
         stack.Children.Add(VectorRow(positionX, positionY, positionZ));
         stack.Children.Add(Heading("Direction"));
         stack.Children.Add(VectorRow(directionX, directionY, directionZ));
+
+        Grid aimRow = new() { ColumnDefinitions = new ColumnDefinitions("*,Auto"), ColumnSpacing = 6 };
+        aimRow.Children.Add(aimObjectBox);
+        aimRow.Children.Add(aimObjectButton);
+        Grid.SetColumn(aimObjectButton, 1);
+        stack.Children.Add(Labeled("Aim at object", aimRow));
+
         stack.Children.Add(Labeled("Color", colorHexBox));
         stack.Children.Add(Labeled("Intensity", intensityBox));
         stack.Children.Add(Labeled("Range (m; 0 = unlimited)", rangeBox));
@@ -243,7 +258,7 @@ internal sealed class LightEditorWindow : Window
         stack.Children.Add(applyButton);
         stack.Children.Add(new TextBlock
         {
-            Text = "Tip: select a light in this list or by clicking its viewport marker. Drag the selected light's X/Y/Z move gizmo to reposition it. Shift = precision; Ctrl = snap.",
+            Text = "Tip: for a spot or directional light, choose a scene object and press Aim at object to fill a normalized direction vector toward the object center. For directional lights, Position is only the editor marker/aim origin; illumination depends on Direction. Apply saves the values and closes this window.",
             TextWrapping = TextWrapping.Wrap,
             Opacity = 0.66,
             FontSize = 12
@@ -339,6 +354,7 @@ internal sealed class LightEditorWindow : Window
             RefreshFromScene(index);
             statusText.Text = "Light properties applied.";
             onLightChanged();
+            Close();
         }
         catch (Exception ex)
         {
@@ -406,6 +422,18 @@ internal sealed class LightEditorWindow : Window
         if (model == null)
         {
             idBox.Text = string.Empty;
+            kindBox.SelectedIndex = -1;
+            enabledBox.IsChecked = false;
+            shadowBox.IsChecked = false;
+            SetVec(positionX, positionY, positionZ, Vec3.Zero);
+            SetVec(directionX, directionY, directionZ, new Vec3(0.0, -1.0, 0.0));
+            colorHexBox.Text = "#FFFFFF";
+            intensityBox.Text = "0";
+            rangeBox.Text = "0";
+            innerConeBox.Text = "0";
+            outerConeBox.Text = "0";
+            aimObjectBox.IsEnabled = false;
+            aimObjectButton.IsEnabled = false;
             provenanceText.Text = "No lights in the scene.";
             return;
         }
@@ -415,7 +443,8 @@ internal sealed class LightEditorWindow : Window
         enabledBox.IsChecked = model.Enabled;
         shadowBox.IsChecked = model.CastsShadow;
         SetVec(positionX, positionY, positionZ, model.Position);
-        SetVec(directionX, directionY, directionZ, model.Direction);
+        Vec3 displayedDirection = NormalizeDirectionForEditor(model.Direction, model.Kind);
+        SetVec(directionX, directionY, directionZ, displayedDirection);
         colorHexBox.Text = ToHex(model.Color);
         intensityBox.Text = Format(model.Intensity);
         rangeBox.Text = Format(model.Range);
@@ -430,13 +459,122 @@ internal sealed class LightEditorWindow : Window
     private void UpdateKindFieldState()
     {
         if (kindBox.SelectedItem is not SceneLightKind kind)
+        {
+            aimObjectBox.IsEnabled = false;
+            aimObjectButton.IsEnabled = false;
             return;
+        }
+
         bool directional = kind == SceneLightKind.Directional;
         bool spot = kind == SceneLightKind.Spot;
-        directionX.IsEnabled = directionY.IsEnabled = directionZ.IsEnabled = directional || spot;
-        rangeBox.IsEnabled = !directional;
-        innerConeBox.IsEnabled = outerConeBox.IsEnabled = spot;
+        bool hasLight = lightList.SelectedIndex >= 0;
+
+        directionX.IsEnabled = directionY.IsEnabled = directionZ.IsEnabled = hasLight && (directional || spot);
+        rangeBox.IsEnabled = hasLight && !directional;
+        innerConeBox.IsEnabled = outerConeBox.IsEnabled = hasLight && spot;
+        bool canAim = hasLight && (directional || spot) && aimTargets.Count > 0;
+        aimObjectBox.IsEnabled = canAim;
+        aimObjectButton.IsEnabled = canAim;
+
+        // Spot/directional lights should never present blank direction fields.
+        // This also repairs older scenes whose direction was zero or invalid.
+        if (hasLight && (directional || spot) &&
+            (!TryVec(directionX, directionY, directionZ, out Vec3 currentDirection) ||
+             !IsFinite(currentDirection) ||
+             currentDirection.Length() < 1e-8))
+        {
+            SetVec(
+                directionX,
+                directionY,
+                directionZ,
+                kind == SceneLightKind.Spot ? new Vec3(0.0, -1.0, 0.0) : new Vec3(0.0, 0.0, -1.0));
+        }
     }
+
+    private void RefreshAimTargets()
+    {
+        int previousTargetId = aimObjectBox.SelectedIndex >= 0 && aimObjectBox.SelectedIndex < aimTargets.Count
+            ? aimTargets[aimObjectBox.SelectedIndex].Id
+            : -1;
+
+        aimTargets = session.GetObjectInfos()
+            .Where(info => info.TriangleCount > 0)
+            .ToArray();
+
+        aimObjectBox.ItemsSource = aimTargets
+            .Select(info => $"{new string('·', Math.Min(info.Depth, 6))}{(info.Depth > 0 ? " " : string.Empty)}{info.Name}  [#{info.Id}]")
+            .ToArray();
+
+        int selectedIndex = previousTargetId >= 0
+            ? aimTargets.ToList().FindIndex(info => info.Id == previousTargetId)
+            : -1;
+        if (selectedIndex < 0 && aimTargets.Count > 0)
+            selectedIndex = 0;
+        aimObjectBox.SelectedIndex = selectedIndex;
+    }
+
+    private void AimAtObject()
+    {
+        if (kindBox.SelectedItem is not SceneLightKind kind ||
+            (kind != SceneLightKind.Spot && kind != SceneLightKind.Directional))
+        {
+            statusText.Text = "Aim at object is available for spot and directional lights.";
+            return;
+        }
+
+        int targetIndex = aimObjectBox.SelectedIndex;
+        if (targetIndex < 0 || targetIndex >= aimTargets.Count)
+        {
+            statusText.Text = "Choose a scene object to aim at.";
+            return;
+        }
+
+        if (!TryVec(positionX, positionY, positionZ, out Vec3 lightPosition) || !IsFinite(lightPosition))
+        {
+            statusText.Text = "Position X/Y/Z must be valid numbers before aiming.";
+            return;
+        }
+
+        SceneObjectInfo target = aimTargets[targetIndex];
+        Vec3? targetCenter = session.GetObjectAimCenter(target.Id);
+        if (targetCenter is not Vec3 center)
+        {
+            statusText.Text = $"Could not determine the center of {target.Name}.";
+            return;
+        }
+
+        Vec3 delta = center - lightPosition;
+        if (!IsFinite(delta) || delta.Length() < 1e-8)
+        {
+            statusText.Text = "The light is at the target center, so an aim direction cannot be calculated.";
+            return;
+        }
+
+        Vec3 direction = delta.Normalize();
+        SetVec(directionX, directionY, directionZ, direction);
+        string kindNote = kind == SceneLightKind.Directional
+            ? " Directional-light Position is only the editor marker/aim origin; the renderer uses the resulting Direction globally."
+            : string.Empty;
+        statusText.Text =
+            $"Direction filled toward {target.Name}: ({Format(direction.X)}, {Format(direction.Y)}, {Format(direction.Z)}).{kindNote} Press Apply to save.";
+    }
+
+    private static Vec3 NormalizeDirectionForEditor(Vec3 direction, SceneLightKind kind)
+    {
+        if (IsFinite(direction))
+        {
+            Vec3 normalized = direction.Normalize();
+            if (normalized.Length() >= 1e-8)
+                return normalized;
+        }
+
+        return kind == SceneLightKind.Spot
+            ? new Vec3(0.0, -1.0, 0.0)
+            : new Vec3(0.0, 0.0, -1.0);
+    }
+
+    private static bool IsFinite(Vec3 value) =>
+        double.IsFinite(value.X) && double.IsFinite(value.Y) && double.IsFinite(value.Z);
 
     private static Grid Labeled(string label, Control control)
     {

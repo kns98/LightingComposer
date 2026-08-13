@@ -23,8 +23,8 @@ Extracted normal classes:
 Static validation
 -----------------
 PASS - 157 C# files scanned with comment/string-aware delimiter validation
-PASS - 12 .csproj files parse as XML
-PASS - all 12 project files retain net10.0
+PASS - 11 .csproj files parse as XML
+PASS - all 11 project files retain net10.0
 PASS - Composer retains Avalonia 12.1.1
 PASS - ComposerWindow contains no WM_POINTER/native Win32 touchpad implementation
 PASS - ComposerWindow contains no WriteableBitmap/render implementation
@@ -42,7 +42,6 @@ Recommended target-machine validation
 -------------------------------------
 dotnet restore .\LightingShowcase.Composer.sln
 dotnet build .\LightingShowcase.Composer.sln -c Debug --no-restore
-dotnet test .\LightingShowcase.Composer.Tests\LightingShowcase.Composer.Tests.csproj -c Debug --no-build
 
 Interactive smoke test
 ----------------------

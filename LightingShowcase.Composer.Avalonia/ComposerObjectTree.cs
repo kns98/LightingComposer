@@ -18,7 +18,7 @@ internal sealed class ObjectTreeNode
     public override string ToString() => Label;
 }
 
-/// <summary>One hierarchy projection used by both the UI and tests.</summary>
+/// <summary>Builds the hierarchy projection consumed by the Composer UI.</summary>
 internal static class ComposerObjectTree
 {
     public static List<ObjectTreeNode> Build(IReadOnlyList<SceneObjectInfo> infos)

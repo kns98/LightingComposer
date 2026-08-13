@@ -15,13 +15,32 @@ The editor lists every `SceneLight` in the active scene, including built-in defa
 - enabled state;
 - shadow casting;
 - position in meters;
-- direction vector for spot/directional lights;
+- direction vector for spot/directional lights; the editor always fills a valid normalized direction for spot/directional lights instead of leaving the fields blank;
 - RGB color as `#RRGGBB`;
 - intensity;
 - range in meters (`0` means unlimited);
 - spot inner and outer cone angles in degrees.
 
 Imported/default provenance flags are displayed but are intentionally read-only. Property edits, add/delete operations, and committed light moves participate in Composer undo/redo.
+
+For spot and directional lights, **Aim at object** lists scene objects that contain geometry. Choose a target and press **Aim at object** to calculate a normalized direction from the light's currently entered position to the target object's current world-space bounding-box center. The calculated X/Y/Z direction is placed in the direction fields so it can still be adjusted manually before saving. For a directional light, position does not affect illumination; Composer uses the entered position only as an editor marker/aim origin for calculating the direction vector.
+
+Press **Apply** to validate and commit the selected light's properties. A successful Apply closes the Lighting Editor. Invalid values leave the editor open and show the validation message.
+
+## Verifying that a light is affecting the render
+
+Composer scenes start with built-in `key` and `fill` lights, and the renderers also include environment/indirect lighting. A newly added light at an intensity similar to the defaults can therefore be visually subtle.
+
+For an unmistakable check:
+
+1. Temporarily disable the built-in `key` and `fill` lights in the Lighting Editor.
+2. Set the light under test to a saturated color such as `#FF0000`.
+3. Use a high temporary intensity such as `25` to `50`.
+4. For a spot light, aim it at the target, use an outer cone around `45` to `60` degrees, and set Range to `0` (unlimited) while testing.
+5. Turn **Casts shadows** off for the first check so a shadow-map issue cannot hide the direct contribution.
+6. Apply and render once with the light enabled, then disable that same light and render again. A strong color/brightness difference between the two renders confirms the light path is active.
+
+The viewport marker, direction arrow, and spot cone show where the editor believes the light is and where it points; they do not themselves prove that the renderer is receiving illumination. The enabled/disabled render comparison is the definitive check.
 
 ## Viewport markers and move gizmo
 

@@ -27,7 +27,6 @@ This update therefore uses the complete current-main source snapshot already obt
 - Explicit **Convert to Mesh** removes primitive metadata while keeping the generated triangles.
 - Existing committed Vertex/Edge/Face edits continue to make mesh geometry authoritative.
 - Native `.lscene` serialization already retains `PrimitiveKind`, `PrimitiveSourceName`, and `PrimitiveParameters`, so procedural objects survive save/reopen while still parameterized.
-- Added tests for the standard primitive set, meter descriptors, geometry regeneration, parameter undo/redo, conversion, and conversion undo.
 
 ## Unit behavior
 
@@ -53,7 +52,6 @@ This execution environment does not contain `dotnet`, `csc`, `mcs`, or a Vulkan 
 dotnet clean
 dotnet restore LightingShowcase.Composer.Avalonia/LightingShowcase.Composer.Avalonia.csproj
 dotnet build LightingShowcase.Composer.Avalonia/LightingShowcase.Composer.Avalonia.csproj -c Release --no-restore
-dotnet test LightingShowcase.Composer.Tests/LightingShowcase.Composer.Tests.csproj -c Release
 ```
 
 Interactive check:

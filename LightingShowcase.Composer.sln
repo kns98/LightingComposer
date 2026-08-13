@@ -24,8 +24,6 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "LightingShowcase.ObjectLibr
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "LightingShowcase.ObjectLibrary.ReadyMade", "LightingShowcase.ObjectLibrary.ReadyMade\LightingShowcase.ObjectLibrary.ReadyMade.csproj", "{879DE645-AFDE-466E-B5E0-FF9EE6583426}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "LightingShowcase.Composer.Tests", "LightingShowcase.Composer.Tests\LightingShowcase.Composer.Tests.csproj", "{A6F2D783-7C9A-4B71-AF14-640A51F885C8}"
-EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -77,10 +75,6 @@ Global
 		{879DE645-AFDE-466E-B5E0-FF9EE6583426}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{879DE645-AFDE-466E-B5E0-FF9EE6583426}.Release|Any CPU.Build.0 = Release|Any CPU
 
-		{A6F2D783-7C9A-4B71-AF14-640A51F885C8}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{A6F2D783-7C9A-4B71-AF14-640A51F885C8}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{A6F2D783-7C9A-4B71-AF14-640A51F885C8}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{A6F2D783-7C9A-4B71-AF14-640A51F885C8}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

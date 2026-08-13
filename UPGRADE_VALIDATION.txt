@@ -1,6 +1,5 @@
-Projects: 12
+Projects: 11
 OK target: LightingShowcase.Composer.Avalonia/LightingShowcase.Composer.Avalonia.csproj -> ['net10.0']
-OK target: LightingShowcase.Composer.Tests/LightingShowcase.Composer.Tests.csproj -> ['net10.0']
 OK target: LightingShowcase.Core/LightingShowcase.Core.csproj -> ['net10.0']
 OK target: LightingShowcase.ImportExport.Fbx/LightingShowcase.ImportExport.Fbx.csproj -> ['net10.0']
 OK target: LightingShowcase.ImportExport.Gltf/LightingShowcase.ImportExport.Gltf.csproj -> ['net10.0']

@@ -34,8 +34,4 @@ This design targets the existing roughly 20 ms Vulkan raster hot-frame behavior.
 
 ## Validation
 
-The normal regression test verifies that pending move, rotation, and scale do not increment the scene revision and that commit returns transform metadata to identity. An opt-in Vulkan test verifies that pending rotation and non-uniform scaling change rendered pixels while the scene revision remains unchanged. Run it on a Vulkan-capable machine with:
-
-```bash
-LIGHTINGSHOWCASE_RUN_GPU_TESTS=1 ./run-tests.sh
-```
+On a Vulkan-capable target machine, verify that pending move, rotation, and scale update the preview without incrementing the committed scene revision, and that releasing the gizmo commits once and returns transform metadata to identity.

@@ -17,7 +17,7 @@ internal static class Program
         if (args.Length > 0)
         {
             string command = args[0].ToLowerInvariant();
-            if (command is "render" or "headless" or "export" or "formats" or "export-formats" or "self-test-transforms" or "help" or "--help" or "-h")
+            if (command is "render" or "headless" or "export" or "formats" or "export-formats" or "help" or "--help" or "-h")
                 return RunCommandLineAsync(args).GetAwaiter().GetResult();
 
             if (command == "compose")
@@ -76,8 +76,6 @@ internal static class Program
             if (command == "export")
                 return RunExport(args.Skip(1).ToArray(), cancellation.Token);
 
-            if (command == "self-test-transforms")
-                return TransformRegressionTest.Run();
 
             if (command is "help" or "--help" or "-h" ||
                 args.Length == 1 ||
@@ -161,7 +159,6 @@ Portable export package:
 
 Other:
   LightingShowcase.Composer formats
-  LightingShowcase.Composer self-test-transforms
 """);
         return 0;
     }

@@ -4,7 +4,7 @@ This executable provides the Avalonia scene-composition UI and the headless `ren
 
 Committed transforms are baked into triangle positions and normals. The UI clears the transform fields, records an undo command, refreshes the Vulkan raster vertex buffers in place, and redraws. The hierarchy uses lazy virtual triangle rows so inspecting a large mesh does not create additional renderable scene nodes. Any non-terminal selected node can be ungrouped. The toolbar adds Plane, Cube, Circle, UV Sphere, Icosphere, Cylinder, Cone, Torus, and Grid primitives (Monkey/Suzanne omitted). New primitives open a closable modeless Parameters window; all length parameters and Position fields are meters. The Inspector also has a closable modeless **Material…** editor with categorized PBR presets, direct renderer-backed PBR/material-property fields, exact RGB/hex colors, six PBR texture slots, and per-texture offset/scale/rotation/wrap controls. Meter-based box projection or authored/current UVs can be selected for textures. Object/Vertex/Edge/Face selection uses the 4/1/2/3 keys. Component editing starts with move only. Edge and face modes hide whole-object bounds, require direct component picking, and use live affected-vertex updates in Vulkan raster.
 
-See the repository-level `README.md`, `PARAMETERIZED_PRIMITIVES.md`, `MATERIAL_EDITING.md`, `MESH_EDITING.md`, `VALIDATION_NOTES.md`, and `TESTING.md` for usage and verification commands.
+See the repository-level `README.md`, `PARAMETERIZED_PRIMITIVES.md`, `MATERIAL_EDITING.md`, `MESH_EDITING.md`, `VALIDATION_NOTES.md` for usage and verification commands.
 
 ## Export package
 
