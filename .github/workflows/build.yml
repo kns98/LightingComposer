@@ -101,9 +101,10 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
-  # macOS builds run here, isolated from the main build. This job is
-  # intentionally NOT listed in the release job's `needs`, so a macOS
-  # runner or publish failure can never block the release.
+  # macOS builds run here, isolated from the main build. The release job
+  # waits for this job but only requires the main build to succeed (see
+  # its `if` condition), so macOS artifacts are included when they
+  # succeed while a macOS failure can never block the release.
   build-macos:
     name: ${{ matrix.artifact }} (macOS, non-blocking)
     runs-on: ${{ matrix.os }}
@@ -167,8 +168,8 @@ jobs:
 
   release:
     name: Replace latest build release
-    if: ${{ github.event_name != 'pull_request' }}
-    needs: build
+    if: ${{ github.event_name != 'pull_request' && needs.build.result == 'success' }}
+    needs: [build, build-macos]
     runs-on: ubuntu-latest
 
     steps:
@@ -183,6 +184,14 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           pattern: LightingComposer-linux-*
+          path: release-files
+          merge-multiple: true
+
+      - name: Download macOS builds when available
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          pattern: LightingComposer-macos-*
           path: release-files
           merge-multiple: true
 
