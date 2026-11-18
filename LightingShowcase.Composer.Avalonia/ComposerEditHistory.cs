@@ -15,7 +15,9 @@ internal interface IComposerEditCommand
     string Description { get; }
     int? UndoSelectionId { get; }
     int? RedoSelectionId { get; }
+    /// <summary>Reverts this command against the given scene.</summary>
     void Undo(Scene scene);
+    /// <summary>Reapplies this command against the given scene.</summary>
     void Redo(Scene scene);
 }
 
@@ -40,11 +42,13 @@ internal sealed class BakedGeometryState
         int[][] LogicalFaceTriangleGroups);
     private readonly NodeGeometry[] nodes;
 
+    /// <summary>Initializes a new baked geometry snapshot from the given node states.</summary>
     private BakedGeometryState(NodeGeometry[] nodes)
     {
         this.nodes = nodes;
     }
 
+    /// <summary>Captures the baked triangle state of the given subtree.</summary>
     public static BakedGeometryState Capture(SceneObjectGroup root)
     {
         return new BakedGeometryState(root.SelfAndDescendants()
@@ -58,6 +62,7 @@ internal sealed class BakedGeometryState
             .ToArray());
     }
 
+    /// <summary>Restores the captured triangles, parameters, and identity transforms onto the scene.</summary>
     public void Restore(Scene scene)
     {
         foreach (NodeGeometry node in nodes)
@@ -96,6 +101,7 @@ internal sealed class BakedTransformEditCommand : IComposerEditCommand
     private readonly bool beforeVisible;
     private readonly bool afterVisible;
 
+    /// <summary>Initializes a new baked transform command for the given group, pivot, pose, and display state.</summary>
     public BakedTransformEditCommand(
         int groupId,
         BakedGeometryState beforeGeometry,
@@ -124,6 +130,7 @@ internal sealed class BakedTransformEditCommand : IComposerEditCommand
     public int? UndoSelectionId => groupId;
     public int? RedoSelectionId => groupId;
 
+    /// <summary>Restores the original geometry, name, and visibility and rebuilds the scene.</summary>
     public void Undo(Scene scene)
     {
         SceneObjectGroup group = RequireGroup(scene);
@@ -133,6 +140,7 @@ internal sealed class BakedTransformEditCommand : IComposerEditCommand
         Rebuild(scene, group);
     }
 
+    /// <summary>Reapplies the baked transform to the original geometry and rebuilds the scene.</summary>
     public void Redo(Scene scene)
     {
         SceneObjectGroup group = RequireGroup(scene);
@@ -143,9 +151,11 @@ internal sealed class BakedTransformEditCommand : IComposerEditCommand
         Rebuild(scene, group);
     }
 
+    /// <summary>Returns the edited group or throws when it no longer exists.</summary>
     private SceneObjectGroup RequireGroup(Scene scene) => scene.GroupById(groupId)
         ?? throw new InvalidOperationException("The transformed scene node no longer exists.");
 
+    /// <summary>Recalculates pivots and rebuilds world geometry after a transform edit.</summary>
     private static void Rebuild(Scene scene, SceneObjectGroup group)
     {
         foreach (SceneObjectGroup node in group.SelfAndDescendants().Reverse())
@@ -170,6 +180,7 @@ internal sealed class ParametricTransformEditCommand : IComposerEditCommand
     private readonly bool beforeVisible;
     private readonly bool afterVisible;
 
+    /// <summary>Initializes a new parametric transform command with before and after parameters and display state.</summary>
     public ParametricTransformEditCommand(
         int groupId,
         IEnumerable<KeyValuePair<string, double>> beforeParameters,
@@ -192,9 +203,12 @@ internal sealed class ParametricTransformEditCommand : IComposerEditCommand
     public int? UndoSelectionId => groupId;
     public int? RedoSelectionId => groupId;
 
+    /// <summary>Restores the before parameters, name, and visibility.</summary>
     public void Undo(Scene scene) => Restore(scene, beforeParameters, beforeName, beforeVisible);
+    /// <summary>Restores the after parameters, name, and visibility.</summary>
     public void Redo(Scene scene) => Restore(scene, afterParameters, afterName, afterVisible);
 
+    /// <summary>Restores the given parameters and display state, then regenerates the procedural object.</summary>
     private void Restore(
         Scene scene,
         IReadOnlyList<KeyValuePair<string, double>> parameters,
@@ -227,6 +241,7 @@ internal sealed class GeometryStateEditCommand : IComposerEditCommand
     private readonly BakedGeometryState before;
     private readonly BakedGeometryState after;
 
+    /// <summary>Initializes a new geometry replacement command with before and after state.</summary>
     public GeometryStateEditCommand(string description, int groupId, BakedGeometryState before, BakedGeometryState after)
     {
         Description = description;
@@ -239,9 +254,12 @@ internal sealed class GeometryStateEditCommand : IComposerEditCommand
     public int? UndoSelectionId => groupId;
     public int? RedoSelectionId => groupId;
 
+    /// <summary>Restores the before geometry snapshot.</summary>
     public void Undo(Scene scene) => Restore(scene, before);
+    /// <summary>Restores the after geometry snapshot.</summary>
     public void Redo(Scene scene) => Restore(scene, after);
 
+    /// <summary>Restores the given geometry snapshot and rebuilds pivots and world geometry.</summary>
     private void Restore(Scene scene, BakedGeometryState state)
     {
         SceneObjectGroup group = scene.GroupById(groupId)
@@ -260,6 +278,7 @@ internal sealed class SceneSnapshotEditCommand : IComposerEditCommand
     private readonly SceneSnapshot before;
     private readonly SceneSnapshot after;
 
+    /// <summary>Initializes a new snapshot command with before and after scenes and selection targets.</summary>
     public SceneSnapshotEditCommand(
         string description,
         SceneSnapshot before,
@@ -277,7 +296,9 @@ internal sealed class SceneSnapshotEditCommand : IComposerEditCommand
     public string Description { get; }
     public int? UndoSelectionId { get; }
     public int? RedoSelectionId { get; }
+    /// <summary>Restores the before scene snapshot.</summary>
     public void Undo(Scene scene) => scene.RestoreSnapshot(before);
+    /// <summary>Restores the after scene snapshot.</summary>
     public void Redo(Scene scene) => scene.RestoreSnapshot(after);
 }
 
@@ -296,6 +317,7 @@ internal sealed class ComposerEditHistory
     public bool RedoRequiresFullRendererInvalidation =>
         redo.TryPeek(out IComposerEditCommand? command) && command is IFullRendererInvalidationEditCommand;
 
+    /// <summary>Pushes an applied command onto the undo stack and trims it to the entry limit.</summary>
     public void PushApplied(IComposerEditCommand command)
     {
         undo.Push(command);
@@ -309,6 +331,7 @@ internal sealed class ComposerEditHistory
             undo.Push(newestFirst[i]);
     }
 
+    /// <summary>Undoes the top command and returns its undo selection target.</summary>
     public int? Undo(Scene scene)
     {
         if (!undo.TryPop(out IComposerEditCommand? command))
@@ -318,6 +341,7 @@ internal sealed class ComposerEditHistory
         return command.UndoSelectionId;
     }
 
+    /// <summary>Redoes the top command and returns its redo selection target.</summary>
     public int? Redo(Scene scene)
     {
         if (!redo.TryPop(out IComposerEditCommand? command))
@@ -327,6 +351,7 @@ internal sealed class ComposerEditHistory
         return command.RedoSelectionId;
     }
 
+    /// <summary>Clears both the undo and redo stacks.</summary>
     public void Clear()
     {
         undo.Clear();

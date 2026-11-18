@@ -22,6 +22,7 @@ public sealed class SceneRenderData
     public RenderSettings Settings { get; }
     public Aabb? Bounds { get; }
 
+    /// <summary>Initializes shared render data with meshes, lights, materials, assets, settings, and bounds.</summary>
     public SceneRenderData(IReadOnlyList<RenderMeshInstance> meshes, IReadOnlyList<RenderLight> lights, IReadOnlyList<RenderMaterial> materials, AssetRegistry assets, RenderSettings settings, Aabb? bounds)
     {
         Meshes = meshes;
@@ -36,6 +37,7 @@ public sealed class SceneRenderData
 /// <summary>Builds shared render data from the editable scene so renderers do not reinterpret the scene differently.</summary>
 public static class SceneRenderDataBuilder
 {
+    /// <summary>Builds shared render data from the editable scene document.</summary>
     public static SceneRenderData Build(SceneDocument document, RenderSettings? settings = null)
     {
         if (document == null) throw new ArgumentNullException(nameof(document));

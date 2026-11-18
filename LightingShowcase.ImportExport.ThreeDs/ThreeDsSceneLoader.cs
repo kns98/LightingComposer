@@ -53,6 +53,7 @@ public static class ThreeDsSceneLoader
         public List<Vec2> Uvs { get; } = new();
         public List<ThreeDsFace> Faces { get; } = new();
 
+        /// <summary>Creates a mesh container with the given object name.</summary>
         public ThreeDsMesh(string name)
         {
             Name = string.IsNullOrWhiteSpace(name) ? "3DS Object" : name;
@@ -66,6 +67,7 @@ public static class ThreeDsSceneLoader
         public int C { get; }
         public string? MaterialName { get; set; }
 
+        /// <summary>Creates a face with the given vertex indices.</summary>
         public ThreeDsFace(int a, int b, int c)
         {
             A = a;
@@ -81,6 +83,7 @@ public static class ThreeDsSceneLoader
         public string? TextureFileName { get; set; }
     }
 
+    /// <summary>Loads a 3DS file into the scene, normalizing its size and floor position.</summary>
     public static ObjLoadResult LoadIntoScene(
         Scene scene,
         string filePath,
@@ -133,6 +136,7 @@ public static class ThreeDsSceneLoader
         return new ObjLoadResult(filePath, vertexCount, faceCount, triangleCount);
     }
 
+    /// <summary>Reads every 3DS chunk in the given file into a document.</summary>
     private static ThreeDsDocument ReadDocument(string filePath, Action<ObjLoadProgress>? progress)
     {
         using BinaryReader reader = new(File.OpenRead(filePath), Encoding.ASCII);
@@ -141,6 +145,7 @@ public static class ThreeDsSceneLoader
         return document;
     }
 
+    /// <summary>Recursively reads 3DS chunks up to the given end position.</summary>
     private static void ReadChunks(
         BinaryReader reader,
         long endPosition,
@@ -209,6 +214,7 @@ public static class ThreeDsSceneLoader
         }
     }
 
+    /// <summary>Reads the vertex list chunk into the current mesh.</summary>
     private static void ReadVertexList(BinaryReader reader, long chunkEnd, ThreeDsMesh mesh)
     {
         if (reader.BaseStream.Position + 2 > chunkEnd) return;
@@ -219,6 +225,7 @@ public static class ThreeDsSceneLoader
             mesh.Vertices.Add(new Vec3(reader.ReadSingle(), reader.ReadSingle(), reader.ReadSingle()));
     }
 
+    /// <summary>Reads the UV mapping chunk into the current mesh.</summary>
     private static void ReadMappingCoords(BinaryReader reader, long chunkEnd, ThreeDsMesh mesh)
     {
         if (reader.BaseStream.Position + 2 > chunkEnd) return;
@@ -229,6 +236,7 @@ public static class ThreeDsSceneLoader
             mesh.Uvs.Add(new Vec2(reader.ReadSingle(), reader.ReadSingle()));
     }
 
+    /// <summary>Reads the face list chunk and its material assignments into the mesh.</summary>
     private static void ReadFaceList(BinaryReader reader, long chunkEnd, ThreeDsMesh mesh)
     {
         if (reader.BaseStream.Position + 2 > chunkEnd) return;
@@ -260,6 +268,7 @@ public static class ThreeDsSceneLoader
         }
     }
 
+    /// <summary>Assigns one material name to the listed faces.</summary>
     private static void ReadFaceMaterial(BinaryReader reader, long chunkEnd, ThreeDsMesh mesh)
     {
         string materialName = ReadNullTerminatedString(reader, chunkEnd);
@@ -273,6 +282,7 @@ public static class ThreeDsSceneLoader
         }
     }
 
+    /// <summary>Reads one material block with its name, diffuse color, and texture.</summary>
     private static ThreeDsMaterialInfo ReadMaterial(BinaryReader reader, long chunkEnd)
     {
         ThreeDsMaterialInfo material = new();
@@ -304,6 +314,7 @@ public static class ThreeDsSceneLoader
         return material;
     }
 
+    /// <summary>Reads a 3DS color chunk and returns its RGB value.</summary>
     private static Vec3 ReadColorContainer(BinaryReader reader, long chunkEnd, Vec3 fallback)
     {
         Vec3 color = fallback;
@@ -327,6 +338,7 @@ public static class ThreeDsSceneLoader
         return color;
     }
 
+    /// <summary>Reads a texture map chunk and returns its file name.</summary>
     private static string? ReadTextureMap(BinaryReader reader, long chunkEnd)
     {
         string? fileName = null;
@@ -348,6 +360,7 @@ public static class ThreeDsSceneLoader
         return string.IsNullOrWhiteSpace(fileName) ? null : fileName;
     }
 
+    /// <summary>Builds scene materials with resolved textures from the parsed material infos.</summary>
     private static Dictionary<string, Material> BuildMaterials(
         Dictionary<string, ThreeDsMaterialInfo> materialInfos,
         string modelPath,
@@ -370,6 +383,7 @@ public static class ThreeDsSceneLoader
         return materials;
     }
 
+    /// <summary>Locates the texture file next to the model or in its subdirectories.</summary>
     private static string? ResolveTexturePath(string modelPath, string? textureFileName)
     {
         if (string.IsNullOrWhiteSpace(textureFileName)) return null;
@@ -400,6 +414,7 @@ public static class ThreeDsSceneLoader
         return null;
     }
 
+    /// <summary>Transforms the parsed meshes into scene groups and returns the triangle count.</summary>
     private static int BuildScene(
         Scene scene,
         List<ThreeDsMesh> meshes,
@@ -458,12 +473,14 @@ public static class ThreeDsSceneLoader
         return triangleCount;
     }
 
+    /// <summary>Returns true when the face indices are distinct and in range.</summary>
     private static bool IsValidFace(ThreeDsFace face, int vertexCount) =>
         (uint)face.A < (uint)vertexCount &&
         (uint)face.B < (uint)vertexCount &&
         (uint)face.C < (uint)vertexCount &&
         face.A != face.B && face.B != face.C && face.A != face.C;
 
+    /// <summary>Returns the stored UV for the given vertex or a box-projected fallback.</summary>
     private static Vec2 GetUv(ThreeDsMesh mesh, int index, Vec3 transformedPoint, Vec3 normal, Aabb bounds)
     {
         if ((uint)index < (uint)mesh.Uvs.Count)
@@ -471,6 +488,7 @@ public static class ThreeDsSceneLoader
         return GenerateBoxUv(transformedPoint, normal, bounds);
     }
 
+    /// <summary>Computes the minimum and maximum corners over all mesh vertices.</summary>
     private static void GetBounds(List<ThreeDsMesh> meshes, out Vec3 min, out Vec3 max)
     {
         bool hasPoint = false;
@@ -495,10 +513,12 @@ public static class ThreeDsSceneLoader
         }
     }
 
+    /// <summary>Recenters, scales, and offsets one vertex into scene space.</summary>
     private static Vec3 Transform(Vec3 p, Vec3 sourceCenter, double scale, Vec3 offset) => (p - sourceCenter) * scale + offset;
 
     private const double TextureRepeatWorldUnits = 0.25;
 
+    /// <summary>Generates box-projected UVs from the dominant normal axis.</summary>
     private static Vec2 GenerateBoxUv(Vec3 point, Vec3 normal, Aabb bounds)
     {
         double nx = Math.Abs(normal.X), ny = Math.Abs(normal.Y), nz = Math.Abs(normal.Z);
@@ -513,10 +533,13 @@ public static class ThreeDsSceneLoader
         return new Vec2(ToTileCoordinate(point.X, bounds.Min.X), ToTileCoordinate(point.Y, bounds.Min.Y));
     }
 
+    /// <summary>Converts a scene coordinate into a repeating texture tile coordinate.</summary>
     private static double ToTileCoordinate(double value, double origin) =>
         (value - origin) / TextureRepeatWorldUnits;
+    /// <summary>Clamps the given value to the 0 to 1 range.</summary>
     private static double Clamp01(double value) => Math.Max(0.0, Math.Min(1.0, value));
 
+    /// <summary>Reads a null-terminated ASCII string up to the chunk end.</summary>
     private static string ReadNullTerminatedString(BinaryReader reader, long endPosition)
     {
         List<byte> bytes = new();

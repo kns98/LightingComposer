@@ -22,26 +22,31 @@ internal sealed class ComposerWindow : Window
 {
     private sealed record RendererChoice(ComposerRendererKind Kind, string Label, string Description)
     {
+        /// <summary>Returns the renderer display label.</summary>
         public override string ToString() => Label;
     }
 
     private sealed record GizmoModeChoice(ComposerGizmoMode Mode, string Label)
     {
+        /// <summary>Returns the gizmo mode display label.</summary>
         public override string ToString() => Label;
     }
 
     private sealed record SelectionModeChoice(ComposerSelectionMode Mode, string Label)
     {
+        /// <summary>Returns the selection mode display label.</summary>
         public override string ToString() => Label;
     }
 
     private sealed record MoveAxisChoice(ComposerGizmoAxis Axis, string Label)
     {
+        /// <summary>Returns the move axis display label.</summary>
         public override string ToString() => Label;
     }
 
     private sealed class LightGizmoDragState
     {
+        /// <summary>Initializes drag state with the light start position, pointer point, and gizmo hit.</summary>
         public LightGizmoDragState(Vec3 startPosition, Point lastImagePoint, ComposerGizmoHit hit)
         {
             StartPosition = startPosition;
@@ -162,6 +167,7 @@ internal sealed class ComposerWindow : Window
     private readonly DispatcherTimer hoverPulseTimer;
     private long lastHoverProbeTimestamp;
 
+    /// <summary>Builds the composer window, wires its controllers, and opens any startup scene.</summary>
     public ComposerWindow(string[] startupArguments)
     {
         Title = "LightingShowcase Avalonia Composer";
@@ -396,6 +402,7 @@ internal sealed class ComposerWindow : Window
         Closed += (_, _) => DisposeWindowResources();
     }
 
+    /// <summary>Wires button clicks, combo boxes, and viewport input to their handlers.</summary>
     private void WireEvents()
     {
         newButton.Click += async (_, _) => await NewSceneAsync();
@@ -506,6 +513,7 @@ internal sealed class ComposerWindow : Window
         (moveAxisBox.SelectedItem as MoveAxisChoice)?.Axis ?? ComposerGizmoAxis.None;
 
 
+/// <summary>Opens the render settings dialog for the selected renderer and applies any changes.</summary>
 private async Task OpenRenderSettingsAsync()
 {
     RendererChoice renderer = SelectedRenderer;
@@ -535,42 +543,51 @@ private async Task OpenRenderSettingsAsync()
     }
 }
 
+    /// <summary>Starts a new empty scene through the command coordinator.</summary>
     private async Task NewSceneAsync()
     {
         await commandCoordinator.NewSceneAsync();
         dialogController.RefreshLightEditor();
     }
 
+    /// <summary>Opens a file picker and loads the chosen scene.</summary>
     private async Task BrowseAndOpenAsync()
     {
         await commandCoordinator.BrowseAndOpenAsync();
         dialogController.RefreshLightEditor();
     }
 
+    /// <summary>Opens a file picker and inserts the chosen model into the scene.</summary>
     private async Task BrowseAndInsertAsync()
     {
         await commandCoordinator.BrowseAndInsertAsync();
         dialogController.RefreshLightEditor();
     }
 
+    /// <summary>Loads the scene at the given path and refreshes the light editor.</summary>
     private async Task LoadSceneAsync(string path)
     {
         await commandCoordinator.LoadSceneAsync(path);
         dialogController.RefreshLightEditor();
     }
 
+    /// <summary>Inserts the model at the given path and refreshes the light editor.</summary>
     private async Task InsertModelAsync(string path)
     {
         await commandCoordinator.InsertModelAsync(path);
         dialogController.RefreshLightEditor();
     }
 
+    /// <summary>Adds the primitive selected in the primitive box to the scene.</summary>
     private Task AddPrimitiveAsync() => commandCoordinator.AddPrimitiveAsync();
 
+    /// <summary>Saves the current scene through the command coordinator.</summary>
     private Task SaveSceneAsync() => commandCoordinator.SaveSceneAsync();
 
+    /// <summary>Exports the current scene as a package through the command coordinator.</summary>
     private Task ExportPackageAsync() => commandCoordinator.ExportPackageAsync();
 
+    /// <summary>Applies the inspector values when Enter is pressed in a transform box.</summary>
     private void OnTransformBoxKeyDown(object? sender, KeyEventArgs e)
     {
         if (e.Key != Key.Enter)
@@ -580,32 +597,42 @@ private async Task OpenRenderSettingsAsync()
         e.Handled = true;
     }
 
+    /// <summary>Applies the inspector name, visibility, and transform values to the selection.</summary>
     private Task ApplyInspectorAsync() => transformController.ApplyInspectorAsync();
 
+    /// <summary>Resets the selected object transform to its default values.</summary>
     private Task ResetSelectedTransformAsync() => transformController.ResetSelectedTransformAsync();
 
+    /// <summary>Undoes the last edit and refreshes the light editor.</summary>
     private async Task UndoAsync()
     {
         await commandCoordinator.UndoAsync();
         dialogController.RefreshLightEditor();
     }
 
+    /// <summary>Redoes the last undone edit and refreshes the light editor.</summary>
     private async Task RedoAsync()
     {
         await commandCoordinator.RedoAsync();
         dialogController.RefreshLightEditor();
     }
 
+    /// <summary>Groups the selected objects into a new parent group.</summary>
     private Task GroupSelectedAsync() => commandCoordinator.GroupSelectedAsync();
 
+    /// <summary>Ungroups the selected group back into separate objects.</summary>
     private Task UngroupSelectedAsync() => commandCoordinator.UngroupSelectedAsync();
 
+    /// <summary>Duplicates the selected objects.</summary>
     private Task DuplicateSelectedAsync() => commandCoordinator.DuplicateSelectedAsync();
 
+    /// <summary>Deletes the selected objects.</summary>
     private Task DeleteSelectedAsync() => commandCoordinator.DeleteSelectedAsync();
 
+    /// <summary>Moves the camera to frame the current selection.</summary>
     private void FrameSelected() => selectionController.FrameSelected();
 
+    /// <summary>Routes viewport presses to navigation, light gizmos, transform gizmos, or click selection.</summary>
     private void OnViewportPointerPressed(object? sender, PointerPressedEventArgs e)
     {
         if (!session.HasRenderableScene)
@@ -643,6 +670,7 @@ private async Task OpenRenderSettingsAsync()
         }
     }
 
+    /// <summary>Routes viewport pointer movement to navigation, active drags, or mesh hover preview.</summary>
     private void OnViewportPointerMoved(object? sender, PointerEventArgs e)
     {
         if (navigationController.TryHandlePointerMoved(e))
@@ -666,6 +694,7 @@ private async Task OpenRenderSettingsAsync()
         UpdateMeshHover(current);
     }
 
+    /// <summary>Highlights the mesh component under the cursor in vertex, edge, or face mode.</summary>
     private void UpdateMeshHover(Point viewportPoint)
     {
         if (SelectedSelectionMode == ComposerSelectionMode.Object ||
@@ -717,6 +746,7 @@ private async Task OpenRenderSettingsAsync()
         _ = renderController.RequestRenderAsync(interactive: true);
     }
 
+    /// <summary>Clears the mesh hover highlight and optionally requests a fresh render.</summary>
     private void ClearMeshHoverOverlay(bool requestRender)
     {
         if (!session.ClearMeshHover())
@@ -725,6 +755,7 @@ private async Task OpenRenderSettingsAsync()
             _ = renderController.RequestRenderAsync(interactive: true);
     }
 
+    /// <summary>Finishes navigation and gizmo drags or selects the object or mesh element under the cursor.</summary>
     private async void OnViewportPointerReleased(object? sender, PointerReleasedEventArgs e)
     {
         if (await navigationController.TryHandlePointerReleasedAsync(e))
@@ -841,6 +872,7 @@ private async Task OpenRenderSettingsAsync()
         }
     }
 
+    /// <summary>Opens the light or face context menu for the right-clicked viewport point.</summary>
     private async Task ShowViewportContextMenuAsync(Point viewportPoint)
     {
         if (session.ShowLightMarkers &&
@@ -865,6 +897,7 @@ private async Task OpenRenderSettingsAsync()
         await ShowFaceContextMenuAsync(viewportPoint);
     }
 
+    /// <summary>Opens the light editor dialog for the preferred or currently selected light.</summary>
     private void OpenLightEditor(int? preferredIndex)
     {
         int? index = preferredIndex ?? session.SelectedLightIndex;
@@ -886,6 +919,7 @@ private async Task OpenRenderSettingsAsync()
             UpdateHistoryButtons);
     }
 
+    /// <summary>Selects the light at the given index and updates the status text and overlays.</summary>
     private void SelectLight(int? index)
     {
         if (index.HasValue)
@@ -909,6 +943,7 @@ private async Task OpenRenderSettingsAsync()
             _ = renderController.RequestRenderAsync(interactive: true);
     }
 
+    /// <summary>Starts a light gizmo drag when the pointer hits a translation axis, returning true on success.</summary>
     private bool TryBeginLightGizmoDrag(Point viewportPoint)
     {
         if (SelectedSelectionMode != ComposerSelectionMode.Object ||
@@ -941,6 +976,7 @@ private async Task OpenRenderSettingsAsync()
         return true;
     }
 
+    /// <summary>Moves the selected light along its gizmo axis following the pointer.</summary>
     private void UpdateLightGizmoDrag(Point viewportPoint, KeyModifiers modifiers)
     {
         LightGizmoDragState? current = lightGizmoDrag;
@@ -975,6 +1011,7 @@ private async Task OpenRenderSettingsAsync()
             _ = renderController.RequestRenderAsync(interactive: true);
     }
 
+    /// <summary>Commits the light gizmo drag and requests a final render.</summary>
     private async Task CommitLightGizmoDragAsync(Point viewportPoint, KeyModifiers modifiers)
     {
         if (lightGizmoDrag == null)
@@ -993,6 +1030,7 @@ private async Task OpenRenderSettingsAsync()
         await renderController.RequestRenderAsync(interactive: false);
     }
 
+    /// <summary>Cancels the active light gizmo drag and restores the light position.</summary>
     private void CancelLightGizmoDrag()
     {
         if (lightGizmoDrag == null)
@@ -1002,6 +1040,7 @@ private async Task OpenRenderSettingsAsync()
         dialogController.RefreshLightEditor();
     }
 
+    /// <summary>Returns the unit vector for the given gizmo axis.</summary>
     private static Vec3 LightAxisVector(ComposerGizmoAxis axis) => axis switch
     {
         ComposerGizmoAxis.X => new Vec3(1, 0, 0),
@@ -1010,6 +1049,7 @@ private async Task OpenRenderSettingsAsync()
         _ => Vec3.Zero
     };
 
+    /// <summary>Selects the face under the cursor and opens its extrude and inset menu.</summary>
     private async Task ShowFaceContextMenuAsync(Point viewportPoint)
     {
         if (SelectedSelectionMode != ComposerSelectionMode.Face ||
@@ -1051,6 +1091,7 @@ private async Task OpenRenderSettingsAsync()
         menu.Open(viewport);
     }
 
+    /// <summary>Prompts for a distance and extrudes or insets the selected face.</summary>
     private async Task RunFaceOperationAsync(bool insetOperation)
     {
         if (selectionController.ActiveObjectId is not int id || !session.CanEditSelectedFace(id))
@@ -1119,6 +1160,7 @@ private async Task OpenRenderSettingsAsync()
         }
     }
 
+    /// <summary>Opens the primitive parameters dialog for the active object.</summary>
     private void OpenPrimitiveParameters()
     {
         if (selectionController.ActiveObjectId is not int id)
@@ -1136,6 +1178,7 @@ private async Task OpenRenderSettingsAsync()
             objectId => selectionController.RefreshObjectTree(objectId));
     }
 
+    /// <summary>Opens the material editor dialog for the active object.</summary>
     private void OpenMaterialEditor()
     {
         if (selectionController.ActiveObjectId is not int id)
@@ -1152,6 +1195,7 @@ private async Task OpenRenderSettingsAsync()
             objectId => selectionController.RefreshObjectTree(objectId));
     }
 
+    /// <summary>Handles keyboard shortcuts for history, editing, selection modes, gizmos, and camera navigation.</summary>
     private void OnWindowKeyDown(object? sender, KeyEventArgs e)
     {
         if (e.KeyModifiers.HasFlag(KeyModifiers.Control) && e.Key == Key.Z)
@@ -1288,6 +1332,7 @@ private async Task OpenRenderSettingsAsync()
         }
     }
 
+    /// <summary>Selects the given selection mode in the selection mode box.</summary>
     private void SelectSelectionMode(ComposerSelectionMode mode)
     {
         int index = Array.FindIndex(selectionModeChoices, choice => choice.Mode == mode);
@@ -1295,6 +1340,7 @@ private async Task OpenRenderSettingsAsync()
             selectionModeBox.SelectedIndex = index;
     }
 
+    /// <summary>Selects the given move axis lock in the move axis box.</summary>
     private void SelectMoveAxisLock(ComposerGizmoAxis axis)
     {
         int index = Array.FindIndex(moveAxisChoices, choice => choice.Axis == axis);
@@ -1302,6 +1348,7 @@ private async Task OpenRenderSettingsAsync()
             moveAxisBox.SelectedIndex = index;
     }
 
+    /// <summary>Selects the given gizmo mode, forcing move mode outside object selection.</summary>
     private void SelectGizmoMode(ComposerGizmoMode mode)
     {
         if (SelectedSelectionMode != ComposerSelectionMode.Object && mode != ComposerGizmoMode.Translate)
@@ -1317,6 +1364,7 @@ private async Task OpenRenderSettingsAsync()
 
 
 
+    /// <summary>Refreshes the undo and redo buttons from the session history state.</summary>
     private void UpdateHistoryButtons()
     {
         undoButton.IsEnabled = session.CanUndo;
@@ -1336,6 +1384,7 @@ private async Task OpenRenderSettingsAsync()
     }
 
 
+    /// <summary>Enables or disables window controls while a long operation runs.</summary>
     private void SetBusy(bool busy, string? message = null)
     {
         newButton.IsEnabled = !busy;
@@ -1369,6 +1418,7 @@ private async Task OpenRenderSettingsAsync()
         menuController.SyncEnabledState();
     }
 
+    /// <summary>Shows an operation error in the status bar and writes the full details to diagnostics.</summary>
     private void ReportOperationFailure(string operation, Exception exception)
     {
         string message = $"{operation}: {exception.Message}";
@@ -1377,6 +1427,7 @@ private async Task OpenRenderSettingsAsync()
         Console.Error.WriteLine($"{message}{Environment.NewLine}{exception}");
     }
 
+    /// <summary>Stops timers and disposes controllers, the session, and render resources.</summary>
     private void DisposeWindowResources()
     {
         hoverPulseTimer.Stop();
@@ -1388,8 +1439,11 @@ private async Task OpenRenderSettingsAsync()
         lifetimeCancellation.Dispose();
     }
 
+    /// <summary>Creates a toolbar button with the given label.</summary>
     private static Button NewButton(string content) => new() { Content = content, MinHeight = 32 };
+    /// <summary>Creates a standard inspector text box.</summary>
     private static TextBox NewTextBox() => new() { MinHeight = 30 };
+    /// <summary>Creates a right-aligned numeric text box with the given initial value.</summary>
     private static TextBox NumberBox(string value) => new()
     {
         Text = value,

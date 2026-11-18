@@ -27,6 +27,7 @@ public sealed class LightingState
     public LightingState Clone() => new();
 
     // Playback only animates the camera timeline. Lighting is manual through SceneLight objects.
+    /// <summary>Resets the lighting label without changing any scene lights.</summary>
     public void Evaluate(double timeSeconds, double duration)
     {
         Label = "Scene lights";

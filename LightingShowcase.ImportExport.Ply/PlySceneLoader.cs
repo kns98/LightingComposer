@@ -22,6 +22,7 @@ namespace LightingShowcase.SceneGraph;
 /// <summary>Imports common ASCII and binary PLY assets into the internal scene graph.</summary>
 public static class PlySceneLoader
 {
+    /// <summary>Loads a PLY file into the scene, scaled and placed on the floor.</summary>
     public static ObjLoadResult LoadIntoScene(
         Scene scene,
         string filePath,
@@ -97,6 +98,7 @@ public static class PlySceneLoader
         public int Count { get; }
         public List<PlyProperty> Properties { get; } = new();
 
+        /// <summary>Initializes a new PLY element with the given name and count.</summary>
         public PlyElement(string name, int count)
         {
             Name = name;
@@ -109,6 +111,7 @@ public static class PlySceneLoader
         public Vec3 Position { get; }
         public Vec3? Color { get; }
 
+        /// <summary>Initializes a new PLY vertex with the given position and optional color.</summary>
         public PlyVertex(Vec3 position, Vec3? color)
         {
             Position = position;
@@ -124,6 +127,7 @@ public static class PlySceneLoader
         public string CountType { get; }
         public string ItemType { get; }
 
+        /// <summary>Initializes a new PLY property descriptor.</summary>
         private PlyProperty(string name, string type, bool isList, string countType, string itemType)
         {
             Name = name;
@@ -133,10 +137,13 @@ public static class PlySceneLoader
             ItemType = itemType;
         }
 
+        /// <summary>Creates a scalar PLY property of the given type and name.</summary>
         public static PlyProperty Scalar(string type, string name) => new(name, type, false, string.Empty, string.Empty);
+        /// <summary>Creates a list PLY property with the given count type, item type, and name.</summary>
         public static PlyProperty List(string countType, string itemType, string name) => new(name, string.Empty, true, countType, itemType);
     }
 
+    /// <summary>Reads the PLY header and returns it with the data offset.</summary>
     private static PlyHeader ReadHeader(byte[] bytes, out int dataOffset)
     {
         if (bytes.Length < 4)
@@ -229,6 +236,7 @@ public static class PlySceneLoader
         return header;
     }
 
+    /// <summary>Reads PLY vertices and faces in ASCII or binary form.</summary>
     private static void ReadGeometry(
         byte[] bytes,
         int dataOffset,
@@ -253,6 +261,7 @@ public static class PlySceneLoader
         ReadBinaryElements(bytes, ref offset, header, littleEndian, vertices, faces, progress);
     }
 
+    /// <summary>Reads ASCII PLY vertices and faces, skipping other elements.</summary>
     private static void ReadAsciiElements(
         StringReader reader,
         PlyHeader header,
@@ -302,6 +311,7 @@ public static class PlySceneLoader
         }
     }
 
+    /// <summary>Parses one ASCII PLY vertex line into a position with an optional color.</summary>
     private static PlyVertex ReadAsciiVertex(string line, PlyElement element)
     {
         string[] tokens = line.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
@@ -338,6 +348,7 @@ public static class PlySceneLoader
         return new PlyVertex(new Vec3(x, y, z), color);
     }
 
+    /// <summary>Parses one ASCII PLY face line into validated vertex indices.</summary>
     private static int[] ReadAsciiFace(string line, PlyElement element, PlyProperty faceList, int vertexCount)
     {
         string[] tokens = line.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
@@ -372,6 +383,7 @@ public static class PlySceneLoader
         return Array.Empty<int>();
     }
 
+    /// <summary>Reads binary PLY vertices and faces with the given byte order, skipping other elements.</summary>
     private static void ReadBinaryElements(
         byte[] bytes,
         ref int offset,
@@ -418,6 +430,7 @@ public static class PlySceneLoader
         }
     }
 
+    /// <summary>Reads one binary PLY vertex record into a position with an optional color.</summary>
     private static PlyVertex ReadBinaryVertex(byte[] bytes, ref int offset, PlyElement element, bool littleEndian)
     {
         double x = 0, y = 0, z = 0;
@@ -451,6 +464,7 @@ public static class PlySceneLoader
         return new PlyVertex(new Vec3(x, y, z), color);
     }
 
+    /// <summary>Reads one binary PLY face record into validated vertex indices.</summary>
     private static int[] ReadBinaryFace(byte[] bytes, ref int offset, PlyElement element, PlyProperty faceList, bool littleEndian, int vertexCount)
     {
         foreach (PlyProperty property in element.Properties)
@@ -478,6 +492,7 @@ public static class PlySceneLoader
         return Array.Empty<int>();
     }
 
+    /// <summary>Skips one binary record of the given element.</summary>
     private static void SkipBinaryRecord(byte[] bytes, ref int offset, PlyElement element, bool littleEndian)
     {
         foreach (PlyProperty property in element.Properties)
@@ -495,6 +510,7 @@ public static class PlySceneLoader
         }
     }
 
+    /// <summary>Triangulates the faces into transformed scene triangles and returns their count.</summary>
     private static int BuildFaces(
         List<int[]> faces,
         List<PlyVertex> vertices,
@@ -536,6 +552,7 @@ public static class PlySceneLoader
     }
 
 
+    /// <summary>Blends the vertex colors into a material, or returns the fallback when any is missing.</summary>
     private static Material MaterialForTriangleColor(Material fallback, Vec3? a, Vec3? b, Vec3? c)
     {
         if (a == null || b == null || c == null)
@@ -545,15 +562,19 @@ public static class PlySceneLoader
         return new Material(average, fallback.Emission, fallback.LightId, fallback.Texture);
     }
 
+    /// <summary>Returns true when the property name denotes a red color channel.</summary>
     private static bool IsRedProperty(string name) =>
         name.Equals("red", StringComparison.OrdinalIgnoreCase) || name.Equals("r", StringComparison.OrdinalIgnoreCase) || name.Equals("diffuse_red", StringComparison.OrdinalIgnoreCase);
 
+    /// <summary>Returns true when the property name denotes a green color channel.</summary>
     private static bool IsGreenProperty(string name) =>
         name.Equals("green", StringComparison.OrdinalIgnoreCase) || name.Equals("g", StringComparison.OrdinalIgnoreCase) || name.Equals("diffuse_green", StringComparison.OrdinalIgnoreCase);
 
+    /// <summary>Returns true when the property name denotes a blue color channel.</summary>
     private static bool IsBlueProperty(string name) =>
         name.Equals("blue", StringComparison.OrdinalIgnoreCase) || name.Equals("b", StringComparison.OrdinalIgnoreCase) || name.Equals("diffuse_blue", StringComparison.OrdinalIgnoreCase);
 
+    /// <summary>Normalizes a color component to the 0..1 range for the given property type.</summary>
     private static double NormalizeColorComponent(double value, string propertyType)
     {
         string normalized = NormalizeType(propertyType);
@@ -563,6 +584,7 @@ public static class PlySceneLoader
         return Math.Clamp(scaled, 0.0, 1.0);
     }
 
+    /// <summary>Finds the header element with the given name, or returns null.</summary>
     private static PlyElement? FindElement(PlyHeader header, string name)
     {
         foreach (PlyElement element in header.Elements)
@@ -573,6 +595,7 @@ public static class PlySceneLoader
         return null;
     }
 
+    /// <summary>Finds the element property with the given name, or returns null.</summary>
     private static PlyProperty? FindProperty(PlyElement element, string name)
     {
         foreach (PlyProperty property in element.Properties)
@@ -583,6 +606,7 @@ public static class PlySceneLoader
         return null;
     }
 
+    /// <summary>Selects the face list property holding vertex indices.</summary>
     private static PlyProperty SelectFaceIndexProperty(PlyElement faceElement)
     {
         PlyProperty? firstList = null;
@@ -601,6 +625,7 @@ public static class PlySceneLoader
         return firstList ?? throw new InvalidDataException("PLY face element must contain a list property for vertex indices.");
     }
 
+    /// <summary>Parses a face index and validates it against the vertex count.</summary>
     private static int ParseIndex(string value, int vertexCount)
     {
         int index = ParseInt(value, "face index");
@@ -608,6 +633,7 @@ public static class PlySceneLoader
         return index;
     }
 
+    /// <summary>Reads a binary face index of the given type and validates it against the vertex count.</summary>
     private static int ReadBinaryIndex(byte[] bytes, ref int offset, string type, bool littleEndian, int vertexCount)
     {
         int index = ReadBinaryInt(bytes, ref offset, type, littleEndian);
@@ -615,12 +641,14 @@ public static class PlySceneLoader
         return index;
     }
 
+    /// <summary>Throws when the face index falls outside the vertex range.</summary>
     private static void ValidateIndex(int index, int vertexCount)
     {
         if (index < 0 || index >= vertexCount)
             throw new InvalidDataException($"PLY face references vertex index {index}, but valid range is 0..{vertexCount - 1}.");
     }
 
+    /// <summary>Parses a PLY integer with an invariant culture.</summary>
     private static int ParseInt(string value, string name)
     {
         if (!int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out int result))
@@ -628,6 +656,7 @@ public static class PlySceneLoader
         return result;
     }
 
+    /// <summary>Parses a PLY number with an invariant culture.</summary>
     private static double ParseDouble(string value)
     {
         if (!double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out double result))
@@ -635,8 +664,10 @@ public static class PlySceneLoader
         return result;
     }
 
+    /// <summary>Throws when the PLY property type is unsupported.</summary>
     private static void ValidateType(string type) => _ = TypeSize(type);
 
+    /// <summary>Returns the byte size of the given PLY property type.</summary>
     private static int TypeSize(string type) => NormalizeType(type) switch
     {
         "int8" => 1,
@@ -650,6 +681,7 @@ public static class PlySceneLoader
         _ => throw new NotSupportedException($"Unsupported PLY property type: {type}")
     };
 
+    /// <summary>Normalizes a PLY type alias to its canonical name.</summary>
     private static string NormalizeType(string type) => type.ToLowerInvariant() switch
     {
         "char" => "int8",
@@ -671,6 +703,7 @@ public static class PlySceneLoader
         _ => type.ToLowerInvariant()
     };
 
+    /// <summary>Skips one binary scalar of the given type.</summary>
     private static void SkipBinaryScalar(byte[] bytes, ref int offset, string type)
     {
         offset += TypeSize(type);
@@ -678,6 +711,7 @@ public static class PlySceneLoader
     }
 
 
+    /// <summary>Reads a binary list count of the given type.</summary>
     private static int ReadBinaryListCount(byte[] bytes, ref int offset, string type, bool littleEndian)
     {
         int count = ReadBinaryInt(bytes, ref offset, type, littleEndian);
@@ -686,6 +720,7 @@ public static class PlySceneLoader
         return count;
     }
 
+    /// <summary>Reads a binary integer of the given type.</summary>
     private static int ReadBinaryInt(byte[] bytes, ref int offset, string type, bool littleEndian)
     {
         double value = ReadBinaryDouble(bytes, ref offset, type, littleEndian);
@@ -694,6 +729,7 @@ public static class PlySceneLoader
         return (int)value;
     }
 
+    /// <summary>Reads a binary number of the given type as a double.</summary>
     private static double ReadBinaryDouble(byte[] bytes, ref int offset, string type, bool littleEndian)
     {
         string normalized = NormalizeType(type);
@@ -722,6 +758,7 @@ public static class PlySceneLoader
         }
     }
 
+    /// <summary>Reads a 16-bit unsigned integer with the given byte order.</summary>
     private static ushort ReadUInt16(byte[] bytes, ref int offset, bool littleEndian)
     {
         EnsureAvailable(bytes, offset, 2);
@@ -732,6 +769,7 @@ public static class PlySceneLoader
         return value;
     }
 
+    /// <summary>Reads a 32-bit unsigned integer with the given byte order.</summary>
     private static uint ReadUInt32(byte[] bytes, ref int offset, bool littleEndian)
     {
         EnsureAvailable(bytes, offset, 4);
@@ -742,12 +780,14 @@ public static class PlySceneLoader
         return value;
     }
 
+    /// <summary>Reads a 32-bit float with the given byte order.</summary>
     private static float ReadSingle(byte[] bytes, ref int offset, bool littleEndian)
     {
         uint raw = ReadUInt32(bytes, ref offset, littleEndian);
         return BitConverter.Int32BitsToSingle(unchecked((int)raw));
     }
 
+    /// <summary>Reads a 64-bit double with the given byte order.</summary>
     private static double ReadDouble(byte[] bytes, ref int offset, bool littleEndian)
     {
         EnsureAvailable(bytes, offset, 8);
@@ -778,12 +818,14 @@ public static class PlySceneLoader
         return BitConverter.Int64BitsToDouble(unchecked((long)raw));
     }
 
+    /// <summary>Throws when fewer than the required bytes remain in the buffer.</summary>
     private static void EnsureAvailable(byte[] bytes, int offset, int count)
     {
         if (offset < 0 || count < 0 || offset + count > bytes.Length)
             throw new InvalidDataException("PLY file ended before all declared binary data was read.");
     }
 
+    /// <summary>Computes the minimum and maximum corners of the given vertices.</summary>
     private static void GetBounds(List<Vec3> vertices, out Vec3 min, out Vec3 max)
     {
         min = vertices[0];
@@ -795,10 +837,12 @@ public static class PlySceneLoader
         }
     }
 
+    /// <summary>Recenters, scales, and offsets the given point into scene space.</summary>
     private static Vec3 Transform(Vec3 p, Vec3 sourceCenter, double scale, Vec3 offset) => (p - sourceCenter) * scale + offset;
 
     private const double TextureRepeatWorldUnits = 0.25;
 
+    /// <summary>Generates box-projection UVs for the given point from its dominant normal axis.</summary>
     private static Vec2 GenerateBoxUv(Vec3 point, Vec3 normal, Aabb bounds)
     {
         double nx = Math.Abs(normal.X), ny = Math.Abs(normal.Y), nz = Math.Abs(normal.Z);
@@ -813,6 +857,7 @@ public static class PlySceneLoader
         return new Vec2(ToTileCoordinate(point.X, bounds.Min.X), ToTileCoordinate(point.Y, bounds.Min.Y));
     }
 
+    /// <summary>Converts a scene coordinate into repeating texture tile units.</summary>
     private static double ToTileCoordinate(double value, double origin) =>
         (value - origin) / TextureRepeatWorldUnits;
 }

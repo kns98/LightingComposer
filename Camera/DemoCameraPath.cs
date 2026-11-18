@@ -80,10 +80,14 @@ public sealed class DemoCameraPath
 
     /// <summary>Sorts keyframes by ascending time.</summary>
     private void SortKeys() => keys.Sort((a, b) => a.Time.CompareTo(b.Time));
+    /// <summary>Clamps a camera keyframe time into the valid path range.</summary>
     private static CameraKey ClampKey(CameraKey key) => new(ClampTime(key.Time), key.Position, key.Target);
+    /// <summary>Clamps a path time into the 0..1 range.</summary>
     private static double ClampTime(double v) => System.Math.Max(0.0, System.Math.Min(1.0, v));
     /// <summary>Applies smoothstep easing to a 0..1 interpolation factor.</summary>
     private static double Smooth(double t) => t * t * (3.0 - 2.0 * t);
+    /// <summary>Returns true when two values differ by less than the keyframe tolerance.</summary>
     private static bool NearlyEqual(double a, double b) => System.Math.Abs(a - b) < 0.000001;
+    /// <summary>Returns true when two vectors are closer than the keyframe tolerance.</summary>
     private static bool SameVector(Vec3 a, Vec3 b) => (a - b).Length() < 0.000001;
 }

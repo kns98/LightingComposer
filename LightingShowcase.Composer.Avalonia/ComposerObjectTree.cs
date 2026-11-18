@@ -11,6 +11,7 @@ namespace LightingShowcase.Composer;
 
 internal sealed class ObjectTreeNode
 {
+    /// <summary>Initializes a tree node with its id, label, and local triangle count.</summary>
     public ObjectTreeNode(int id, string label, int localTriangleCount)
     {
         Id = id;
@@ -22,12 +23,14 @@ internal sealed class ObjectTreeNode
     public string Label { get; }
     public int LocalTriangleCount { get; }
     public List<ObjectTreeNode> Children { get; } = new();
+    /// <summary>Returns the node label.</summary>
     public override string ToString() => Label;
 }
 
 /// <summary>Builds the hierarchy projection consumed by the Composer UI.</summary>
 internal static class ComposerObjectTree
 {
+    /// <summary>Builds a nested object tree from a depth-ordered list of scene object infos.</summary>
     public static List<ObjectTreeNode> Build(IReadOnlyList<SceneObjectInfo> infos)
     {
         List<ObjectTreeNode> roots = new();
@@ -60,6 +63,7 @@ internal static class ComposerObjectTree
         return roots;
     }
 
+    /// <summary>Finds the node with the given id by searching the tree recursively.</summary>
     public static ObjectTreeNode? Find(IEnumerable<ObjectTreeNode> nodes, int id)
     {
         foreach (ObjectTreeNode node in nodes)
@@ -75,6 +79,7 @@ internal static class ComposerObjectTree
         return null;
     }
 
+    /// <summary>Toggles the expanded state of an object id and returns true when it becomes expanded.</summary>
     public static bool ToggleExpanded(ISet<int> expandedIds, int objectId)
     {
         ArgumentNullException.ThrowIfNull(expandedIds);
@@ -85,6 +90,7 @@ internal static class ComposerObjectTree
         return false;
     }
 
+    /// <summary>Collects the visible object ids by walking only expanded branches.</summary>
     public static IReadOnlyList<int> FlattenVisible(
         IEnumerable<ObjectTreeNode> roots,
         IReadOnlySet<int> expandedIds)
@@ -95,6 +101,7 @@ internal static class ComposerObjectTree
         return result;
     }
 
+    /// <summary>Appends a node id and, when expanded, its descendants to the result list.</summary>
     private static void AddVisible(ObjectTreeNode node, IReadOnlySet<int> expandedIds, List<int> result)
     {
         result.Add(node.Id);

@@ -28,6 +28,7 @@ public static class GltfSceneIO
     private const uint BinChunkType = 0x004E4942; // BIN\0
     private static readonly JsonDocument EmptyArrayDocument = JsonDocument.Parse("[]");
 
+    /// <summary>Loads a glTF or GLB file into the scene, fitting it to the editor viewport.</summary>
     public static ObjLoadResult LoadIntoScene(
         Scene scene,
         string filePath,
@@ -156,6 +157,7 @@ public static class GltfSceneIO
         progress?.Invoke(new ObjLoadProgress($"Finished glTF in {totalTimer.ElapsedMilliseconds:N0} ms", 100, vertexCount, faceCount, triangleCount));
         return new ObjLoadResult(filePath, vertexCount, faceCount, triangleCount, details);
 
+        /// <summary>Visits every root node of the active scene with the given visitor.</summary>
         void TraverseSceneRoots(Action<int, Matrix4x4> visitor)
         {
             if (scenes.GetArrayLength() > 0 && sceneIndex >= 0 && sceneIndex < scenes.GetArrayLength() && scenes[sceneIndex].TryGetProperty("nodes", out JsonElement rootNodes))
@@ -170,6 +172,7 @@ public static class GltfSceneIO
             }
         }
 
+        /// <summary>Accumulates world-space bounds for a node and its children.</summary>
         void TraverseBounds(int nodeIndex, Matrix4x4 parent)
         {
             if (nodeIndex < 0 || nodeIndex >= nodes.GetArrayLength())
@@ -191,6 +194,7 @@ public static class GltfSceneIO
             }
         }
 
+        /// <summary>Expands the import bounds with the transformed bounds of one mesh.</summary>
         void ExpandMeshBounds(JsonElement mesh, Matrix4x4 world)
         {
             if (!mesh.TryGetProperty("primitives", out JsonElement primitives))
@@ -217,6 +221,7 @@ public static class GltfSceneIO
             }
         }
 
+        /// <summary>Expands the import bounds with the eight transformed corners of a bounding box.</summary>
         void ExpandTransformedBounds(Vec3 min, Vec3 max, Matrix4x4 transform)
         {
             Span<Vector3> corners = stackalloc Vector3[8]
@@ -238,6 +243,7 @@ public static class GltfSceneIO
             }
         }
 
+        /// <summary>Expands the import bounds to include the given position.</summary>
         void ExpandBounds(Vec3 position)
         {
             boundsMin = Min(boundsMin, position);
@@ -245,8 +251,10 @@ public static class GltfSceneIO
             hasBounds = true;
         }
 
+        /// <summary>Maps an authoring-space position into fitted editor space.</summary>
         Vec3 NormalizePosition(Vec3 position) => (position - sourceCenter) * importScale + importOffset;
 
+        /// <summary>Imports one node and its children, placing lights and meshes into the scene.</summary>
         void TraverseNode(int nodeIndex, Matrix4x4 parent)
         {
             if (nodeIndex < 0 || nodeIndex >= nodes.GetArrayLength())
@@ -290,6 +298,7 @@ public static class GltfSceneIO
             }
         }
 
+        /// <summary>Imports one mesh primitive set into a scene group with normalized positions.</summary>
         void ImportMesh(JsonElement mesh, string nodeName, Matrix4x4 world)
         {
             if (!mesh.TryGetProperty("primitives", out JsonElement primitives))
@@ -394,6 +403,7 @@ public static class GltfSceneIO
         }
     }
 
+    /// <summary>Saves the scene to a glTF or GLB file.</summary>
     public static void Save(Scene scene, string filePath, bool binary, SceneSaveOptions? options = null)
     {
         ExportBuild build = BuildExport(scene, options?.TexturePathResolver, options?.OptimizeGeometry ?? false);
@@ -403,6 +413,7 @@ public static class GltfSceneIO
             WriteGltf(build, filePath, options?.BufferFileName);
     }
 
+    /// <summary>Builds the glTF JSON document and binary buffer for the scene.</summary>
     private static ExportBuild BuildExport(Scene scene, Func<TextureMap, string?>? texturePathResolver, bool optimizeGeometry)
     {
         List<byte> bin = new();
@@ -419,6 +430,7 @@ public static class GltfSceneIO
         Dictionary<TextureMap, int> textureIds = new(ReferenceEqualityComparer.Instance);
         HashSet<string> materialExtensionsUsed = new(StringComparer.Ordinal);
 
+        /// <summary>Returns the export index for a texture, registering it when first seen.</summary>
         int TextureIndex(TextureMap? texture)
         {
             if (texture == null || texturePathResolver == null)
@@ -453,6 +465,7 @@ public static class GltfSceneIO
             return textureIndex;
         }
 
+        /// <summary>Returns the export id for a material, emitting its glTF definition when first seen.</summary>
         int GetMaterialId(Material material)
         {
             if (materialIds.TryGetValue(material, out int existingMaterialId))
@@ -550,6 +563,7 @@ public static class GltfSceneIO
             return materialId;
         }
 
+        /// <summary>Builds one glTF mesh primitive from the triangles sharing a material.</summary>
         Dictionary<string, object?> BuildPrimitive(Material material, List<Triangle> materialTris)
         {
             Dictionary<ExportVertex, uint> vertexIds = new();
@@ -584,6 +598,7 @@ public static class GltfSceneIO
                 ["mode"] = 4
             };
 
+            /// <summary>Adds a deduplicated vertex to the export buffers and records its index.</summary>
             void AddVertex(Vec3 p, Vec2 uv, Vec3 normal)
             {
                 ExportVertex key = new(
@@ -732,6 +747,7 @@ public static class GltfSceneIO
         return new ExportBuild(root, bin.ToArray(), optimizeGeometry);
     }
 
+    /// <summary>Writes the export as a .gltf JSON file plus an external binary buffer.</summary>
     private static void WriteGltf(ExportBuild build, string filePath, string? bufferFileName)
     {
         string binName = string.IsNullOrWhiteSpace(bufferFileName)
@@ -747,6 +763,7 @@ public static class GltfSceneIO
         File.WriteAllBytes(Path.Combine(Path.GetDirectoryName(filePath) ?? string.Empty, binName), bin);
     }
 
+    /// <summary>Writes the export as a binary GLB container.</summary>
     private static void WriteGlb(ExportBuild build, string filePath, string? bufferFileName)
     {
         bool useExternalBuffer = !string.IsNullOrWhiteSpace(bufferFileName);
@@ -790,6 +807,7 @@ public static class GltfSceneIO
         }
     }
 
+    /// <summary>Reads the JSON document and binary chunk from a glTF or GLB file.</summary>
     private static GltfDocument ReadDocument(string filePath)
     {
         string extension = Path.GetExtension(filePath).ToLowerInvariant();
@@ -820,6 +838,7 @@ public static class GltfSceneIO
         return new GltfDocument(jsonUtf8 ?? throw new InvalidDataException("GLB JSON chunk missing."), bin);
     }
 
+    /// <summary>Trims trailing padding bytes from a GLB JSON chunk.</summary>
     private static byte[] TrimJsonPadding(byte[] bytes)
     {
         int length = bytes.Length;
@@ -832,6 +851,7 @@ public static class GltfSceneIO
         return result;
     }
 
+    /// <summary>Loads every buffer referenced by the glTF document.</summary>
     private static List<byte[]> LoadBuffers(JsonElement root, GltfDocument doc, string filePath)
     {
         List<byte[]> result = new();
@@ -854,6 +874,7 @@ public static class GltfSceneIO
         return result;
     }
 
+    /// <summary>Reads buffer bytes from a data URI or an external file.</summary>
     private static byte[] ReadUriBytes(string uri, string baseDirectory)
     {
         if (uri.StartsWith("data:", StringComparison.OrdinalIgnoreCase))
@@ -865,6 +886,7 @@ public static class GltfSceneIO
         return File.ReadAllBytes(Path.Combine(baseDirectory, Uri.UnescapeDataString(uri)));
     }
 
+    /// <summary>Reads every material definition into scene materials with textures.</summary>
     private static List<GltfMaterial> ReadMaterials(JsonElement root, List<byte[]> buffers, string sceneFilePath, Material fallback)
     {
         List<GltfMaterial> result = new();
@@ -1083,6 +1105,7 @@ public static class GltfSceneIO
         return result;
     }
 
+    /// <summary>Reads one texture by index, returning null when it is missing or unreadable.</summary>
     private static TextureMap? TryReadTexture(JsonElement root, List<byte[]> buffers, string sceneFilePath, int textureIndex)
     {
         try
@@ -1145,6 +1168,7 @@ public static class GltfSceneIO
         return null;
     }
 
+    /// <summary>Applies a KHR_texture_transform offset, scale, and rotation to a texture.</summary>
     private static TextureMap? ApplyTextureTransform(TextureMap? texture, JsonElement textureInfo)
     {
         if (texture == null ||
@@ -1174,6 +1198,7 @@ public static class GltfSceneIO
         return texture.WithTextureTransform(offsetU, offsetV, scaleU, scaleV, rotation);
     }
 
+    /// <summary>Reads the texture coordinate set index for one texture reference.</summary>
     private static int ReadTextureCoordSet(JsonElement textureInfo)
     {
         int texCoord = textureInfo.TryGetProperty("texCoord", out JsonElement texCoordEl)
@@ -1190,6 +1215,7 @@ public static class GltfSceneIO
         return texCoord;
     }
 
+    /// <summary>Converts a texture address mode to its glTF wrap constant.</summary>
     private static int ToGltfWrap(TextureAddressMode mode) => mode switch
     {
         TextureAddressMode.ClampToEdge => 33071,
@@ -1197,6 +1223,7 @@ public static class GltfSceneIO
         _ => 10497
     };
 
+    /// <summary>Converts a glTF wrap constant to a texture address mode.</summary>
     private static TextureAddressMode ToTextureAddressMode(int gltfWrap) => gltfWrap switch
     {
         33071 => TextureAddressMode.ClampToEdge,
@@ -1204,6 +1231,7 @@ public static class GltfSceneIO
         _ => TextureAddressMode.Repeat
     };
 
+    /// <summary>Decodes the base64 payload of a data URI.</summary>
     private static byte[] ReadDataUriBytes(string uri)
     {
         int comma = uri.IndexOf(',');
@@ -1212,6 +1240,7 @@ public static class GltfSceneIO
         return Convert.FromBase64String(uri[(comma + 1)..]);
     }
 
+    /// <summary>Reads the bytes of one buffer view.</summary>
     private static byte[] ReadBufferViewBytes(JsonElement root, List<byte[]> buffers, int bufferViewIndex)
     {
         JsonElement bufferViews = GetArray(root, "bufferViews");
@@ -1226,6 +1255,7 @@ public static class GltfSceneIO
         return bytes;
     }
 
+    /// <summary>Reads KHR_lights_punctual light definitions from the document.</summary>
     private static List<ImportedLight> ReadLights(JsonElement root)
     {
         List<ImportedLight> result = new();
@@ -1266,6 +1296,7 @@ public static class GltfSceneIO
         return result;
     }
 
+    /// <summary>Reads the stored min and max of a VEC3 accessor, returning false when they are missing or invalid.</summary>
     private static bool TryReadVec3AccessorBounds(JsonElement root, int accessorIndex, out Vec3 min, out Vec3 max)
     {
         min = Vec3.Zero;
@@ -1292,6 +1323,7 @@ public static class GltfSceneIO
                min.X <= max.X && min.Y <= max.Y && min.Z <= max.Z;
     }
 
+    /// <summary>Reads every value from a VEC3 float accessor with the given transform applied.</summary>
     private static List<Vec3> ReadVec3Accessor(JsonElement root, List<byte[]> buffers, int accessorIndex, Matrix4x4 transform)
     {
         AccessorInfo info = GetAccessorInfo(root, accessorIndex);
@@ -1308,6 +1340,7 @@ public static class GltfSceneIO
         return values;
     }
 
+    /// <summary>Reads mesh positions with the node transform and fit-to-editor normalization applied.</summary>
     private static List<Vec3> ReadNormalizedPositionAccessor(
         JsonElement root,
         List<byte[]> buffers,
@@ -1335,6 +1368,7 @@ public static class GltfSceneIO
         return values;
     }
 
+    /// <summary>Reads normals with the inverse-transpose normal transform applied.</summary>
     private static List<Vec3> ReadNormalAccessor(JsonElement root, List<byte[]> buffers, int accessorIndex, Matrix4x4 transform)
     {
         AccessorInfo info = GetAccessorInfo(root, accessorIndex);
@@ -1361,6 +1395,7 @@ public static class GltfSceneIO
         return values;
     }
 
+    /// <summary>Reads every value from a VEC2 accessor.</summary>
     private static List<Vec2> ReadVec2Accessor(JsonElement root, List<byte[]> buffers, int accessorIndex)
     {
         AccessorInfo info = GetAccessorInfo(root, accessorIndex);
@@ -1379,6 +1414,7 @@ public static class GltfSceneIO
         return values;
     }
 
+    /// <summary>Reads RGB values from a vertex color accessor.</summary>
     private static List<Vec3> ReadColorAccessor(JsonElement root, List<byte[]> buffers, int accessorIndex)
     {
         AccessorInfo info = GetAccessorInfo(root, accessorIndex);
@@ -1394,6 +1430,7 @@ public static class GltfSceneIO
         return values;
     }
 
+    /// <summary>Reads triangle indices from an index accessor.</summary>
     private static List<int> ReadIndexAccessor(JsonElement root, List<byte[]> buffers, int accessorIndex)
     {
         AccessorInfo info = GetAccessorInfo(root, accessorIndex);
@@ -1413,6 +1450,7 @@ public static class GltfSceneIO
         return values;
     }
 
+    /// <summary>Resolves buffer layout details for one accessor.</summary>
     private static AccessorInfo GetAccessorInfo(JsonElement root, int accessorIndex)
     {
         JsonElement accessors = GetArray(root, "accessors");
@@ -1430,6 +1468,7 @@ public static class GltfSceneIO
         return new AccessorInfo(buffer, offset, stride, accessor.GetProperty("count").GetInt32(), componentType, type);
     }
 
+    /// <summary>Builds the local transform matrix for one node.</summary>
     private static Matrix4x4 GetNodeTransform(JsonElement node)
     {
         if (node.TryGetProperty("matrix", out JsonElement matrixEl) && matrixEl.GetArrayLength() == 16)
@@ -1450,6 +1489,7 @@ public static class GltfSceneIO
         return Matrix4x4.CreateScale(scale) * Matrix4x4.CreateFromQuaternion(rotation) * Matrix4x4.CreateTranslation(translation);
     }
 
+    /// <summary>Appends float values to the export buffer and returns the new accessor index.</summary>
     private static int AddFloatAccessor(List<byte> bin, List<object> views, List<object> accessors, float[] values, string type, Vec3? min, Vec3? max)
     {
         Align(bin, 4);
@@ -1475,6 +1515,7 @@ public static class GltfSceneIO
         return accessor;
     }
 
+    /// <summary>Appends indices to the export buffer using 16-bit or 32-bit components and returns the new accessor index.</summary>
     private static int AddIndexAccessor(
         List<byte> bin,
         List<object> views,
@@ -1520,6 +1561,7 @@ public static class GltfSceneIO
         return accessor;
     }
 
+    /// <summary>Reads one accessor component value with optional normalization.</summary>
     private static double ReadAccessorComponent(byte[] data, int offset, int componentType, bool normalized)
     {
         return componentType switch
@@ -1534,6 +1576,7 @@ public static class GltfSceneIO
         };
     }
 
+    /// <summary>Returns the byte size of one accessor component type.</summary>
     private static int ComponentByteSize(int componentType) => componentType switch
     {
         5120 or 5121 => 1,
@@ -1542,18 +1585,30 @@ public static class GltfSceneIO
         _ => throw new NotSupportedException($"Unsupported glTF accessor component type {componentType}.")
     };
 
+    /// <summary>Returns a named JSON array, or an empty array when it is missing.</summary>
     private static JsonElement GetArray(JsonElement root, string name) => root.TryGetProperty(name, out JsonElement value) && value.ValueKind == JsonValueKind.Array ? value : EmptyArrayDocument.RootElement;
+    /// <summary>Reads a single-precision float from a byte buffer.</summary>
     private static float ReadFloat(byte[] data, int offset) => BitConverter.ToSingle(data, offset);
+    /// <summary>Returns true when an index lies within the given count.</summary>
     private static bool IsValidIndex(int index, int count) => index >= 0 && index < count;
+    /// <summary>Returns a trimmed name, falling back to the given default when it is blank.</summary>
     private static string SanitizeName(string? value, string fallback) => string.IsNullOrWhiteSpace(value) ? fallback : value.Trim();
+    /// <summary>Clamps a value to the 0 to 1 range.</summary>
     private static double Clamp01(double value) => Math.Max(0.0, Math.Min(1.0, value));
+    /// <summary>Builds a cache key from a material color, emission, and light id.</summary>
     private static string MaterialKey(Material m) => string.Create(CultureInfo.InvariantCulture, $"{m.Color.X:F6},{m.Color.Y:F6},{m.Color.Z:F6},{m.Emission:F6},{m.LightId}");
+    /// <summary>Returns the component-wise minimum of two vectors.</summary>
     private static Vec3 Min(Vec3 a, Vec3 b) => new(Math.Min(a.X, b.X), Math.Min(a.Y, b.Y), Math.Min(a.Z, b.Z));
+    /// <summary>Returns the component-wise maximum of two vectors.</summary>
     private static Vec3 Max(Vec3 a, Vec3 b) => new(Math.Max(a.X, b.X), Math.Max(a.Y, b.Y), Math.Max(a.Z, b.Z));
+    /// <summary>Pads a byte list with zeros up to the given boundary.</summary>
     private static void Align(List<byte> bytes, int boundary) { while (bytes.Count % boundary != 0) bytes.Add(0); }
+    /// <summary>Pads a byte array to a four-byte boundary with the given byte.</summary>
     private static byte[] Pad(byte[] bytes, byte pad) { int padded = (bytes.Length + 3) & ~3; if (padded == bytes.Length) return bytes; byte[] result = new byte[padded]; Array.Copy(bytes, result, bytes.Length); for (int i = bytes.Length; i < result.Length; i++) result[i] = pad; return result; }
+    /// <summary>Creates the JSON serializer options used for glTF output.</summary>
     private static JsonSerializerOptions JsonOptions(bool compact = false) => new() { WriteIndented = !compact, DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull };
 
+    /// <summary>Returns the glTF type name for a scene light kind.</summary>
     private static string LightTypeName(SceneLightKind kind) => kind switch
     {
         SceneLightKind.Directional => "directional",
@@ -1561,6 +1616,7 @@ public static class GltfSceneIO
         _ => "point"
     };
 
+    /// <summary>Computes the quaternion rotating the glTF forward axis onto the given direction.</summary>
     private static double[]? RotationFromMinusZ(Vec3 direction)
     {
         Vec3 target = direction.Normalize();

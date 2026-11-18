@@ -60,6 +60,7 @@ public sealed class SceneLight
         IsDefault = isDefault;
     }
 
+    /// <summary>Normalizes a light direction, falling back to negative Z when it is degenerate.</summary>
     private static Vec3 NormalizeDirection(Vec3 direction)
     {
         Vec3 normalized = direction.Normalize();

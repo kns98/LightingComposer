@@ -39,9 +39,11 @@ public static class BinarySceneFile
         Mesh = 4
     }
 
+    /// <summary>Saves the scene to a binary scene file with default options.</summary>
     public static void Save(Scene scene, string filePath) =>
         Save(scene, filePath, new BinarySceneSaveOptions());
 
+    /// <summary>Saves the scene to a compressed binary scene file through a temporary file.</summary>
     public static void Save(Scene scene, string filePath, BinarySceneSaveOptions options)
     {
         if (scene == null) throw new ArgumentNullException(nameof(scene));
@@ -116,6 +118,7 @@ public static class BinarySceneFile
         }
     }
 
+    /// <summary>Loads a binary scene file into the scene and returns its description.</summary>
     public static string LoadIntoScene(Scene scene, string filePath)
     {
         if (scene == null) throw new ArgumentNullException(nameof(scene));
@@ -157,6 +160,7 @@ public static class BinarySceneFile
         return string.IsNullOrWhiteSpace(description) ? $"Binary scene: {Path.GetFileName(filePath)}" : description;
     }
 
+    /// <summary>Writes one scene light to the binary writer.</summary>
     private static void WriteLight(BinaryWriter writer, SceneLight light)
     {
         writer.Write(light.Id ?? string.Empty);
@@ -171,6 +175,7 @@ public static class BinarySceneFile
         writer.Write(light.OuterConeAngle);
     }
 
+    /// <summary>Reads one scene light from the binary reader.</summary>
     private static SceneLight ReadLight(BinaryReader reader, int version)
     {
         string id = reader.ReadString();
@@ -189,6 +194,7 @@ public static class BinarySceneFile
         return new SceneLight(id, position, color, intensity, enabled, kind, direction, range, innerConeAngle, outerConeAngle);
     }
 
+    /// <summary>Writes an object group with its geometry and children to the binary writer.</summary>
     private static void WriteObject(BinaryWriter writer, SceneObjectGroup group, TextureWriteTable textureTable, MaterialWriteTable materialTable)
     {
         writer.Write(group.Name ?? string.Empty);
@@ -213,6 +219,7 @@ public static class BinarySceneFile
             WriteObject(writer, child, textureTable, materialTable);
     }
 
+    /// <summary>Writes the primitive parameters of an object group.</summary>
     private static void WritePrimitiveParameters(BinaryWriter writer, SceneObjectGroup group)
     {
         writer.Write(group.PrimitiveParameters.Count);
@@ -223,6 +230,7 @@ public static class BinarySceneFile
         }
     }
 
+    /// <summary>Reads primitive parameters, keeping only finite values with non-empty keys.</summary>
     private static Dictionary<string, double> ReadPrimitiveParameters(BinaryReader reader)
     {
         int count = reader.ReadInt32();
@@ -237,6 +245,7 @@ public static class BinarySceneFile
         return parameters;
     }
 
+    /// <summary>Writes explicit mesh logical-face topology, skipping reconstructible primitives.</summary>
     private static void WriteLogicalFaceGroups(BinaryWriter writer, SceneObjectGroup group)
     {
         // Procedural primitives can reconstruct their authored polygon topology
@@ -253,6 +262,7 @@ public static class BinarySceneFile
         }
     }
 
+    /// <summary>Reads logical-face triangle groups into the object group.</summary>
     private static void ReadLogicalFaceGroups(BinaryReader reader, SceneObjectGroup group)
     {
         int faceCount = reader.ReadInt32();
@@ -273,6 +283,7 @@ public static class BinarySceneFile
         group.SetLogicalFaceTriangleGroups(groups);
     }
 
+    /// <summary>Returns true when the face groups partition the local triangles exactly once.</summary>
     private static bool HasValidLogicalFacePartition(SceneObjectGroup group)
     {
         if (!group.HasLogicalFaceTopology || group.LocalTriangles.Count == 0)
@@ -292,6 +303,7 @@ public static class BinarySceneFile
         return covered.All(value => value);
     }
 
+    /// <summary>Reads an object group with its geometry and children into the scene.</summary>
     private static SceneObjectGroup ReadObject(BinaryReader reader, Scene scene, SceneObjectGroup? parent, string sceneFilePath, int version, TextureReadTable? textureTable, MaterialReadTable? materialTable)
     {
         string name = reader.ReadString();
@@ -340,6 +352,7 @@ public static class BinarySceneFile
         return group;
     }
 
+    /// <summary>Creates compact geometry records for an object group from its triangles.</summary>
     private static IEnumerable<GeometryRecord> CreateGeometryRecords(SceneObjectGroup group)
     {
         if (group.LocalTriangles.Count == 0)
@@ -381,6 +394,7 @@ public static class BinarySceneFile
         }
     }
 
+    /// <summary>Writes one geometry record according to its geometry kind.</summary>
     private static void WriteGeometryRecord(BinaryWriter writer, GeometryRecord record, TextureWriteTable textureTable, MaterialWriteTable materialTable)
     {
         writer.Write((byte)record.Kind);
@@ -411,6 +425,7 @@ public static class BinarySceneFile
         }
     }
 
+    /// <summary>Reads one geometry record and adds its triangles to the object group.</summary>
     private static void ReadGeometryRecord(BinaryReader reader, Scene scene, SceneObjectGroup group, string sceneFilePath, int version, TextureReadTable? textureTable, MaterialReadTable? materialTable)
     {
         GeometryKind kind = (GeometryKind)reader.ReadByte();
@@ -480,6 +495,7 @@ public static class BinarySceneFile
 
     private readonly record struct MeshVertex(Vec3 Position, Vec2 Uv, Vec3 Normal);
 
+    /// <summary>Writes triangles as a deduplicated indexed mesh with per-face material ids.</summary>
     private static void WriteIndexedMesh(BinaryWriter writer, IReadOnlyList<Triangle> triangles, MaterialWriteTable materialTable)
     {
         Dictionary<string, int> indexByVertex = new(StringComparer.Ordinal);
@@ -512,6 +528,7 @@ public static class BinarySceneFile
         }
     }
 
+    /// <summary>Reads an indexed mesh and adds its faces to the object group.</summary>
     private static void ReadIndexedMesh(BinaryReader reader, SceneObjectGroup group, MaterialReadTable? materialTable, int version)
     {
         int vertexCount = reader.ReadInt32();
@@ -545,6 +562,7 @@ public static class BinarySceneFile
         }
     }
 
+    /// <summary>Adds a mesh vertex to the table or returns its existing index.</summary>
     private static int AddMeshVertex(List<MeshVertex> vertices, Dictionary<string, int> indexByVertex, Vec3 position, Vec2 uv, Vec3 normal)
     {
         string key = MeshVertexKey(position, uv, normal);
@@ -557,12 +575,15 @@ public static class BinarySceneFile
         return index;
     }
 
+    /// <summary>Builds a deduplication key from a vertex position, UV, and normal.</summary>
     private static string MeshVertexKey(Vec3 position, Vec2 uv, Vec3 normal) =>
         $"{RoundKey(position.X)}|{RoundKey(position.Y)}|{RoundKey(position.Z)}|{RoundKey(uv.U)}|{RoundKey(uv.V)}|" +
         $"{RoundKey(normal.X)}|{RoundKey(normal.Y)}|{RoundKey(normal.Z)}";
 
+    /// <summary>Formats a coordinate rounded to six decimals for vertex keys.</summary>
     private static string RoundKey(double value) => Math.Round(value, 6).ToString("G17", System.Globalization.CultureInfo.InvariantCulture);
 
+    /// <summary>Writes an integer using variable-length encoding.</summary>
     private static void WriteCompactInt(BinaryWriter writer, int value)
     {
         uint unsigned = (uint)value;
@@ -574,6 +595,7 @@ public static class BinarySceneFile
         writer.Write((byte)unsigned);
     }
 
+    /// <summary>Reads a variable-length encoded integer.</summary>
     private static int ReadCompactInt(BinaryReader reader)
     {
         uint result = 0;
@@ -589,6 +611,7 @@ public static class BinarySceneFile
         throw new InvalidDataException("Invalid compact integer in binary scene file.");
     }
 
+    /// <summary>Writes one triangle with its material to the binary writer.</summary>
     private static void WriteTriangle(BinaryWriter writer, Triangle triangle, TextureWriteTable textureTable)
     {
         WriteVec3(writer, triangle.A);
@@ -600,6 +623,7 @@ public static class BinarySceneFile
         WriteMaterial(writer, triangle.Material, textureTable);
     }
 
+    /// <summary>Reads one triangle with its material into the object group.</summary>
     private static void ReadTriangle(BinaryReader reader, SceneObjectGroup group, string sceneFilePath, int version, TextureReadTable? textureTable)
     {
         Vec3 a = ReadVec3(reader);
@@ -612,6 +636,7 @@ public static class BinarySceneFile
         group.AddTriangle(a, b, c, uvA, uvB, uvC, material);
     }
 
+    /// <summary>Writes a material preceded by a presence flag.</summary>
     private static void WriteOptionalMaterial(BinaryWriter writer, Material? material, TextureWriteTable textureTable, MaterialWriteTable materialTable)
     {
         writer.Write(material != null);
@@ -619,14 +644,17 @@ public static class BinarySceneFile
             WriteMaterialRef(writer, material, materialTable);
     }
 
+    /// <summary>Reads a material written with a presence flag, or null when absent.</summary>
     private static Material? ReadOptionalMaterial(BinaryReader reader, string sceneFilePath, int version, TextureReadTable? textureTable, MaterialReadTable? materialTable) =>
         reader.ReadBoolean() ? ReadMaterialOrRef(reader, sceneFilePath, version, textureTable, materialTable) : null;
 
+    /// <summary>Writes a reference to a material in the material table.</summary>
     private static void WriteMaterialRef(BinaryWriter writer, Material material, MaterialWriteTable materialTable)
     {
         WriteCompactInt(writer, materialTable.IdFor(material));
     }
 
+    /// <summary>Reads a material table reference or a legacy inline material.</summary>
     private static Material ReadMaterialOrRef(BinaryReader reader, string sceneFilePath, int version, TextureReadTable? textureTable, MaterialReadTable? materialTable)
     {
         if (version >= 3)
@@ -635,6 +663,7 @@ public static class BinarySceneFile
         return ReadMaterial(reader, sceneFilePath, version, textureTable);
     }
 
+    /// <summary>Writes a material with its color, PBR, and texture references.</summary>
     private static void WriteMaterial(BinaryWriter writer, Material material, TextureWriteTable textureTable)
     {
         WriteVec3(writer, material.Color);
@@ -675,6 +704,7 @@ public static class BinarySceneFile
         writer.Write(material.ClearcoatUsesTransmissionTexture);
     }
 
+    /// <summary>Reads a material with version-appropriate defaults for newer fields.</summary>
     private static Material ReadMaterial(BinaryReader reader, string sceneFilePath, int version, TextureReadTable? textureTable)
     {
         Vec3 color = ReadVec3(reader);
@@ -743,6 +773,7 @@ public static class BinarySceneFile
             clearcoatUsesTransmissionTexture);
     }
 
+    /// <summary>Writes the texture table records to the binary writer.</summary>
     private static void WriteTextureTable(BinaryWriter writer, TextureWriteTable textureTable, BinarySceneSaveOptions options)
     {
         writer.Write(textureTable.Textures.Count);
@@ -750,6 +781,7 @@ public static class BinarySceneFile
             WriteTextureRecord(writer, texture, options);
     }
 
+    /// <summary>Reads the texture table records into a lookup table.</summary>
     private static TextureReadTable ReadTextureTable(BinaryReader reader, string sceneFilePath, int version)
     {
         int count = reader.ReadInt32();
@@ -759,6 +791,7 @@ public static class BinarySceneFile
         return new TextureReadTable(textures);
     }
 
+    /// <summary>Writes one texture record with addressing metadata and optional embedded pixels.</summary>
     private static void WriteTextureRecord(BinaryWriter writer, TextureMap texture, BinarySceneSaveOptions options)
     {
         string sourcePath = options.EmbedTexturePixels
@@ -787,6 +820,7 @@ public static class BinarySceneFile
         }
     }
 
+    /// <summary>Reads one texture record, resolving embedded pixels or external files.</summary>
     private static TextureMap? ReadTextureRecord(BinaryReader reader, string sceneFilePath, int version)
     {
         string name = reader.ReadString();
@@ -847,6 +881,7 @@ public static class BinarySceneFile
         return ResolveTexture(name, width, height, sourcePath, checker, sceneFilePath, wrapU, wrapV, offsetU, offsetV, scaleU, scaleV, rotation);
     }
 
+    /// <summary>Reads a legacy version 1 texture record.</summary>
     private static TextureMap? ReadTextureV1(BinaryReader reader, string sceneFilePath)
     {
         if (!reader.ReadBoolean())
@@ -860,6 +895,7 @@ public static class BinarySceneFile
         return ResolveTexture(name, width, height, sourcePath, checker, sceneFilePath);
     }
 
+    /// <summary>Applies addressing and transform metadata to a texture.</summary>
     private static TextureMap ApplyTextureMetadata(
         TextureMap texture,
         TextureAddressMode wrapU,
@@ -871,6 +907,7 @@ public static class BinarySceneFile
         double rotation) =>
         texture.WithAddressing(wrapU, wrapV).WithTextureTransform(offsetU, offsetV, scaleU, scaleV, rotation);
 
+    /// <summary>Resolves a texture from a checker definition or an external file.</summary>
     private static TextureMap? ResolveTexture(
         string name,
         int width,
@@ -905,11 +942,13 @@ public static class BinarySceneFile
         }
     }
 
+    /// <summary>Converts a stored integer to a texture address mode, defaulting to repeat.</summary>
     private static TextureAddressMode ReadTextureAddressMode(int value) =>
         Enum.IsDefined(typeof(TextureAddressMode), value)
             ? (TextureAddressMode)value
             : TextureAddressMode.Repeat;
 
+    /// <summary>Writes the material table records to the binary writer.</summary>
     private static void WriteMaterialTable(BinaryWriter writer, MaterialWriteTable materialTable, TextureWriteTable textureTable)
     {
         writer.Write(materialTable.Materials.Count);
@@ -917,6 +956,7 @@ public static class BinarySceneFile
             WriteMaterial(writer, material, textureTable);
     }
 
+    /// <summary>Reads the material table records into a lookup table.</summary>
     private static MaterialReadTable ReadMaterialTable(BinaryReader reader, TextureReadTable? textureTable, int version)
     {
         int count = reader.ReadInt32();
@@ -933,11 +973,13 @@ public static class BinarySceneFile
 
         public List<Material> Materials { get; } = new();
 
+        /// <summary>Initializes a new material write table for the given texture table.</summary>
         private MaterialWriteTable(TextureWriteTable textureTable)
         {
             this.textureTable = textureTable;
         }
 
+        /// <summary>Collects the distinct materials referenced by the scene.</summary>
         public static MaterialWriteTable Build(Scene scene, TextureWriteTable textureTable)
         {
             MaterialWriteTable table = new(textureTable);
@@ -946,6 +988,7 @@ public static class BinarySceneFile
             return table;
         }
 
+        /// <summary>Returns the table id for a material, adding it when first seen.</summary>
         public int IdFor(Material material)
         {
             if (idsByReference.TryGetValue(material, out int id))
@@ -957,6 +1000,7 @@ public static class BinarySceneFile
             return id;
         }
 
+        /// <summary>Collects materials from an object group and its children.</summary>
         private void CollectGroup(SceneObjectGroup group)
         {
             if (group.ColorOverride != null)
@@ -973,11 +1017,13 @@ public static class BinarySceneFile
     {
         private readonly Material[] materials;
 
+        /// <summary>Initializes a new material lookup table from the given materials.</summary>
         public MaterialReadTable(Material[] materials)
         {
             this.materials = materials;
         }
 
+        /// <summary>Returns the material with the given id, or null when out of range.</summary>
         public Material? ById(int id) => id >= 0 && id < materials.Length ? materials[id] : null;
     }
 
@@ -987,6 +1033,7 @@ public static class BinarySceneFile
 
         public List<TextureMap> Textures { get; } = new();
 
+        /// <summary>Collects the distinct textures referenced by the scene.</summary>
         public static TextureWriteTable Build(Scene scene)
         {
             TextureWriteTable table = new();
@@ -995,6 +1042,7 @@ public static class BinarySceneFile
             return table;
         }
 
+        /// <summary>Returns the table id for a texture, adding it when first seen.</summary>
         public int IdFor(TextureMap? texture)
         {
             if (texture == null)
@@ -1011,6 +1059,7 @@ public static class BinarySceneFile
             return id;
         }
 
+        /// <summary>Collects textures from an object group and its children.</summary>
         private void CollectGroup(SceneObjectGroup group)
         {
             CollectMaterial(group.ColorOverride);
@@ -1020,6 +1069,7 @@ public static class BinarySceneFile
                 CollectGroup(child);
         }
 
+        /// <summary>Collects every texture slot referenced by a material.</summary>
         private void CollectMaterial(Material? material)
         {
             if (material == null)
@@ -1039,17 +1089,20 @@ public static class BinarySceneFile
     {
         private readonly TextureMap?[] textures;
 
+        /// <summary>Initializes a new texture lookup table from the given textures.</summary>
         public TextureReadTable(TextureMap?[] textures)
         {
             this.textures = textures;
         }
 
+        /// <summary>Returns the texture with the given id, or null when out of range.</summary>
         public TextureMap? ById(int id)
         {
             return id >= 0 && id < textures.Length ? textures[id] : null;
         }
     }
 
+    /// <summary>Creates a cuboid record when the triangles form a single-material box.</summary>
     private static bool TryCreateCuboidRecord(IReadOnlyList<Triangle> triangles, out GeometryRecord record)
     {
         record = default;
@@ -1078,6 +1131,7 @@ public static class BinarySceneFile
         return true;
     }
 
+    /// <summary>Creates a rectangle record when the triangles form one quad.</summary>
     private static bool TryCreateRectangleRecord(IReadOnlyList<Triangle> triangles, out GeometryRecord record)
     {
         record = default;
@@ -1093,6 +1147,7 @@ public static class BinarySceneFile
         return true;
     }
 
+    /// <summary>Orders four rectangle vertices around their center.</summary>
     private static List<Vec3> OrderRectangleVertices(List<Vec3> vertices)
     {
         Vec3 center = new(vertices.Average(p => p.X), vertices.Average(p => p.Y), vertices.Average(p => p.Z));
@@ -1107,6 +1162,7 @@ public static class BinarySceneFile
             .ToList();
     }
 
+    /// <summary>Groups triangles into components connected by shared vertices.</summary>
     private static List<List<Triangle>> FindConnectedTriangleComponents(IReadOnlyList<Triangle> triangles)
     {
         int count = triangles.Count;
@@ -1139,6 +1195,7 @@ public static class BinarySceneFile
         return components.Values.ToList();
     }
 
+    /// <summary>Finds the union-find set root for the given index.</summary>
     private static int Find(int[] parent, int value)
     {
         while (parent[value] != value)
@@ -1149,6 +1206,7 @@ public static class BinarySceneFile
         return value;
     }
 
+    /// <summary>Merges the union-find sets containing the two indices.</summary>
     private static void Union(int[] parent, int a, int b)
     {
         int rootA = Find(parent, a);
@@ -1157,9 +1215,11 @@ public static class BinarySceneFile
             parent[rootB] = rootA;
     }
 
+    /// <summary>Builds a rounded-coordinate key for a vertex position.</summary>
     private static string VertexKey(Vec3 value) =>
         $"{Math.Round(value.X, 6):G17}|{Math.Round(value.Y, 6):G17}|{Math.Round(value.Z, 6):G17}";
 
+    /// <summary>Computes the bounding box enclosing the given triangles.</summary>
     private static Aabb BoundsOf(IEnumerable<Triangle> triangles)
     {
         using IEnumerator<Vec3> points = triangles.SelectMany(TriangleVertices).GetEnumerator();
@@ -1176,6 +1236,7 @@ public static class BinarySceneFile
         return new Aabb(min, max);
     }
 
+    /// <summary>Collects the distinct vertices of the given triangles.</summary>
     private static List<Vec3> UniqueVertices(IEnumerable<Triangle> triangles)
     {
         List<Vec3> unique = new();
@@ -1187,6 +1248,7 @@ public static class BinarySceneFile
         return unique;
     }
 
+    /// <summary>Returns true when two triangles form a single-material rectangle.</summary>
     private static bool IsRectanglePair(Triangle a, Triangle b)
     {
         if (CountSharedVertices(a, b) != 2)
@@ -1219,6 +1281,7 @@ public static class BinarySceneFile
                SameMaterial(a.Material, b.Material);
     }
 
+    /// <summary>Counts the vertices shared by two triangles.</summary>
     private static int CountSharedVertices(Triangle a, Triangle b)
     {
         int count = 0;
@@ -1236,6 +1299,7 @@ public static class BinarySceneFile
         return count;
     }
 
+    /// <summary>Enumerates the three vertices of a triangle.</summary>
     private static IEnumerable<Vec3> TriangleVertices(Triangle triangle)
     {
         yield return triangle.A;
@@ -1243,12 +1307,15 @@ public static class BinarySceneFile
         yield return triangle.C;
     }
 
+    /// <summary>Returns the color override of a group or its first triangle material.</summary>
     private static Material RepresentativeMaterial(SceneObjectGroup group) =>
         group.ColorOverride ?? RepresentativeMaterial(group.LocalTriangles);
 
+    /// <summary>Returns the first triangle material, or a default material when empty.</summary>
     private static Material RepresentativeMaterial(IReadOnlyList<Triangle> triangles) =>
         triangles.Count == 0 ? new Material(new Vec3(0.78, 0.76, 0.72)) : triangles[0].Material;
 
+    /// <summary>Returns true when two materials match on color, PBR, and texture values.</summary>
     private static bool SameMaterial(Material a, Material b) =>
         SameVec(a.Color, b.Color) &&
         NearlyEqual(a.Emission, b.Emission) &&
@@ -1269,6 +1336,7 @@ public static class BinarySceneFile
         SameTexture(a.NormalTexture, b.NormalTexture) &&
         SameTexture(a.OcclusionTexture, b.OcclusionTexture);
 
+    /// <summary>Returns true when two textures match on name, source, and transform values.</summary>
     private static bool SameTexture(TextureMap? a, TextureMap? b) =>
         string.Equals(a?.Name ?? string.Empty, b?.Name ?? string.Empty, StringComparison.Ordinal) &&
         string.Equals(a?.SourcePath ?? string.Empty, b?.SourcePath ?? string.Empty, StringComparison.Ordinal) &&
@@ -1280,12 +1348,18 @@ public static class BinarySceneFile
         NearlyEqual(a?.ScaleV ?? 1.0, b?.ScaleV ?? 1.0) &&
         NearlyEqual(a?.Rotation ?? 0.0, b?.Rotation ?? 0.0);
 
+    /// <summary>Returns true when two vectors are equal within tolerance.</summary>
     private static bool SameVec(Vec3 a, Vec3 b) => SamePoint(a, b);
+    /// <summary>Returns true when two points are equal within tolerance.</summary>
     private static bool SamePoint(Vec3 a, Vec3 b) => NearlyEqual(a.X, b.X) && NearlyEqual(a.Y, b.Y) && NearlyEqual(a.Z, b.Z);
+    /// <summary>Returns true when two values differ by at most 1e-6.</summary>
     private static bool NearlyEqual(double a, double b) => Math.Abs(a - b) <= 1e-6;
+    /// <summary>Returns the component-wise minimum of two vectors.</summary>
     private static Vec3 Min(Vec3 a, Vec3 b) => new(Math.Min(a.X, b.X), Math.Min(a.Y, b.Y), Math.Min(a.Z, b.Z));
+    /// <summary>Returns the component-wise maximum of two vectors.</summary>
     private static Vec3 Max(Vec3 a, Vec3 b) => new(Math.Max(a.X, b.X), Math.Max(a.Y, b.Y), Math.Max(a.Z, b.Z));
 
+    /// <summary>Adds the twelve triangles of an axis-aligned box to the group.</summary>
     private static void AddBox(SceneObjectGroup group, Vec3 min, Vec3 max, Material material)
     {
         double x0 = min.X, y0 = min.Y, z0 = min.Z, x1 = max.X, y1 = max.Y, z1 = max.Z;
@@ -1300,12 +1374,14 @@ public static class BinarySceneFile
         AddQuad(group, p000, p100, p101, p001, material);
     }
 
+    /// <summary>Adds two triangles forming a quad to the group.</summary>
     private static void AddQuad(SceneObjectGroup group, Vec3 a, Vec3 b, Vec3 c, Vec3 d, Material material)
     {
         group.AddTriangle(a, b, c, new Vec2(0, 0), new Vec2(1, 0), new Vec2(1, 1), material);
         group.AddTriangle(a, c, d, new Vec2(0, 0), new Vec2(1, 1), new Vec2(0, 1), material);
     }
 
+    /// <summary>Writes a 3D vector as single-precision floats.</summary>
     private static void WriteVec3Single(BinaryWriter writer, Vec3 value)
     {
         writer.Write((float)value.X);
@@ -1313,16 +1389,20 @@ public static class BinarySceneFile
         writer.Write((float)value.Z);
     }
 
+    /// <summary>Reads a 3D vector stored as single-precision floats.</summary>
     private static Vec3 ReadVec3Single(BinaryReader reader) => new(reader.ReadSingle(), reader.ReadSingle(), reader.ReadSingle());
 
+    /// <summary>Writes a 2D vector as single-precision floats.</summary>
     private static void WriteVec2Single(BinaryWriter writer, Vec2 value)
     {
         writer.Write((float)value.U);
         writer.Write((float)value.V);
     }
 
+    /// <summary>Reads a 2D vector stored as single-precision floats.</summary>
     private static Vec2 ReadVec2Single(BinaryReader reader) => new(reader.ReadSingle(), reader.ReadSingle());
 
+    /// <summary>Writes a 3D vector as double-precision floats.</summary>
     private static void WriteVec3(BinaryWriter writer, Vec3 value)
     {
         writer.Write(value.X);
@@ -1330,14 +1410,17 @@ public static class BinarySceneFile
         writer.Write(value.Z);
     }
 
+    /// <summary>Reads a 3D vector stored as double-precision floats.</summary>
     private static Vec3 ReadVec3(BinaryReader reader) => new(reader.ReadDouble(), reader.ReadDouble(), reader.ReadDouble());
 
+    /// <summary>Writes a 2D vector as double-precision floats.</summary>
     private static void WriteVec2(BinaryWriter writer, Vec2 value)
     {
         writer.Write(value.U);
         writer.Write(value.V);
     }
 
+    /// <summary>Reads a 2D vector stored as double-precision floats.</summary>
     private static Vec2 ReadVec2(BinaryReader reader) => new(reader.ReadDouble(), reader.ReadDouble());
 
     private readonly struct GeometryRecord
@@ -1355,6 +1438,7 @@ public static class BinarySceneFile
         public Material? Material { get; }
         public IReadOnlyList<Triangle> Triangles { get; }
 
+        /// <summary>Initializes a new geometry record with the given kind and shape data.</summary>
         private GeometryRecord(GeometryKind kind, string? name, Vec3 min, Vec3 max, Vec3 p0, Vec3 p1, Vec3 p2, Vec3 p3, string? primitiveKind, string? primitiveSourceName, Material? material, IReadOnlyList<Triangle>? triangles)
         {
             Kind = kind;
@@ -1371,15 +1455,19 @@ public static class BinarySceneFile
             Triangles = triangles ?? Array.Empty<Triangle>();
         }
 
+        /// <summary>Creates a cuboid geometry record from bounds and a material.</summary>
         public static GeometryRecord Cuboid(Vec3 min, Vec3 max, Material material) =>
             new(GeometryKind.Cuboid, null, min, max, Vec3.Zero, Vec3.Zero, Vec3.Zero, Vec3.Zero, null, null, material, null);
 
+        /// <summary>Creates a rectangle geometry record from four corners and a material.</summary>
         public static GeometryRecord Rectangle(Vec3 p0, Vec3 p1, Vec3 p2, Vec3 p3, Material material) =>
             new(GeometryKind.Rectangle, null, Vec3.Zero, Vec3.Zero, p0, p1, p2, p3, null, null, material, null);
 
+        /// <summary>Creates a ready-made primitive geometry record from its kind and material.</summary>
         public static GeometryRecord ReadyMade(string kind, string? sourceName, Material material) =>
             new(GeometryKind.ReadyMadePrimitive, null, Vec3.Zero, Vec3.Zero, Vec3.Zero, Vec3.Zero, Vec3.Zero, Vec3.Zero, kind, sourceName, material, null);
 
+        /// <summary>Creates a mesh geometry record from a triangle list.</summary>
         public static GeometryRecord Mesh(IReadOnlyList<Triangle> triangles) =>
             new(GeometryKind.Mesh, null, Vec3.Zero, Vec3.Zero, Vec3.Zero, Vec3.Zero, Vec3.Zero, Vec3.Zero, null, null, null, triangles);
     }

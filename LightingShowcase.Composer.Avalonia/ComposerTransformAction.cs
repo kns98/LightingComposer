@@ -16,6 +16,7 @@ namespace LightingShowcase.Composer;
 /// </summary>
 internal sealed record ComposerTransformRequest(Vec3 Position, Vec3 RotationRadians, Vec3 Scale)
 {
+    /// <summary>Parses inspector position, rotation, and scale text into a transform request.</summary>
     public static ComposerTransformRequest Parse(
         string? positionX, string? positionY, string? positionZ,
         string? rotationXDegrees, string? rotationYDegrees, string? rotationZDegrees,
@@ -40,6 +41,7 @@ internal sealed record ComposerTransformRequest(Vec3 Position, Vec3 RotationRadi
             scale);
     }
 
+    /// <summary>Applies the parsed transform to the named scene object in the session.</summary>
     public bool Apply(
         ComposerSceneSession session,
         int objectId,
@@ -50,6 +52,7 @@ internal sealed record ComposerTransformRequest(Vec3 Position, Vec3 RotationRadi
         return session.UpdateObject(objectId, name, visible, Position, RotationRadians, Scale);
     }
 
+    /// <summary>Parses a finite number, returning the blank value for empty text.</summary>
     private static double ParseFinite(string? text, string label, double blankValue)
     {
         if (string.IsNullOrWhiteSpace(text))
@@ -61,6 +64,7 @@ internal sealed record ComposerTransformRequest(Vec3 Position, Vec3 RotationRadi
         throw new FormatException($"{label} must be a finite number.");
     }
 
+    /// <summary>Parses a finite number and requires it to be greater than zero.</summary>
     private static double ParsePositive(string? text, string label, double blankValue)
     {
         double value = ParseFinite(text, label, blankValue);

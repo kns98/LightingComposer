@@ -18,6 +18,7 @@ public sealed class CameraDefinition
     public double NearPlane { get; set; } = 0.05;
     public double FarPlane { get; set; } = 5000.0;
 
+    /// <summary>Returns a copy of this camera definition.</summary>
     public CameraDefinition Clone() => new()
     {
         Position = Position,
@@ -28,6 +29,7 @@ public sealed class CameraDefinition
         FarPlane = FarPlane
     };
 
+    /// <summary>Builds an orthonormal forward, right, and up basis from the camera position, target, and up vector.</summary>
     public CameraBasis ToBasis()
     {
         Vec3 forward = (Target - Position).Normalize();

@@ -57,6 +57,7 @@ internal sealed class WindowsPrecisionTouchpadTracker
     private const double CircularAccumulationThresholdRadians = 0.0015;
     private const double CircularAccumulationDecay = 0.55;
 
+    /// <summary>Classifies the two touchpad contacts as an orbit, zoom, circular, baseline, or waiting gesture.</summary>
     public WindowsTrackpadGesture Update(WindowsTouchContact[] source)
     {
         if (source.Length != 2)
@@ -199,6 +200,7 @@ internal sealed class WindowsPrecisionTouchpadTracker
             WindowsTrackpadGestureKind.Baseline, 0, 0, 1, 0, frameId);
     }
 
+    /// <summary>Clears tracked contacts and gesture state.</summary>
     public void Reset()
     {
         hasPrevious = false;
@@ -218,6 +220,7 @@ internal sealed class WindowsPrecisionTouchpadTracker
         accumulatedAngleDelta = 0;
     }
 
+    /// <summary>Stores the current contact pair as the baseline for the next frame.</summary>
     private void Store(
         WindowsTouchContact a,
         WindowsTouchContact b,
@@ -241,6 +244,7 @@ internal sealed class WindowsPrecisionTouchpadTracker
         lastFrameId = frameId;
     }
 
+    /// <summary>Wraps an angle in radians into the negative pi to pi range.</summary>
     private static double NormalizeRadians(double radians)
     {
         while (radians > Math.PI)

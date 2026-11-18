@@ -18,6 +18,7 @@ internal sealed record ComposerTransformWorkItem(
     bool Visible,
     ComposerTransformRequest Transform)
 {
+    /// <summary>Applies the captured transform request to the given session.</summary>
     public bool Apply(ComposerSceneSession session)
     {
         ArgumentNullException.ThrowIfNull(session);

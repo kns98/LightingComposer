@@ -22,7 +22,9 @@ public sealed class TorusPrimitive : PrimitiveBase
         LengthParameter("majorRadius", "Major Radius"),
         LengthParameter("minorRadius", "Minor Radius")
     ];
+    /// <summary>Creates the default torus parameter set.</summary>
     public override Dictionary<string, double> CreateDefaultParameters() => Parameters(("originX", 0.0), ("originY", -0.58), ("originZ", 3.55), ("majorRadius", 1.0), ("minorRadius", 0.25), ("majorSegments", 48), ("tubeSegments", 16));
+    /// <summary>Derives torus parameters from a bounding box.</summary>
     public override Dictionary<string, double> CreateParametersFromBounds(Aabb bounds)
     {
         Vec3 size = bounds.Max - bounds.Min;
@@ -31,7 +33,9 @@ public sealed class TorusPrimitive : PrimitiveBase
         double minor = Math.Max(1e-6, size.Y) * 0.5;
         return Parameters(("originX", center.X), ("originY", center.Y), ("originZ", center.Z), ("majorRadius", Math.Max(1e-6, outer - minor)), ("minorRadius", minor), ("majorSegments", 48), ("tubeSegments", 16));
     }
+    /// <summary>Builds torus triangles from the given parameters.</summary>
     public override void Build(SceneMaterials materials, IReadOnlyDictionary<string, double> p, Material material, AddTriangleCallback addTriangle) => AddTorus(addTriangle, Origin(p, 0, -0.58, 3.55), Size(p, "majorRadius", 1.0), Size(p, "minorRadius", 0.25), ReadInt(p, "majorSegments", 48, 3, 512), ReadInt(p, "tubeSegments", 16, 3, 256), material);
+    /// <summary>Applies a gizmo scale delta to the torus radii.</summary>
     public override bool ApplyScaleDelta(IDictionary<string, double> p, char axis, double factor) => char.ToUpperInvariant(axis) == 'Y' ? Multiply(p, "minorRadius", factor) : Multiply(p, "majorRadius", factor);
 }
 
@@ -40,7 +44,9 @@ public sealed class TubePrimitive : PrimitiveBase
     public override string Kind => "tube";
     public override string DisplayName => "Tube";
     public override PrimitiveGizmoEditMetadata GizmoMetadata { get; } = new("Tube", true, "X/Z scale updates inner/outer radius; Y scale updates height", "stored as object rotation");
+    /// <summary>Creates the default tube parameter set.</summary>
     public override Dictionary<string, double> CreateDefaultParameters() => Parameters(("originX", 0.0), ("originY", -0.525), ("originZ", 3.55), ("outerRadius", 0.55), ("innerRadius", 0.32), ("height", 1.05), ("sides", 36));
+    /// <summary>Derives tube parameters from a bounding box.</summary>
     public override Dictionary<string, double> CreateParametersFromBounds(Aabb bounds)
     {
         Dictionary<string, double> p = RadialHeightParameters(bounds, "outerRadius", "height");
@@ -48,7 +54,9 @@ public sealed class TubePrimitive : PrimitiveBase
         p["sides"] = 36;
         return p;
     }
+    /// <summary>Builds tube triangles from the given parameters.</summary>
     public override void Build(SceneMaterials materials, IReadOnlyDictionary<string, double> p, Material material, AddTriangleCallback addTriangle) => AddTube(addTriangle, Origin(p, 0, -0.525, 3.55), Size(p, "outerRadius", 0.55), Size(p, "innerRadius", 0.32), Size(p, "height", 1.05), ReadInt(p, "sides", 36, 3, 256), material);
+    /// <summary>Applies a gizmo scale delta to the tube dimensions.</summary>
     public override bool ApplyScaleDelta(IDictionary<string, double> p, char axis, double factor) => char.ToUpperInvariant(axis) == 'Y' ? Multiply(p, "height", factor) : MultiplyAny(p, factor, "outerRadius", "innerRadius");
 }
 
@@ -57,7 +65,9 @@ public sealed class CapsulePrimitive : PrimitiveBase
     public override string Kind => "capsule";
     public override string DisplayName => "Capsule";
     public override PrimitiveGizmoEditMetadata GizmoMetadata { get; } = new("Capsule", true, "X/Z scale updates radius; Y scale updates total height", "stored as object rotation");
+    /// <summary>Creates the default capsule parameter set.</summary>
     public override Dictionary<string, double> CreateDefaultParameters() => Parameters(("originX", 0.0), ("originY", -0.615), ("originZ", 3.55), ("radius", 0.34), ("totalHeight", 1.35), ("longitudeSegments", 28), ("latitudeSegments", 8));
+    /// <summary>Derives capsule parameters from a bounding box.</summary>
     public override Dictionary<string, double> CreateParametersFromBounds(Aabb bounds)
     {
         Dictionary<string, double> p = RadialHeightParameters(bounds, "radius", "totalHeight");
@@ -66,6 +76,7 @@ public sealed class CapsulePrimitive : PrimitiveBase
         return p;
     }
 
+    /// <summary>Builds capsule triangles from the given parameters.</summary>
     public override void Build(SceneMaterials materials, IReadOnlyDictionary<string, double> p, Material material, AddTriangleCallback addTriangle)
     {
         Vec3 origin = Origin(p, 0, -0.615, 3.55);
@@ -81,6 +92,7 @@ public sealed class CapsulePrimitive : PrimitiveBase
         AddHemisphere(addTriangle, lowerCenter + new Vec3(0, radius * 0.5, 0), radius, radius, sides, lat, upper: false, material);
     }
 
+    /// <summary>Applies a gizmo scale delta to the capsule dimensions.</summary>
     public override bool ApplyScaleDelta(IDictionary<string, double> p, char axis, double factor) => char.ToUpperInvariant(axis) == 'Y' ? Multiply(p, "totalHeight", factor) : Multiply(p, "radius", factor);
 }
 
@@ -89,12 +101,15 @@ public sealed class PyramidPrimitive : PrimitiveBase
     public override string Kind => "pyramid";
     public override string DisplayName => "Pyramid";
     public override PrimitiveGizmoEditMetadata GizmoMetadata { get; } = new("Pyramid", true, "X/Y/Z scale updates width/height/depth", "stored as object rotation");
+    /// <summary>Creates the default pyramid parameter set.</summary>
     public override Dictionary<string, double> CreateDefaultParameters() => Parameters(("originX", 0.0), ("originY", -0.50), ("originZ", 3.55), ("width", 1.10), ("height", 1.10), ("depth", 1.00));
+    /// <summary>Derives pyramid parameters from a bounding box.</summary>
     public override Dictionary<string, double> CreateParametersFromBounds(Aabb bounds)
     {
         Vec3 size = bounds.Max - bounds.Min;
         return BoxParameters(bounds, Math.Max(1e-6, size.X), Math.Max(1e-6, size.Y), Math.Max(1e-6, size.Z));
     }
+    /// <summary>Builds pyramid triangles from the given parameters.</summary>
     public override void Build(SceneMaterials materials, IReadOnlyDictionary<string, double> p, Material material, AddTriangleCallback addTriangle)
     {
         Vec3 o = Origin(p, 0, -0.50, 3.55);
@@ -104,6 +119,7 @@ public sealed class PyramidPrimitive : PrimitiveBase
         AddQuad(addTriangle, a, b, c, dd, material);
         EmitTriangle(addTriangle, a, apex, b, material); EmitTriangle(addTriangle, b, apex, c, material); EmitTriangle(addTriangle, c, apex, dd, material); EmitTriangle(addTriangle, dd, apex, a, material);
     }
+    /// <summary>Applies a gizmo scale delta to the pyramid dimensions.</summary>
     public override bool ApplyScaleDelta(IDictionary<string, double> p, char axis, double factor) => char.ToUpperInvariant(axis) switch { 'X' => Multiply(p, "width", factor), 'Y' => Multiply(p, "height", factor), _ => Multiply(p, "depth", factor) };
 }
 
@@ -112,12 +128,15 @@ public sealed class TriangularPrismPrimitive : PrimitiveBase
     public override string Kind => "triangularPrism";
     public override string DisplayName => "Triangular Prism";
     public override PrimitiveGizmoEditMetadata GizmoMetadata { get; } = new("Triangular Prism", true, "X/Y/Z scale updates width/height/depth", "stored as object rotation");
+    /// <summary>Creates the default triangular prism parameter set.</summary>
     public override Dictionary<string, double> CreateDefaultParameters() => Parameters(("originX", 0.0), ("originY", -0.60), ("originZ", 3.60), ("width", 1.10), ("height", 0.90), ("depth", 0.90));
+    /// <summary>Derives triangular prism parameters from a bounding box.</summary>
     public override Dictionary<string, double> CreateParametersFromBounds(Aabb bounds)
     {
         Vec3 size = bounds.Max - bounds.Min;
         return BoxParameters(bounds, Math.Max(1e-6, size.X), Math.Max(1e-6, size.Y), Math.Max(1e-6, size.Z));
     }
+    /// <summary>Builds triangular prism triangles from the given parameters.</summary>
     public override void Build(SceneMaterials materials, IReadOnlyDictionary<string, double> p, Material material, AddTriangleCallback addTriangle)
     {
         Vec3 o = Origin(p, 0, -0.60, 3.60);
@@ -128,6 +147,7 @@ public sealed class TriangularPrismPrimitive : PrimitiveBase
         EmitTriangle(addTriangle, a0, c0, b0, material); EmitTriangle(addTriangle, a1, b1, c1, material);
         AddQuad(addTriangle, a0, a1, c1, c0, material); AddQuad(addTriangle, b1, b0, c0, c1, material); AddQuad(addTriangle, a0, b0, b1, a1, material);
     }
+    /// <summary>Applies a gizmo scale delta to the triangular prism dimensions.</summary>
     public override bool ApplyScaleDelta(IDictionary<string, double> p, char axis, double factor) => char.ToUpperInvariant(axis) switch { 'X' => Multiply(p, "width", factor), 'Y' => Multiply(p, "height", factor), _ => Multiply(p, "depth", factor) };
 }
 
@@ -136,12 +156,15 @@ public sealed class WedgePrimitive : PrimitiveBase
     public override string Kind => "wedge";
     public override string DisplayName => "Wedge";
     public override PrimitiveGizmoEditMetadata GizmoMetadata { get; } = new("Wedge", true, "X/Y/Z scale updates width/height/depth", "stored as object rotation");
+    /// <summary>Creates the default wedge parameter set.</summary>
     public override Dictionary<string, double> CreateDefaultParameters() => Parameters(("originX", 0.0), ("originY", -0.575), ("originZ", 3.60), ("width", 1.20), ("height", 0.95), ("depth", 1.00));
+    /// <summary>Derives wedge parameters from a bounding box.</summary>
     public override Dictionary<string, double> CreateParametersFromBounds(Aabb bounds)
     {
         Vec3 size = bounds.Max - bounds.Min;
         return BoxParameters(bounds, Math.Max(1e-6, size.X), Math.Max(1e-6, size.Y), Math.Max(1e-6, size.Z));
     }
+    /// <summary>Builds wedge triangles from the given parameters.</summary>
     public override void Build(SceneMaterials materials, IReadOnlyDictionary<string, double> p, Material material, AddTriangleCallback addTriangle)
     {
         Vec3 o = Origin(p, 0, -0.575, 3.60);
@@ -153,5 +176,6 @@ public sealed class WedgePrimitive : PrimitiveBase
         EmitTriangle(addTriangle, a, e, c, material); EmitTriangle(addTriangle, b, d0, f, material);
         AddQuad(addTriangle, a, e, f, b, material);
     }
+    /// <summary>Applies a gizmo scale delta to the wedge dimensions.</summary>
     public override bool ApplyScaleDelta(IDictionary<string, double> p, char axis, double factor) => char.ToUpperInvariant(axis) switch { 'X' => Multiply(p, "width", factor), 'Y' => Multiply(p, "height", factor), _ => Multiply(p, "depth", factor) };
 }

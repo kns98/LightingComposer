@@ -139,6 +139,7 @@ public sealed class SceneObjectGroup
     }
 
 
+    /// <summary>Adds a delta to a primitive parameter, returning false when the delta is invalid.</summary>
     private bool AddParameter(string key, double delta)
     {
         if (!double.IsFinite(delta) || Math.Abs(delta) <= 1e-12)
@@ -147,6 +148,7 @@ public sealed class SceneObjectGroup
         return true;
     }
 
+    /// <summary>Scales an existing primitive parameter by the given factor.</summary>
     private bool MultiplyParameter(string key, double factor)
     {
         if (!PrimitiveParameters.ContainsKey(key) || !double.IsFinite(factor) || Math.Abs(factor - 1.0) <= 1e-12)
@@ -155,11 +157,14 @@ public sealed class SceneObjectGroup
         return true;
     }
 
+    /// <summary>Reads a primitive parameter value or returns the fallback.</summary>
     private double ReadParameter(string key, double fallback) =>
         PrimitiveParameters.TryGetValue(key, out double value) && double.IsFinite(value) ? value : fallback;
 
+    /// <summary>Returns a valid scale, substituting one for invalid values.</summary>
     private static double SanitizeScale(double value) => double.IsFinite(value) && value > 1e-6 ? value : 1.0;
 
+    /// <summary>Normalizes a primitive kind into lowercase letters and digits.</summary>
     private static string NormalizePrimitiveKind(string? value)
     {
         if (string.IsNullOrWhiteSpace(value)) return string.Empty;
@@ -173,6 +178,7 @@ public sealed class SceneObjectGroup
     public bool HasChildren => Children.Count > 0;
     public bool HasLocalGeometry => LocalTriangles.Count > 0;
 
+    /// <summary>Initializes a new object group with the given id and name.</summary>
     public SceneObjectGroup(int id, string name, bool selectable = true)
     {
         Id = id;
@@ -180,6 +186,7 @@ public sealed class SceneObjectGroup
         IsSelectable = selectable;
     }
 
+    /// <summary>Adds a child group, rejecting self-parenting and cycles.</summary>
     public void AddChild(SceneObjectGroup child, bool recalculatePivot = true)
     {
         if (child == null) throw new ArgumentNullException(nameof(child));
@@ -193,6 +200,7 @@ public sealed class SceneObjectGroup
             RecalculatePivot();
     }
 
+    /// <summary>Removes a child group and returns true when it was present.</summary>
     public bool RemoveChild(SceneObjectGroup child)
     {
         if (!Children.Remove(child)) return false;
@@ -201,6 +209,7 @@ public sealed class SceneObjectGroup
         return true;
     }
 
+    /// <summary>Enumerates this group and all of its descendants.</summary>
     public IEnumerable<SceneObjectGroup> SelfAndDescendants()
     {
         yield return this;
@@ -211,19 +220,23 @@ public sealed class SceneObjectGroup
         }
     }
 
+    /// <summary>Returns true when this subtree contains a group with the given id.</summary>
     public bool ContainsDescendant(int id) => SelfAndDescendants().Any(g => g.Id == id);
 
+    /// <summary>Adds a triangle with default UVs to this group.</summary>
     public void AddTriangle(Vec3 a, Vec3 b, Vec3 c, Material material)
     {
         AddTriangle(a, b, c, new Vec2(0, 0), new Vec2(1, 0), new Vec2(0, 1), material);
     }
 
+    /// <summary>Adds a triangle with explicit UVs to this group.</summary>
     public void AddTriangle(Vec3 a, Vec3 b, Vec3 c, Vec2 uvA, Vec2 uvB, Vec2 uvC, Material material)
     {
         logicalFaceTriangleGroups.Clear();
         LocalTriangles.Add(new Triangle(a, b, c, uvA, uvB, uvC, material, Id));
     }
 
+    /// <summary>Adds a triangle with explicit UVs and normals to this group.</summary>
     public void AddTriangle(
         Vec3 a, Vec3 b, Vec3 c,
         Vec2 uvA, Vec2 uvB, Vec2 uvC,
@@ -250,6 +263,7 @@ public sealed class SceneObjectGroup
         LocalTriangles.EnsureCapacity(checked(LocalTriangles.Count + additionalTriangleCount));
     }
 
+    /// <summary>Recomputes the pivot as the center of local triangles and child bounds.</summary>
     public void RecalculatePivot()
     {
         bool hasPoint = false;
@@ -344,6 +358,7 @@ public sealed class SceneObjectGroup
         RecalculatePivot();
     }
 
+    /// <summary>Applies the given color to every material in this subtree while preserving other properties.</summary>
     public void ApplyColor(Material material)
     {
         if (material == null) throw new ArgumentNullException(nameof(material));
@@ -430,6 +445,7 @@ public sealed class SceneObjectGroup
         ColorOverride = null;
     }
 
+    /// <summary>Assigns a base-color texture using box projection at the default tile size.</summary>
     public void ApplyTexture(TextureMap texture)
     {
         ApplyTexture(MaterialTextureSlot.BaseColor, texture, TextureRepeatWorldUnits, forceBoxProjection: true);
@@ -557,6 +573,7 @@ public sealed class SceneObjectGroup
             ObjectLibraryRegistry.StoreParametricTextureProjection(this, safeTileWorldUnits, forceBoxProjection: false);
     }
 
+    /// <summary>Clears the base-color texture from this subtree.</summary>
     public void ClearTexture()
     {
         ClearTexture(MaterialTextureSlot.BaseColor);
@@ -607,6 +624,7 @@ public sealed class SceneObjectGroup
         return before - CountLocalTrianglesRecursively();
     }
 
+    /// <summary>Simplifies local geometry in this group and its descendants.</summary>
     private void SimplifyLocalGeometryRecursively(double keepFraction)
     {
         if (LocalTriangles.Count > 3)
@@ -649,6 +667,7 @@ public sealed class SceneObjectGroup
         return null;
     }
 
+    /// <summary>Returns the world-space bounds, or an empty box when the subtree has no geometry.</summary>
     public Aabb GetWorldBounds(bool includeHidden = false) =>
         TryGetWorldBounds(includeHidden, out Aabb bounds)
             ? bounds
@@ -699,6 +718,7 @@ public sealed class SceneObjectGroup
             child.AppendLocalTrianglesAsWorld(destination, includeHidden);
     }
 
+    /// <summary>Accumulates local triangle and child bounds for an identity-transform subtree.</summary>
     private void AccumulateLocalBounds(bool includeHidden, ref bool hasPoint, ref Vec3 min, ref Vec3 max)
     {
         if (!includeHidden && !Visible)
@@ -755,20 +775,24 @@ public sealed class SceneObjectGroup
         }
     }
 
+    /// <summary>Transforms a point from local to world space.</summary>
     public Vec3 TransformPoint(Vec3 p)
     {
         return TransformConverter.ApplySrt(p, Pivot, Position, Rotation, Scale);
     }
 
+    /// <summary>Transforms a normal from local to world space.</summary>
     public Vec3 TransformNormal(Vec3 normal)
     {
         return TransformConverter.ApplySrtNormal(normal, Rotation, Scale);
     }
 
+    /// <summary>Returns true when this group holds an unbaked transform.</summary>
     private bool HasPendingTransform() =>
         Position.Length() > 1e-12 || Rotation.Length() > 1e-12 ||
         Math.Abs(Scale.X - 1.0) > 1e-12 || Math.Abs(Scale.Y - 1.0) > 1e-12 || Math.Abs(Scale.Z - 1.0) > 1e-12;
 
+    /// <summary>Applies point and normal transforms to every triangle in this subtree.</summary>
     private void ApplyPointTransformRecursively(Func<Vec3, Vec3> pointTransform, Func<Vec3, Vec3> normalTransform)
     {
         for (int i = 0; i < LocalTriangles.Count; i++)
@@ -785,6 +809,7 @@ public sealed class SceneObjectGroup
             child.ApplyPointTransformRecursively(pointTransform, normalTransform);
     }
 
+    /// <summary>Clears primitive kind and parameter metadata in this subtree.</summary>
     private void ClearParametricMetadataRecursively()
     {
         PrimitiveKind = null;
@@ -794,6 +819,7 @@ public sealed class SceneObjectGroup
             child.ClearParametricMetadataRecursively();
     }
 
+    /// <summary>Applies a triangle transform to every local triangle in this subtree.</summary>
     private void ApplyMaterialRecursively(Func<Triangle, Triangle> transform)
     {
         for (int i = 0; i < LocalTriangles.Count; i++)
@@ -806,15 +832,19 @@ public sealed class SceneObjectGroup
 
     private const double TextureRepeatWorldUnits = 0.25;
 
+    /// <summary>Returns true when all three UVs of the triangle are unit corners.</summary>
     private static bool HasDefaultUnitUvs(Triangle tri) =>
         IsUnitUv(tri.UvA) && IsUnitUv(tri.UvB) && IsUnitUv(tri.UvC);
 
+    /// <summary>Returns true when both UV components are zero or one.</summary>
     private static bool IsUnitUv(Vec2 value) =>
         IsZeroOrOne(value.U) && IsZeroOrOne(value.V);
 
+    /// <summary>Returns true when the value is approximately zero or one.</summary>
     private static bool IsZeroOrOne(double value) =>
         Math.Abs(value) < 1e-9 || Math.Abs(value - 1.0) < 1e-9;
 
+    /// <summary>Computes a box-projected UV in tile units for the dominant face plane.</summary>
     private static Vec2 GenerateBoxUv(Vec3 point, Vec3 normal, Aabb bounds, double tileWorldUnits)
     {
         double nx = Math.Abs(normal.X), ny = Math.Abs(normal.Y), nz = Math.Abs(normal.Z);
@@ -829,12 +859,15 @@ public sealed class SceneObjectGroup
         return new Vec2(ToTileCoordinate(point.X, bounds.Min.X, tileWorldUnits), ToTileCoordinate(point.Y, bounds.Min.Y, tileWorldUnits));
     }
 
+    /// <summary>Converts a scene coordinate into tile units relative to the given origin.</summary>
     private static double ToTileCoordinate(double value, double origin, double tileWorldUnits) =>
         (value - origin) / tileWorldUnits;
 
+    /// <summary>Returns a valid tile size, substituting the default when invalid.</summary>
     private static double SanitizeTileWorldUnits(double tileWorldUnits) =>
         double.IsFinite(tileWorldUnits) && tileWorldUnits > 1e-6 ? tileWorldUnits : TextureRepeatWorldUnits;
 
+    /// <summary>Resets the position, rotation, and scale to identity.</summary>
     private void ResetTransformState()
     {
         Position = Vec3.Zero;
@@ -842,6 +875,7 @@ public sealed class SceneObjectGroup
         Scale = new Vec3(1, 1, 1);
     }
 
+    /// <summary>Returns true when the given transform is approximately identity.</summary>
     private static bool IsIdentityTransform(Vec3 position, Vec3 rotation, Vec3 scale) =>
         position.Length() <= 1e-12 &&
         rotation.Length() <= 1e-12 &&
@@ -849,6 +883,7 @@ public sealed class SceneObjectGroup
         Math.Abs(scale.Y - 1.0) <= 1e-12 &&
         Math.Abs(scale.Z - 1.0) <= 1e-12;
 
+    /// <summary>Rotates a point by the given Euler angles.</summary>
     private static Vec3 Rotate(Vec3 p, Vec3 r)
     {
         double cx = Math.Cos(r.X), sx = Math.Sin(r.X);
@@ -860,12 +895,14 @@ public sealed class SceneObjectGroup
         return new Vec3(y.X * cz - y.Y * sz, y.X * sz + y.Y * cz, y.Z);
     }
 
+    /// <summary>Expands the running bounds to include the given point.</summary>
     private static void AddPoint(Vec3 p, ref Vec3 min, ref Vec3 max)
     {
         min = Min(min, p);
         max = Max(max, p);
     }
 
+    /// <summary>Includes a point in the running bounds, initializing them for the first point.</summary>
     private static void IncludePoint(Vec3 point, ref bool hasPoint, ref Vec3 min, ref Vec3 max)
     {
         if (!hasPoint)
@@ -879,6 +916,8 @@ public sealed class SceneObjectGroup
         max = Max(max, point);
     }
 
+    /// <summary>Returns the component-wise minimum of two vectors.</summary>
     private static Vec3 Min(Vec3 a, Vec3 b) => new(Math.Min(a.X, b.X), Math.Min(a.Y, b.Y), Math.Min(a.Z, b.Z));
+    /// <summary>Returns the component-wise maximum of two vectors.</summary>
     private static Vec3 Max(Vec3 a, Vec3 b) => new(Math.Max(a.X, b.X), Math.Max(a.Y, b.Y), Math.Max(a.Z, b.Z));
 }

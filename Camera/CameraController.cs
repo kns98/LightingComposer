@@ -25,6 +25,7 @@ public sealed class CameraController
     public double Pitch { get; private set; } = -0.09;
     public double Distance => Math.Max(MinDistance, (Position - Target).Length());
 
+    /// <summary>Initializes the camera controller with a default target ahead of the camera.</summary>
     public CameraController()
     {
         Target = Position + ForwardFromAngles() * 2.25;
@@ -49,6 +50,7 @@ public sealed class CameraController
         Target += delta;
     }
 
+    /// <summary>Moves the camera to a new position and recomputes the orbit angles.</summary>
     public void SetPosition(Vec3 position)
     {
         Position = position;
@@ -111,14 +113,17 @@ public sealed class CameraController
     /// <summary>Returns basis derived from the current state.</summary>
     public CameraBasis GetBasis() => Camera.ToBasis();
 
+    /// <summary>Returns a copy of the current camera state.</summary>
     public CameraDefinition ToDefinition() => Camera.Clone();
 
+    /// <summary>Repositions the camera around its target at the given orbit distance.</summary>
     private void RebuildPositionFromOrbit(double distance)
     {
         Vec3 forward = ForwardFromAngles();
         Position = Target - forward * Clamp(distance, MinDistance, MaxDistance);
     }
 
+    /// <summary>Computes the view direction from the current yaw and pitch angles.</summary>
     private Vec3 ForwardFromAngles()
     {
         Vec3 forward = new(
@@ -130,6 +135,7 @@ public sealed class CameraController
         return normalized.Length() < 1e-8 ? TransformConverter.WorldForward : normalized;
     }
 
+    /// <summary>Recomputes the yaw and pitch angles from the current position and target.</summary>
     private void UpdateAnglesFromLookAt()
     {
         Vec3 dir = (Target - Position).Normalize();
@@ -139,5 +145,6 @@ public sealed class CameraController
         Pitch = Math.Asin(Clamp(dir.Y, -1.0, 1.0));
     }
 
+    /// <summary>Clamps a value to the given range.</summary>
     private static double Clamp(double v, double min, double max) => Math.Max(min, Math.Min(max, v));
 }

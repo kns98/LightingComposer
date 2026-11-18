@@ -26,6 +26,7 @@ public static class SceneFormatRegistry
     public static IReadOnlyList<ISceneFormatPlugin> Importers => Plugins.Where(p => p.CanImport).ToList();
     public static IReadOnlyList<ISceneFormatPlugin> Exporters => Plugins.Where(p => p.CanExport).ToList();
 
+    /// <summary>Initializes the plugin registry once in a thread-safe manner.</summary>
     public static void EnsureInitialized()
     {
         if (initialized) return;
@@ -38,6 +39,7 @@ public static class SceneFormatRegistry
         }
     }
 
+    /// <summary>Loads import and export plugin assemblies from the application directory.</summary>
     private static void LoadPluginAssemblies()
     {
         string baseDirectory = AppContext.BaseDirectory;
@@ -61,6 +63,7 @@ public static class SceneFormatRegistry
         }
     }
 
+    /// <summary>Instantiates and registers plugin types from the loaded assemblies.</summary>
     private static void DiscoverPlugins()
     {
         foreach (Assembly assembly in AppDomain.CurrentDomain.GetAssemblies())
@@ -87,6 +90,7 @@ public static class SceneFormatRegistry
         plugins.Sort((a, b) => string.Compare(a.DisplayName, b.DisplayName, StringComparison.OrdinalIgnoreCase));
     }
 
+    /// <summary>Returns true when a registered importer handles the given extension.</summary>
     public static bool IsImportExtension(string extension)
     {
         EnsureInitialized();
@@ -94,6 +98,7 @@ public static class SceneFormatRegistry
         return plugins.Any(p => p.CanImport && p.Extensions.Any(e => NormalizeExtension(e) == extension));
     }
 
+    /// <summary>Returns true when a registered exporter handles the given extension.</summary>
     public static bool IsExportExtension(string extension)
     {
         EnsureInitialized();
@@ -101,6 +106,7 @@ public static class SceneFormatRegistry
         return plugins.Any(p => p.CanExport && p.Extensions.Any(e => NormalizeExtension(e) == extension));
     }
 
+    /// <summary>Finds the importer for the given file path or throws.</summary>
     public static ISceneFormatPlugin FindImporter(string filePath)
     {
         EnsureInitialized();
@@ -109,6 +115,7 @@ public static class SceneFormatRegistry
             ?? throw new NotSupportedException($"Unsupported model file type: {extension}");
     }
 
+    /// <summary>Finds the exporter for the given file path or throws.</summary>
     public static ISceneFormatPlugin FindExporter(string filePath)
     {
         EnsureInitialized();
@@ -117,17 +124,20 @@ public static class SceneFormatRegistry
             ?? throw new NotSupportedException($"Unsupported export file type: {extension}");
     }
 
+    /// <summary>Imports the given file into the scene using its registered importer.</summary>
     public static ObjLoadResult Import(Scene scene, string filePath, SceneLoadOptions options)
     {
         ISceneFormatPlugin plugin = FindImporter(filePath);
         return plugin.Import(scene, filePath, options);
     }
 
+    /// <summary>Exports the scene to the given file using its registered exporter.</summary>
     public static void Export(Scene scene, string filePath, SceneSaveOptions options)
     {
         ISceneFormatPlugin plugin = FindExporter(filePath);
         plugin.Export(scene, filePath, options);
     }
 
+    /// <summary>Normalizes an extension to lowercase with a leading dot.</summary>
     private static string NormalizeExtension(string extension) => extension.StartsWith('.') ? extension.ToLowerInvariant() : "." + extension.ToLowerInvariant();
 }

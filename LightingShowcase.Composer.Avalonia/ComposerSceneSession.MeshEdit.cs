@@ -33,6 +33,7 @@ internal sealed partial class ComposerSceneSession
     public bool HasMeshComponentSelection => selectedMeshSelection.HasValue;
     public ComposerGizmoAxis MeshMoveAxisLock => meshMoveAxisLock;
 
+    /// <summary>Returns the number of mesh faces in the given group.</summary>
     internal int GetMeshFaceGroupCountForTests(int groupId)
     {
         sceneGate.Wait();
@@ -46,6 +47,7 @@ internal sealed partial class ComposerSceneSession
         }
     }
 
+    /// <summary>Returns the number of mesh edges in the given group.</summary>
     internal int GetMeshEdgeCountForTests(int groupId)
     {
         sceneGate.Wait();
@@ -60,6 +62,7 @@ internal sealed partial class ComposerSceneSession
     }
 
 
+    /// <summary>Switches the selection mode and clears any mesh selection state.</summary>
     public bool SetSelectionMode(ComposerSelectionMode mode)
     {
         sceneGate.Wait();
@@ -87,6 +90,7 @@ internal sealed partial class ComposerSceneSession
         }
     }
 
+    /// <summary>Locks mesh moves to the given axis, forcing no lock in object mode.</summary>
     public bool SetMeshMoveAxisLock(ComposerGizmoAxis axis)
     {
         if (axis is not (ComposerGizmoAxis.None or ComposerGizmoAxis.X or ComposerGizmoAxis.Y or ComposerGizmoAxis.Z))
@@ -109,6 +113,7 @@ internal sealed partial class ComposerSceneSession
         }
     }
 
+    /// <summary>Clears the hovered mesh element and returns true when one was set.</summary>
     public bool ClearMeshHover()
     {
         sceneGate.Wait();
@@ -126,6 +131,7 @@ internal sealed partial class ComposerSceneSession
         }
     }
 
+    /// <summary>Flips the hover highlight visibility when a mesh element is hovered.</summary>
     public bool ToggleMeshHoverPulse()
     {
         sceneGate.Wait();
@@ -142,6 +148,7 @@ internal sealed partial class ComposerSceneSession
         }
     }
 
+    /// <summary>Inserts the named ready-made object into the scene and returns its group id.</summary>
     public int InsertPrimitive(string primitiveName)
     {
         sceneGate.Wait();
@@ -180,6 +187,7 @@ internal sealed partial class ComposerSceneSession
         }
     }
 
+    /// <summary>Refreshes the hovered mesh element under the cursor and reports whether the hover changed.</summary>
     public ComposerMeshPickResult? UpdateMeshHover(
         CameraDefinition camera,
         double normalizedX,
@@ -227,6 +235,7 @@ internal sealed partial class ComposerSceneSession
         }
     }
 
+    /// <summary>Selects the mesh element under the cursor for the given mode.</summary>
     public ComposerMeshPickResult? PickMeshElement(
         CameraDefinition camera,
         double normalizedX,
@@ -269,6 +278,7 @@ internal sealed partial class ComposerSceneSession
         }
     }
 
+    /// <summary>Locates the vertex, edge, or face under the cursor for the given selection mode.</summary>
     private bool TryFindMeshElement(
         CameraDefinition camera,
         double normalizedX,
@@ -346,6 +356,7 @@ internal sealed partial class ComposerSceneSession
         return true;
     }
 
+    /// <summary>Casts pick rays through a small offset grid to find the surface triangle near the cursor.</summary>
     private bool TryFindNearbyPickSurface(
         CameraDefinition camera,
         double imageX,
@@ -418,6 +429,7 @@ internal sealed partial class ComposerSceneSession
         return false;
     }
 
+    /// <summary>Returns the display label for the given mesh selection.</summary>
     private static string MeshElementLabel(ComposerMeshSelection selection) => selection.Mode switch
     {
         ComposerSelectionMode.Vertex => $"Vertex {selection.ElementIndex + 1:N0}",
@@ -426,6 +438,7 @@ internal sealed partial class ComposerSceneSession
         _ => "Object"
     };
 
+    /// <summary>Returns the world bounds of the active mesh or object selection.</summary>
     public Aabb? GetActiveSelectionBounds()
     {
         sceneGate.Wait();
@@ -448,6 +461,7 @@ internal sealed partial class ComposerSceneSession
         }
     }
 
+    /// <summary>Stores a live preview offset for the selected mesh element from the given world delta.</summary>
     public bool UpdateMeshElementMovePreview(int selectedId, Vec3 worldDelta)
     {
         ValidateFinite(worldDelta, nameof(worldDelta));
@@ -473,6 +487,7 @@ internal sealed partial class ComposerSceneSession
         }
     }
 
+    /// <summary>Discards the pending move preview for the selected mesh element.</summary>
     public bool CancelMeshElementMovePreview(int selectedId)
     {
         sceneGate.Wait();
@@ -490,6 +505,7 @@ internal sealed partial class ComposerSceneSession
         }
     }
 
+    /// <summary>Applies the previewed move to the mesh and records it as an undoable edit.</summary>
     public bool CommitMeshElementMove(int selectedId)
     {
         sceneGate.Wait();
@@ -540,6 +556,7 @@ internal sealed partial class ComposerSceneSession
         }
     }
 
+    /// <summary>Returns true when the given object holds the currently selected editable face.</summary>
     public bool CanEditSelectedFace(int selectedId)
     {
         sceneGate.Wait();
@@ -558,15 +575,19 @@ internal sealed partial class ComposerSceneSession
         }
     }
 
+    /// <summary>Extrudes the selected face by the given distance in meters.</summary>
     public bool ExtrudeSelectedFace(int selectedId, double distanceMeters) =>
         ApplySelectedFaceTopologyEdit(selectedId, distanceMeters, inset: false);
 
+    /// <summary>Insets the selected face by the given amount with no recess.</summary>
     public bool InsetSelectedFace(int selectedId, double insetMeters) =>
         InsetSelectedFace(selectedId, insetMeters, recessDepthMeters: 0.0, profile: ComposerInsetProfile.Square);
 
+    /// <summary>Insets the selected face by the given amount and recess depth.</summary>
     public bool InsetSelectedFace(int selectedId, double insetMeters, double recessDepthMeters) =>
         InsetSelectedFace(selectedId, insetMeters, recessDepthMeters, ComposerInsetProfile.Square);
 
+    /// <summary>Insets the selected face using the given amount, recess depth, and profile.</summary>
     public bool InsetSelectedFace(
         int selectedId,
         double insetMeters,
@@ -579,6 +600,7 @@ internal sealed partial class ComposerSceneSession
             recessDepthMeters: recessDepthMeters,
             insetProfile: profile);
 
+    /// <summary>Applies an extrude or inset edit to the selected face and records it as an undoable edit.</summary>
     private bool ApplySelectedFaceTopologyEdit(
         int selectedId,
         double amountMeters,
@@ -660,6 +682,7 @@ internal sealed partial class ComposerSceneSession
         }
     }
 
+    /// <summary>Builds the Vulkan raster preview for the pending mesh-element move, or null when there is none.</summary>
     private VulkanRasterMeshEditPreview? CreateVulkanMeshEditPreview()
     {
         if (selectedMeshSelection is not ComposerMeshSelection selection ||
@@ -681,11 +704,13 @@ internal sealed partial class ComposerSceneSession
             meshMovePreviewWorld);
     }
 
+    /// <summary>Builds the selection highlight visual for the active mesh selection.</summary>
     private bool TryBuildMeshSelectionVisual(
         out Aabb bounds,
         out ComposerMeshSelectionVisual visual) =>
         TryBuildMeshSelectionVisual(selectedMeshSelection, meshMovePreviewLocal, out bounds, out visual);
 
+    /// <summary>Builds the highlight visual for the hovered mesh element.</summary>
     private bool TryBuildMeshHoverVisual(
         out ComposerMeshSelectionVisual visual)
     {
@@ -693,6 +718,7 @@ internal sealed partial class ComposerSceneSession
         return built;
     }
 
+    /// <summary>Builds the highlight visual for the given mesh selection plus a local move offset.</summary>
     private bool TryBuildMeshSelectionVisual(
         ComposerMeshSelection? selectionValue,
         Vec3 localDelta,
@@ -768,6 +794,7 @@ internal sealed partial class ComposerSceneSession
         return true;
     }
 
+    /// <summary>Returns the cached mesh topology for the given group, rebuilding it when stale.</summary>
     private ComposerMeshTopology GetMeshTopology(SceneObjectGroup group)
     {
         if (meshTopologyByGroup.TryGetValue(group.Id, out CachedMeshTopology cached) &&
@@ -782,6 +809,7 @@ internal sealed partial class ComposerSceneSession
         return topology;
     }
 
+    /// <summary>Returns the index of the closest triangle in the group hit by the ray.</summary>
     private int FindHitTriangle(SceneObjectGroup group, Ray ray)
     {
         int bestIndex = -1;
@@ -798,6 +826,7 @@ internal sealed partial class ComposerSceneSession
         return bestIndex;
     }
 
+    /// <summary>Averages the world positions of the selected mesh vertices into a center point.</summary>
     private Vec3 SelectionWorldCenter(
         SceneObjectGroup group,
         ComposerMeshSelection selection,
@@ -814,6 +843,7 @@ internal sealed partial class ComposerSceneSession
         return sum / vertices.Count;
     }
 
+    /// <summary>Transforms the point from group-local space to world space.</summary>
     private static Vec3 TransformPointToWorld(SceneObjectGroup group, Vec3 point)
     {
         Vec3 result = point;
@@ -822,6 +852,7 @@ internal sealed partial class ComposerSceneSession
         return result;
     }
 
+    /// <summary>Transforms the world point into group-local space.</summary>
     private static Vec3 WorldToLocalPoint(SceneObjectGroup group, Vec3 worldPoint)
     {
         List<SceneObjectGroup> chain = new();
@@ -842,9 +873,11 @@ internal sealed partial class ComposerSceneSession
         return result;
     }
 
+    /// <summary>Converts the world-space move delta into group-local space.</summary>
     private static Vec3 WorldDeltaToLocal(SceneObjectGroup group, Vec3 worldOrigin, Vec3 worldDelta) =>
         WorldToLocalPoint(group, worldOrigin + worldDelta) - WorldToLocalPoint(group, worldOrigin);
 
+    /// <summary>Projects the world point onto the image plane and returns false when it lies behind the camera.</summary>
     private static bool TryProjectToImage(
         Vec3 point,
         CameraDefinition camera,
@@ -872,6 +905,7 @@ internal sealed partial class ComposerSceneSession
         return double.IsFinite(x) && double.IsFinite(y);
     }
 
+    /// <summary>Measures the pixel distance from the point to the given screen segment.</summary>
     private static double ScreenDistanceToSegment(
         double px, double py,
         double ax, double ay,
@@ -886,6 +920,7 @@ internal sealed partial class ComposerSceneSession
         return ScreenDistance(px, py, ax + dx * t, ay + dy * t);
     }
 
+    /// <summary>Measures the pixel distance between two screen points.</summary>
     private static double ScreenDistance(double ax, double ay, double bx, double by)
     {
         double dx = ax - bx;
@@ -893,6 +928,7 @@ internal sealed partial class ComposerSceneSession
         return Math.Sqrt(dx * dx + dy * dy);
     }
 
+    /// <summary>Computes the axis-aligned bounds enclosing the given points.</summary>
     private static Aabb BoundsOfPoints(IReadOnlyList<Vec3> points)
     {
         if (points.Count == 0)
@@ -909,6 +945,7 @@ internal sealed partial class ComposerSceneSession
         return new Aabb(min, max);
     }
 
+    /// <summary>Clears the procedural primitive metadata from the group.</summary>
     private static void ClearPrimitiveMetadata(SceneObjectGroup group)
     {
         group.PrimitiveKind = null;

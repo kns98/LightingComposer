@@ -53,6 +53,7 @@ internal sealed class ViewportNavigationController : IDisposable
     private double pendingWindowsTrackpadZoom;
     private double pendingWindowsTrackpadTurn;
 
+    /// <summary>Initializes viewport navigation with its owner, session, renderer, and input callbacks.</summary>
     public ViewportNavigationController(
         Window owner,
         Border viewport,
@@ -90,6 +91,7 @@ internal sealed class ViewportNavigationController : IDisposable
 
     public bool IsNavigating => rightPressed || dragMode != DragMode.None;
 
+    /// <summary>Begins an orbit or pan drag on right or middle press and returns true when handled.</summary>
     public bool TryHandlePointerPressed(PointerPressedEventArgs e)
     {
         if (!session.HasRenderableScene)
@@ -123,6 +125,7 @@ internal sealed class ViewportNavigationController : IDisposable
         return false;
     }
 
+    /// <summary>Applies orbit or pan movement from pointer drags and returns true when handled.</summary>
     public bool TryHandlePointerMoved(PointerEventArgs e)
     {
         Point current = e.GetPosition(viewport);
@@ -159,6 +162,7 @@ internal sealed class ViewportNavigationController : IDisposable
         return true;
     }
 
+    /// <summary>Finishes a navigation drag or fires a right-click and returns true when handled.</summary>
     public async Task<bool> TryHandlePointerReleasedAsync(PointerReleasedEventArgs e)
     {
         Point releasePoint = e.GetPosition(viewport);
@@ -192,6 +196,7 @@ internal sealed class ViewportNavigationController : IDisposable
         return false;
     }
 
+    /// <summary>Zooms the camera from a mouse wheel event.</summary>
     public void HandleWheel(PointerWheelEventArgs e)
     {
         if (!session.HasRenderableScene)
@@ -203,12 +208,14 @@ internal sealed class ViewportNavigationController : IDisposable
         e.Handled = true;
     }
 
+    /// <summary>Clears any active navigation drag after pointer capture is lost.</summary>
     public void HandleCaptureLost()
     {
         dragMode = DragMode.None;
         rightPressed = false;
     }
 
+    /// <summary>Attaches the native Windows precision touchpad gesture source to the window.</summary>
     public void AttachWindowsTrackpadInput()
     {
         if (!OperatingSystem.IsWindows() || windowsTrackpadInput is not null)
@@ -247,6 +254,7 @@ internal sealed class ViewportNavigationController : IDisposable
         }
     }
 
+    /// <summary>Routes precision touchpad window messages to the gesture source when the pointer is over the viewport.</summary>
     private nint OnWindowsTrackpadWndProc(nint hwnd, uint message, nint wParam, nint lParam, ref bool handled)
     {
         if (windowsTrackpadInput is null ||
@@ -278,6 +286,7 @@ internal sealed class ViewportNavigationController : IDisposable
         return 0;
     }
 
+    /// <summary>Queues a pending orbit delta from a touchpad orbit event.</summary>
     private void OnWindowsTrackpadOrbit(object? sender, NativeTrackpadOrbit e)
     {
         if (!session.HasRenderableScene)
@@ -288,6 +297,7 @@ internal sealed class ViewportNavigationController : IDisposable
             trackpadFrameTimer.Start();
     }
 
+    /// <summary>Queues a pending zoom delta from a touchpad zoom event.</summary>
     private void OnWindowsTrackpadZoom(object? sender, NativeTrackpadZoom e)
     {
         if (!session.HasRenderableScene)
@@ -297,6 +307,7 @@ internal sealed class ViewportNavigationController : IDisposable
             trackpadFrameTimer.Start();
     }
 
+    /// <summary>Queues a pending turn delta from a touchpad turn event.</summary>
     private void OnWindowsTrackpadTurn(object? sender, NativeTrackpadTurn e)
     {
         if (!session.HasRenderableScene)
@@ -306,6 +317,7 @@ internal sealed class ViewportNavigationController : IDisposable
             trackpadFrameTimer.Start();
     }
 
+    /// <summary>Applies queued touchpad orbit, zoom, and turn deltas to the camera.</summary>
     private void ApplyPendingWindowsTrackpadNavigation()
     {
         double orbitX = pendingWindowsTrackpadOrbitX;
@@ -349,6 +361,7 @@ internal sealed class ViewportNavigationController : IDisposable
         trackpadIdleRenderTimer.Start();
     }
 
+    /// <summary>Detaches the touchpad gesture source and removes its window hook.</summary>
     private void DetachWindowsTrackpadInput()
     {
         windowsTrackpadGestureCapturedByViewport = false;
@@ -370,6 +383,7 @@ internal sealed class ViewportNavigationController : IDisposable
         }
     }
 
+    /// <summary>Stops navigation timers and detaches the touchpad input.</summary>
     public void Dispose()
     {
         trackpadFrameTimer.Stop();

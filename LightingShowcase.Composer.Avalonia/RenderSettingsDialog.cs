@@ -38,6 +38,7 @@ internal sealed class RenderSettingsDialog : Window
 
     private bool accepted;
 
+    /// <summary>Builds the render settings dialog for the given renderer with the current options.</summary>
     public RenderSettingsDialog(
         ComposerRendererKind kind,
         string rendererLabel,
@@ -187,6 +188,7 @@ internal sealed class RenderSettingsDialog : Window
         };
     }
 
+    /// <summary>Shows the dialog and returns the accepted options, or null when cancelled.</summary>
     public async Task<ComposerRenderOptions?> ShowForResultAsync(Window owner)
     {
         Show(owner);
@@ -195,6 +197,7 @@ internal sealed class RenderSettingsDialog : Window
         return await completion.Task;
     }
 
+    /// <summary>Validates the dialog fields and closes the dialog with the resulting options.</summary>
     private void Accept()
     {
         ClearErrors();
@@ -272,6 +275,7 @@ internal sealed class RenderSettingsDialog : Window
         Close();
     }
 
+    /// <summary>Loads the given options into the dialog fields.</summary>
     private void Load(ComposerRenderOptions options)
     {
         widthBox.Text = options.Width.ToString(CultureInfo.InvariantCulture);
@@ -289,6 +293,7 @@ internal sealed class RenderSettingsDialog : Window
         validationText.Text = ModeHelp(kind);
     }
 
+    /// <summary>Reads an integer field, clamping disabled values instead of validating them.</summary>
     private int ReadEnabledInt(TextBox box, bool enabled, int min, int max, out bool valid)
     {
         if (!enabled)
@@ -301,6 +306,7 @@ internal sealed class RenderSettingsDialog : Window
         return value;
     }
 
+    /// <summary>Reads a floating-point field, clamping disabled values instead of validating them.</summary>
     private double ReadEnabledDouble(TextBox box, bool enabled, double min, double max, out bool valid)
     {
         if (!enabled)
@@ -314,6 +320,7 @@ internal sealed class RenderSettingsDialog : Window
         return value;
     }
 
+    /// <summary>Reads a color field, tolerating invalid input when the field is disabled.</summary>
     private Vec3 ReadEnabledColor(TextBox box, bool enabled, out bool valid)
     {
         if (!TryReadColor(box, out Vec3 value))
@@ -326,6 +333,7 @@ internal sealed class RenderSettingsDialog : Window
         return value;
     }
 
+    /// <summary>Returns the help text describing which settings the given renderer consumes.</summary>
     private static string ModeHelp(ComposerRendererKind kind) => kind switch
     {
         ComposerRendererKind.Raster =>
@@ -339,9 +347,11 @@ internal sealed class RenderSettingsDialog : Window
         _ => "Renderer settings."
     };
 
+    /// <summary>Returns the supported hint text or a not-used notice for the view mode.</summary>
     private static string Hint(string supportedText, bool supported) =>
         supported ? supportedText : "Not used by this view mode";
 
+    /// <summary>Creates a section header label with the given text.</summary>
     private static TextBlock Section(string text) => new()
     {
         Text = text,
@@ -349,6 +359,7 @@ internal sealed class RenderSettingsDialog : Window
         Margin = new Thickness(0, 5, 0, 0)
     };
 
+    /// <summary>Builds a labeled editor row with a hint caption.</summary>
     private static Control Field(string label, Control editor, string hint)
     {
         Grid row = new()
@@ -373,9 +384,11 @@ internal sealed class RenderSettingsDialog : Window
         return row;
     }
 
+    /// <summary>Creates a right-aligned text box showing the given number.</summary>
     private static TextBox NumberBox(double value) =>
         TextBoxFor(value.ToString("0.###", CultureInfo.InvariantCulture));
 
+    /// <summary>Creates a right-aligned text box with the given text.</summary>
     private static TextBox TextBoxFor(string text) => new()
     {
         Text = text,
@@ -383,6 +396,7 @@ internal sealed class RenderSettingsDialog : Window
         TextAlignment = TextAlignment.Right
     };
 
+    /// <summary>Creates a dialog button with the given text.</summary>
     private static Button NewButton(string text) => new()
     {
         Content = text,
@@ -390,6 +404,7 @@ internal sealed class RenderSettingsDialog : Window
         MinWidth = 78
     };
 
+    /// <summary>Parses an integer within range and marks the box on failure.</summary>
     private static bool TryReadInt(TextBox box, int minimum, int maximum, out int value)
     {
         bool ok = int.TryParse(box.Text, NumberStyles.Integer, CultureInfo.InvariantCulture, out value) &&
@@ -399,6 +414,7 @@ internal sealed class RenderSettingsDialog : Window
         return ok;
     }
 
+    /// <summary>Parses a finite double within range and marks the box on failure.</summary>
     private static bool TryReadDouble(TextBox box, double minimum, double maximum, out double value)
     {
         bool ok = double.TryParse(box.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out value) &&
@@ -409,6 +425,7 @@ internal sealed class RenderSettingsDialog : Window
         return ok;
     }
 
+    /// <summary>Parses a non-negative R,G,B color and marks the box on failure.</summary>
     private static bool TryReadColor(TextBox box, out Vec3 color)
     {
         string[] parts = (box.Text ?? string.Empty)
@@ -431,11 +448,13 @@ internal sealed class RenderSettingsDialog : Window
         return ok;
     }
 
+    /// <summary>Formats the given color as an invariant R,G,B string.</summary>
     private static string ColorText(Vec3 color) =>
         string.Create(
             CultureInfo.InvariantCulture,
             $"{color.X:0.###},{color.Y:0.###},{color.Z:0.###}");
 
+    /// <summary>Clears error highlighting from every dialog field.</summary>
     private void ClearErrors()
     {
         foreach (TextBox box in new[]

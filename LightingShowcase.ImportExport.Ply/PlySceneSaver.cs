@@ -18,6 +18,7 @@ namespace LightingShowcase.SceneGraph;
 /// <summary>Exports the current scene as a triangle-mesh PLY file.</summary>
 public static class PlySceneSaver
 {
+    /// <summary>Saves the scene mesh to a PLY file in binary or ASCII form.</summary>
     public static void Save(Scene scene, string filePath, bool binary = true)
     {
         if (scene == null) throw new ArgumentNullException(nameof(scene));
@@ -33,6 +34,7 @@ public static class PlySceneSaver
             SaveAscii(fullPath, triangles);
     }
 
+    /// <summary>Writes scene triangles to an ASCII PLY file.</summary>
     private static void SaveAscii(string filePath, List<Triangle> triangles)
     {
         using StreamWriter writer = new(filePath, false, Encoding.UTF8);
@@ -52,6 +54,7 @@ public static class PlySceneSaver
         }
     }
 
+    /// <summary>Writes scene triangles to a binary little-endian PLY file.</summary>
     private static void SaveBinary(string filePath, List<Triangle> triangles)
     {
         using FileStream stream = File.Create(filePath);
@@ -76,8 +79,10 @@ public static class PlySceneSaver
         }
     }
 
+    /// <summary>Writes the PLY header for the given format and triangles.</summary>
     private static void WriteHeader(TextWriter writer, string format, List<Triangle> triangles) => writer.Write(BuildHeader(format, triangles));
 
+    /// <summary>Builds the PLY header text for the given format and triangles.</summary>
     private static string BuildHeader(string format, List<Triangle> triangles)
     {
         StringBuilder builder = new();
@@ -99,12 +104,14 @@ public static class PlySceneSaver
         return builder.ToString();
     }
 
+    /// <summary>Writes one vertex as an ASCII PLY line.</summary>
     private static void WriteAsciiVertex(TextWriter writer, Vec3 position, Vec2 uv, Vec3 color)
     {
         (byte r, byte g, byte b) = ToRgb(color);
         writer.WriteLine(FormattableString.Invariant($"{position.X:G17} {position.Y:G17} {position.Z:G17} {uv.U:G17} {uv.V:G17} {r} {g} {b}"));
     }
 
+    /// <summary>Writes one vertex to a binary PLY stream.</summary>
     private static void WriteBinaryVertex(BinaryWriter writer, Vec3 position, Vec2 uv, Vec3 color)
     {
         writer.Write((float)position.X);
@@ -118,6 +125,7 @@ public static class PlySceneSaver
         writer.Write(b);
     }
 
+    /// <summary>Converts a floating-point color to clamped RGB bytes.</summary>
     private static (byte R, byte G, byte B) ToRgb(Vec3 color) =>
         ((byte)Math.Clamp((int)Math.Round(color.X * 255.0), 0, 255),
          (byte)Math.Clamp((int)Math.Round(color.Y * 255.0), 0, 255),

@@ -25,6 +25,7 @@ public static class StlSceneLoader
         public readonly Vec3 B;
         public readonly Vec3 C;
 
+        /// <summary>Initializes a raw triangle from its three corner points.</summary>
         public RawTriangle(Vec3 a, Vec3 b, Vec3 c)
         {
             A = a;
@@ -33,6 +34,7 @@ public static class StlSceneLoader
         }
     }
 
+    /// <summary>Imports an ASCII or binary STL file into the scene, scaled and centered on the floor.</summary>
     public static ObjLoadResult LoadIntoScene(
         Scene scene,
         string filePath,
@@ -91,6 +93,7 @@ public static class StlSceneLoader
         return new ObjLoadResult(filePath, 0, triangles.Count, scene.Triangles.Count);
     }
 
+    /// <summary>Returns true when the file size and header indicate binary STL.</summary>
     private static bool IsProbablyBinaryStl(string filePath)
     {
         long length = new FileInfo(filePath).Length;
@@ -109,6 +112,7 @@ public static class StlSceneLoader
         return !prefix.Equals("solid", StringComparison.OrdinalIgnoreCase);
     }
 
+    /// <summary>Reads triangles from a binary STL file with progress reporting.</summary>
     private static List<RawTriangle> ReadBinary(string filePath, Action<ObjLoadProgress>? progress)
     {
         List<RawTriangle> triangles = new();
@@ -136,8 +140,10 @@ public static class StlSceneLoader
         return triangles;
     }
 
+    /// <summary>Reads three floats from the binary reader as a vector.</summary>
     private static Vec3 ReadVec3(BinaryReader reader) => new(reader.ReadSingle(), reader.ReadSingle(), reader.ReadSingle());
 
+    /// <summary>Reads triangles from an ASCII STL file with progress reporting.</summary>
     private static List<RawTriangle> ReadAscii(string filePath, Action<ObjLoadProgress>? progress)
     {
         List<RawTriangle> triangles = new();
@@ -174,8 +180,10 @@ public static class StlSceneLoader
         return triangles;
     }
 
+    /// <summary>Parses a double using invariant culture.</summary>
     private static bool TryParse(string value, out double number) => double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out number);
 
+    /// <summary>Computes the minimum and maximum corners of the given triangles.</summary>
     private static void GetBounds(List<RawTriangle> triangles, out Vec3 min, out Vec3 max)
     {
         min = triangles[0].A;
@@ -188,16 +196,19 @@ public static class StlSceneLoader
         }
     }
 
+    /// <summary>Expands the running bounds to include the given point.</summary>
     private static void Add(Vec3 p, ref Vec3 min, ref Vec3 max)
     {
         min = new Vec3(Math.Min(min.X, p.X), Math.Min(min.Y, p.Y), Math.Min(min.Z, p.Z));
         max = new Vec3(Math.Max(max.X, p.X), Math.Max(max.Y, p.Y), Math.Max(max.Z, p.Z));
     }
 
+    /// <summary>Scales the given point about the source center and shifts it by the offset.</summary>
     private static Vec3 Transform(Vec3 p, Vec3 sourceCenter, double scale, Vec3 offset) => (p - sourceCenter) * scale + offset;
 
     private const double TextureRepeatWorldUnits = 0.25;
 
+    /// <summary>Generates a box-projection UV for the given point from its dominant normal axis.</summary>
     private static Vec2 GenerateBoxUv(Vec3 point, Vec3 normal, Aabb bounds)
     {
         double nx = Math.Abs(normal.X), ny = Math.Abs(normal.Y), nz = Math.Abs(normal.Z);
@@ -212,6 +223,7 @@ public static class StlSceneLoader
         return new Vec2(ToTileCoordinate(point.X, bounds.Min.X), ToTileCoordinate(point.Y, bounds.Min.Y));
     }
 
+    /// <summary>Converts the given value to a repeating tile coordinate.</summary>
     private static double ToTileCoordinate(double value, double origin) =>
         (value - origin) / TextureRepeatWorldUnits;
 }

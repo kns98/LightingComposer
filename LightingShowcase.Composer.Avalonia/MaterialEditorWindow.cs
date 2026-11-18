@@ -26,11 +26,13 @@ internal sealed class MaterialEditorWindow : Window
 {
     private sealed record TextureSlotChoice(MaterialTextureSlot Slot, string Label)
     {
+        /// <summary>Returns the display label for this texture slot choice.</summary>
         public override string ToString() => Label;
     }
 
     private sealed record ProjectionChoice(bool BoxProjection, string Label)
     {
+        /// <summary>Returns the display label for this projection choice.</summary>
         public override string ToString() => Label;
     }
 
@@ -83,6 +85,7 @@ internal sealed class MaterialEditorWindow : Window
 
     public int ObjectId => objectId;
 
+    /// <summary>Creates a modeless material editor window for the given material model.</summary>
     public MaterialEditorWindow(
         ComposerSceneSession session,
         ComposerMaterialModel model,
@@ -213,6 +216,7 @@ internal sealed class MaterialEditorWindow : Window
         Closed += (_, _) => this.onClosed();
     }
 
+    /// <summary>Reloads the editor controls from the current scene material.</summary>
     public void RefreshFromScene(string message = "Material state refreshed.")
     {
         ComposerMaterialModel? model = session.GetMaterialModel(objectId);
@@ -225,6 +229,7 @@ internal sealed class MaterialEditorWindow : Window
         statusText.Text = message;
     }
 
+    /// <summary>Builds the editor window content with preset, color, property, texture, and mapping sections.</summary>
     private Control BuildContent()
     {
         StackPanel stack = new() { Spacing = 12 };
@@ -344,6 +349,7 @@ internal sealed class MaterialEditorWindow : Window
         };
     }
 
+    /// <summary>Applies the selected library preset to the edited object.</summary>
     private async Task ApplyPresetAsync()
     {
         if (presetBox.SelectedItem is not MaterialPreset preset)
@@ -353,6 +359,7 @@ internal sealed class MaterialEditorWindow : Window
             $"Applied {preset.Category} — {preset.Name}. Direct-property fields were refreshed; assigned textures were preserved.");
     }
 
+    /// <summary>Applies the entered base color to the edited object.</summary>
     private async Task ApplyColorAsync()
     {
         if (!TryReadColor(out Vec3 color))
@@ -363,6 +370,7 @@ internal sealed class MaterialEditorWindow : Window
         await RunEditAsync(() => session.SetObjectBaseColor(objectId, color), $"Base color set to {ToHex(color)}.");
     }
 
+    /// <summary>Applies the entered PBR properties to the edited object.</summary>
     private async Task ApplyPropertiesAsync()
     {
         if (!TryReadMaterialProperties(out ComposerMaterialProperties? properties, out string error))
@@ -376,6 +384,7 @@ internal sealed class MaterialEditorWindow : Window
             "Direct material properties applied. Base color and texture maps were preserved.");
     }
 
+    /// <summary>Opens a file picker and assigns the chosen image to the given texture slot.</summary>
     private async Task BrowseTextureAsync(MaterialTextureSlot slot)
     {
         if (!StorageProvider.CanOpen)
@@ -417,6 +426,7 @@ internal sealed class MaterialEditorWindow : Window
                 : $"{ComposerSceneSession.TextureSlotLabel(slot)} texture {Path.GetFileName(path)} applied using current/authored UVs.");
     }
 
+    /// <summary>Clears the texture assigned to the given slot.</summary>
     private async Task ClearTextureAsync(MaterialTextureSlot slot)
     {
         await RunEditAsync(
@@ -424,6 +434,7 @@ internal sealed class MaterialEditorWindow : Window
             $"{ComposerSceneSession.TextureSlotLabel(slot)} texture cleared.");
     }
 
+    /// <summary>Applies the entered UV transform and address modes to the selected texture slot.</summary>
     private async Task ApplyTextureMappingAsync()
     {
         if (mappingSlotBox.SelectedItem is not TextureSlotChoice choice)
@@ -481,6 +492,7 @@ internal sealed class MaterialEditorWindow : Window
         );
     }
 
+    /// <summary>Runs a scene edit on a background thread and refreshes the editor when it succeeds.</summary>
     private async Task RunEditAsync(Func<bool> edit, string successMessage)
     {
         try
@@ -506,6 +518,7 @@ internal sealed class MaterialEditorWindow : Window
         }
     }
 
+    /// <summary>Loads the editor controls and material summary from the given material model.</summary>
     private void LoadModel(ComposerMaterialModel model)
     {
         Title = $"Material — {model.ObjectName}";
@@ -544,6 +557,7 @@ internal sealed class MaterialEditorWindow : Window
     private bool SelectedProjectionMode =>
         projectionModeBox.SelectedItem is ProjectionChoice choice && choice.BoxProjection;
 
+    /// <summary>Loads the UV mapping controls from the currently selected texture slot.</summary>
     private void LoadSelectedTextureMapping()
     {
         if (currentModel == null || mappingSlotBox.SelectedItem is not TextureSlotChoice choice)
@@ -559,6 +573,7 @@ internal sealed class MaterialEditorWindow : Window
         wrapVBox.SelectedItem = slot.WrapV;
     }
 
+    /// <summary>Builds a texture slot row with its path display and browse and clear buttons.</summary>
     private Control BuildTextureSlotRow(MaterialTextureSlot slot)
     {
         Grid row = new()
@@ -585,6 +600,7 @@ internal sealed class MaterialEditorWindow : Window
         return row;
     }
 
+    /// <summary>Updates the preset summary line for the currently selected preset.</summary>
     private void UpdatePresetSummary()
     {
         if (presetBox.SelectedItem is not MaterialPreset preset)
@@ -595,6 +611,7 @@ internal sealed class MaterialEditorWindow : Window
         presetSummary.Text = $"{preset.Summary}  Metallic {preset.Material.Metallic:0.##}, roughness {preset.Material.Roughness:0.##}.";
     }
 
+    /// <summary>Reads and validates the entered material properties from the editor controls.</summary>
     private bool TryReadMaterialProperties(out ComposerMaterialProperties? properties, out string error)
     {
         properties = null;
@@ -654,6 +671,7 @@ internal sealed class MaterialEditorWindow : Window
         return true;
     }
 
+    /// <summary>Synchronizes the hex box and color swatch with the RGB channel boxes.</summary>
     private void SyncColorFromChannels()
     {
         if (synchronizingColor || !TryReadRgb(out Vec3 color))
@@ -664,6 +682,7 @@ internal sealed class MaterialEditorWindow : Window
         synchronizingColor = false;
     }
 
+    /// <summary>Sets the RGB, hex, and swatch editors to the given color.</summary>
     private void SetColorEditors(Vec3 color)
     {
         synchronizingColor = true;
@@ -675,6 +694,7 @@ internal sealed class MaterialEditorWindow : Window
         synchronizingColor = false;
     }
 
+    /// <summary>Reads the entered base color from the hex box or the RGB channel boxes.</summary>
     private bool TryReadColor(out Vec3 color)
     {
         if (TryParseHex(hexBox.Text, out color))
@@ -682,6 +702,7 @@ internal sealed class MaterialEditorWindow : Window
         return TryReadRgb(out color);
     }
 
+    /// <summary>Reads the entered base color from the RGB channel boxes.</summary>
     private bool TryReadRgb(out Vec3 color)
     {
         color = Vec3.Zero;
@@ -691,6 +712,7 @@ internal sealed class MaterialEditorWindow : Window
         return true;
     }
 
+    /// <summary>Reads the entered box tile size and returns true when it is greater than zero meters.</summary>
     private bool TryReadTileMeters(out double value)
     {
         string text = tileMetersBox.Text?.Trim() ?? string.Empty;
@@ -698,6 +720,7 @@ internal sealed class MaterialEditorWindow : Window
         return ok && value > 1e-6;
     }
 
+    /// <summary>Parses a hex color string into a normalized color vector.</summary>
     private static bool TryParseHex(string? text, out Vec3 color)
     {
         color = Vec3.Zero;
@@ -710,9 +733,11 @@ internal sealed class MaterialEditorWindow : Window
         return true;
     }
 
+    /// <summary>Parses the given text and returns true when the value lies within the given range.</summary>
     private static bool TryRange(string? text, double min, double max, out double value) =>
         TryDouble(text, out value) && value >= min && value <= max;
 
+    /// <summary>Parses the given text as a finite number using the current or invariant culture.</summary>
     private static bool TryDouble(string? text, out double value)
     {
         string trimmed = text?.Trim() ?? string.Empty;
@@ -721,23 +746,32 @@ internal sealed class MaterialEditorWindow : Window
         return ok && double.IsFinite(value);
     }
 
+    /// <summary>Sets the given error message and returns false.</summary>
     private static bool Fail(string message, out string error)
     {
         error = message;
         return false;
     }
 
+    /// <summary>Parses the given text as a byte value between 0 and 255.</summary>
     private static bool TryByte(string? text, out int value) =>
         int.TryParse(text?.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out value) && value is >= 0 and <= 255;
 
+    /// <summary>Converts a normalized color channel to a byte.</summary>
     private static byte ToByte(double channel) => (byte)Math.Clamp((int)Math.Round(channel * 255.0), 0, 255);
+    /// <summary>Formats the given color as a hex string.</summary>
     private static string ToHex(Vec3 color) => $"#{ToByte(color.X):X2}{ToByte(color.Y):X2}{ToByte(color.Z):X2}";
+    /// <summary>Creates a solid brush from the given color.</summary>
     private static IBrush ToBrush(Vec3 color) => new SolidColorBrush(Color.FromRgb(ToByte(color.X), ToByte(color.Y), ToByte(color.Z)));
+    /// <summary>Formats the given value with invariant culture.</summary>
     private static string Format(double value) => value.ToString("0.######", CultureInfo.InvariantCulture);
 
+    /// <summary>Creates a text box for editing one RGB channel value.</summary>
     private static TextBox ChannelBox() => new() { MinWidth = 58, TextAlignment = TextAlignment.Right };
+    /// <summary>Creates a right-aligned text box for editing a material property.</summary>
     private static TextBox PropertyBox() => new() { MinWidth = 88, TextAlignment = TextAlignment.Right };
 
+    /// <summary>Adds a labeled RGB editor to the given grid at the given column.</summary>
     private static void AddRgb(Grid grid, string label, Control editor, int column)
     {
         TextBlock text = new() { Text = label, VerticalAlignment = VerticalAlignment.Center };
@@ -747,6 +781,7 @@ internal sealed class MaterialEditorWindow : Window
         Grid.SetColumn(editor, column + 1);
     }
 
+    /// <summary>Creates a section heading with the given text.</summary>
     private static TextBlock Heading(string text) => new()
     {
         Text = text,
@@ -754,6 +789,7 @@ internal sealed class MaterialEditorWindow : Window
         Margin = new Thickness(0, 6, 0, 0)
     };
 
+    /// <summary>Creates a row pairing the given label with the given control.</summary>
     private static Control LabeledControl(string label, Control control)
     {
         Grid row = new() { ColumnDefinitions = new ColumnDefinitions("*,Auto"), ColumnSpacing = 10 };
@@ -763,6 +799,7 @@ internal sealed class MaterialEditorWindow : Window
         return row;
     }
 
+    /// <summary>Creates a row with two labeled property editors.</summary>
     private static Control TwoPropertyRow(string leftLabel, Control left, string rightLabel, Control right)
     {
         Grid row = new()
@@ -781,6 +818,7 @@ internal sealed class MaterialEditorWindow : Window
         return row;
     }
 
+    /// <summary>Creates a button with the given text.</summary>
     private static Button NewButton(string text) => new()
     {
         Content = text,

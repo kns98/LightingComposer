@@ -51,6 +51,7 @@ internal sealed class WindowsPrecisionTouchpadGestureSource : IDisposable
     public event EventHandler<NativeTrackpadZoom>? Zoom;
     public event EventHandler<NativeTrackpadTurn>? Turn;
 
+    /// <summary>Attaches the gesture source to the given window handle.</summary>
     public void Attach(nint hwnd)
     {
         if (attached)
@@ -74,6 +75,7 @@ internal sealed class WindowsPrecisionTouchpadGestureSource : IDisposable
         }
     }
 
+    /// <summary>Processes a window pointer message and returns true when it carried touchpad gesture input.</summary>
     public bool TryProcessWindowMessage(uint message, nint wParam, nint lParam)
     {
         _ = lParam;
@@ -162,6 +164,7 @@ internal sealed class WindowsPrecisionTouchpadGestureSource : IDisposable
         return true;
     }
 
+    /// <summary>Detaches the gesture source from its window and resets gesture state.</summary>
     public void Detach()
     {
         if (!attached)
@@ -184,12 +187,14 @@ internal sealed class WindowsPrecisionTouchpadGestureSource : IDisposable
         api = null;
     }
 
+    /// <summary>Writes a navigation diagnostic line to the console when diagnostics are enabled.</summary>
     private void Trace(string text)
     {
         if (diagnosticsEnabled)
             Console.WriteLine($"[NAV-WIN32] {text}");
     }
 
+    /// <summary>Reads a positive tuning value from an environment variable, falling back to the given default.</summary>
     private static double ReadPositiveEnvironmentDouble(string name, double fallback)
     {
         string? text = Environment.GetEnvironmentVariable(name);
@@ -204,5 +209,6 @@ internal sealed class WindowsPrecisionTouchpadGestureSource : IDisposable
                 : fallback;
     }
 
+    /// <summary>Releases the gesture source by detaching it from its window.</summary>
     public void Dispose() => Detach();
 }

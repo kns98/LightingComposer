@@ -20,8 +20,10 @@ public sealed class FbxSceneFormatPlugin : ISceneFormatPlugin
     public bool CarriesLights => false;
     public IReadOnlyList<string> ExportVariants => new[] { "binary", "ascii" };
 
+    /// <summary>Imports the FBX file at the given path into the scene.</summary>
     public ObjLoadResult Import(Scene scene, string filePath, SceneLoadOptions options) =>
         FbxSceneIO.LoadIntoScene(scene, filePath, options.FallbackMaterial, options.TargetSize, options.TargetCenter, options.FloorY, options.Progress);
 
+    /// <summary>Exports the scene to an FBX file at the given path using the requested variant.</summary>
     public void Export(Scene scene, string filePath, SceneSaveOptions options) => FbxSceneIO.Save(scene, filePath, options.Variant);
 }

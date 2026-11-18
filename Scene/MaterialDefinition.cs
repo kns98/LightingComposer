@@ -39,6 +39,7 @@ public sealed class MaterialDefinition
     public bool ClearcoatUsesTransmissionTexture { get; set; }
     public bool DoubleSided { get; set; }
 
+    /// <summary>Creates a material definition from the given renderer material.</summary>
     public static MaterialDefinition FromMaterial(Material material, string id, string name)
     {
         if (material == null) throw new ArgumentNullException(nameof(material));
@@ -75,6 +76,7 @@ public sealed class MaterialDefinition
         };
     }
 
+    /// <summary>Converts this definition back into a renderer material with the given textures.</summary>
     public Material ToMaterial(
         TextureMap? baseColorTexture = null,
         TextureMap? emissiveTexture = null,

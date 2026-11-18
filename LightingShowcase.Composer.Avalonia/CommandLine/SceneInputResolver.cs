@@ -15,6 +15,7 @@ internal sealed class ResolvedSceneInput
 
 internal static class SceneInputResolver
 {
+    /// <summary>Validates a local scene input path and resolves its full path and asset directory.</summary>
     public static ResolvedSceneInput Resolve(string input)
     {
         if (string.IsNullOrWhiteSpace(input))

@@ -34,6 +34,7 @@ public static class ShadowRasterRenderer
     /// </summary>
     public sealed class PreviewCache
     {
+        /// <summary>Captures the scene stamp, shadow maps, and build statistics.</summary>
         internal PreviewCache(Scene scene, List<ShadowMap> shadowMaps, long buildMilliseconds)
         {
             CacheStamp = SceneCacheStamp.Capture(scene);
@@ -47,6 +48,7 @@ public static class ShadowRasterRenderer
 
         public SceneCacheStamp CacheStamp { get; }
         public Scene Scene { get; }
+        /// <summary>Returns true when the cache stamp still matches the scene.</summary>
         public bool IsCurrent(Scene scene) => CacheStamp.Matches(scene);
         public int TriangleCount { get; }
         public int LightCount { get; }
@@ -116,6 +118,7 @@ public static class ShadowRasterRenderer
         return new RenderImage(width, height, pixels);
     }
 
+    /// <summary>Prepares enabled lights with shadow maps and spot cone data.</summary>
     private static PreparedLight[] PrepareLights(Scene scene, IReadOnlyList<ShadowMap> shadowMaps)
     {
         Dictionary<string, ShadowMap> shadowByLightId = new(StringComparer.OrdinalIgnoreCase);
@@ -146,6 +149,7 @@ public static class ShadowRasterRenderer
         return prepared.ToArray();
     }
 
+    /// <summary>Clears the frame with a vertical gradient background.</summary>
     private static void ClearBackground(uint[] pixels, int width, int height)
     {
         for (int y = 0; y < height; y++)
@@ -162,6 +166,7 @@ public static class ShadowRasterRenderer
         }
     }
 
+    /// <summary>Projects and shades one triangle into the pixel and depth buffers.</summary>
     private static void RasterizeTriangle(
         uint[] pixels,
         double[] zBuffer,
@@ -251,6 +256,7 @@ public static class ShadowRasterRenderer
         }
     }
 
+    /// <summary>Shades one point with fast diffuse-only lighting.</summary>
     private static Vec3 ShadeFast(Vec3 albedo, Vec3 point, Vec3 normal, IReadOnlyList<PreparedLight> lights)
     {
         Vec3 color = albedo * 0.085;
@@ -298,6 +304,7 @@ public static class ShadowRasterRenderer
         return ClampColor(color);
     }
 
+    /// <summary>Shades one point with diffuse, specular, shadow, and emission terms.</summary>
     private static Vec3 Shade(
         Material material,
         double u,
@@ -349,6 +356,7 @@ public static class ShadowRasterRenderer
         return ClampColor(color);
     }
 
+    /// <summary>Computes diffuse plus specular contribution from one light.</summary>
     private static Vec3 LightContribution(Vec3 surfaceColor, Vec3 normal, Vec3 viewDirection, Vec3 lightDir, Vec3 lightColor, double strength, double metallic, double roughness)
     {
         double ndotl = Math.Max(0.0, normal.Dot(lightDir));
@@ -366,6 +374,7 @@ public static class ShadowRasterRenderer
         return diffuse + specular;
     }
 
+    /// <summary>Computes distance attenuation with smooth range falloff.</summary>
     private static double DistanceAttenuation(double distance, double range)
     {
         double attenuation = 1.0 / (1.0 + 0.11 * distance * distance);
@@ -377,6 +386,7 @@ public static class ShadowRasterRenderer
         return attenuation * edgeFade * edgeFade;
     }
 
+    /// <summary>Computes the smooth spot cone falloff for one direction.</summary>
     private static double SpotConeFactor(PreparedLight prepared, Vec3 lightToSurface)
     {
         double theta = prepared.SpotForward.Dot(lightToSurface.Normalize());
@@ -385,6 +395,7 @@ public static class ShadowRasterRenderer
         return (theta - prepared.CosOuter) / Math.Max(1e-8, prepared.CosInner - prepared.CosOuter);
     }
 
+    /// <summary>Builds one shadow map per shadow-casting light.</summary>
     private static List<ShadowMap> BuildShadowMaps(Scene scene, CancellationToken cancellationToken)
     {
         List<ShadowMap> maps = new();
@@ -405,6 +416,7 @@ public static class ShadowRasterRenderer
         return maps;
     }
 
+    /// <summary>Creates the shadow projection matching the light kind.</summary>
     private static ShadowProjection CreateShadowProjection(SceneLight light, Vec3 center, double radius)
     {
         if (light.Kind == SceneLightKind.Directional)
@@ -429,6 +441,7 @@ public static class ShadowRasterRenderer
         return ShadowProjection.CreatePerspective(light.Position, forward, fov, far, bias: radius * 0.0035 + 0.0025);
     }
 
+    /// <summary>Rasterizes one triangle into a shadow map depth buffer.</summary>
     private static void RasterizeShadowTriangle(ShadowMap map, Triangle tri)
     {
         if (!map.Projection.TryProject(tri.A, map.Size, map.Size, out RasterVertex a) ||
@@ -468,6 +481,7 @@ public static class ShadowRasterRenderer
         }
     }
 
+    /// <summary>Samples one shadow texel for the fast preview path.</summary>
     private static double FindShadowFactorFast(ShadowMap? map, Vec3 point, Vec3 normal)
     {
         if (map == null || !map.Enabled)
@@ -487,6 +501,7 @@ public static class ShadowRasterRenderer
         return 0.30 + visibility * 0.70;
     }
 
+    /// <summary>Samples a 3 by 3 shadow kernel for soft shadows.</summary>
     private static double FindShadowFactor(ShadowMap? map, Vec3 point, Vec3 normal)
     {
         if (map == null || !map.Enabled)
@@ -525,6 +540,7 @@ public static class ShadowRasterRenderer
         return Math.Clamp(0.24 + visibility * 0.76, 0.24, 1.0);
     }
 
+    /// <summary>Projects one world point to raster coordinates.</summary>
     private static bool TryProjectCamera(Vec3 p, Vec3 cameraPosition, CameraBasis basis, int width, int height, out RasterVertex projected)
     {
         Vec3 rel = p - cameraPosition;
@@ -551,18 +567,23 @@ public static class ShadowRasterRenderer
         return true;
     }
 
+    /// <summary>Evaluates the signed edge function for rasterization.</summary>
     private static double Edge(double ax, double ay, double bx, double by, double px, double py) =>
         (px - ax) * (by - ay) - (py - ay) * (bx - ax);
 
+    /// <summary>Clamps a color to the preview range.</summary>
     private static Vec3 ClampColor(Vec3 color) => new(
         Math.Clamp(color.X, 0.0, 8.0),
         Math.Clamp(color.Y, 0.0, 8.0),
         Math.Clamp(color.Z, 0.0, 8.0));
 
+    /// <summary>Applies gamma correction to one channel.</summary>
     private static double Gamma(double value) => Math.Pow(Math.Clamp(value, 0.0, 1.0), 1.0 / 2.2);
+    /// <summary>Packs four bytes into one RGBA pixel.</summary>
     private static uint PackRgba(byte r, byte g, byte b, byte a) =>
         (uint)r | ((uint)g << 8) | ((uint)b << 16) | ((uint)a << 24);
 
+    /// <summary>Converts one unit channel value to a byte.</summary>
     private static byte ToByte(double value) => (byte)Math.Clamp((int)Math.Round(value * 255.0), 0, 255);
 
     internal readonly record struct RasterVertex(double X, double Y, double Z);
@@ -584,6 +605,7 @@ public static class ShadowRasterRenderer
         public bool Enabled => HasDepth;
         internal bool HasDepth { get; set; }
 
+        /// <summary>Initializes an empty shadow map depth buffer.</summary>
         public ShadowMap(string lightId, int size, ShadowProjection projection)
         {
             LightId = lightId;
@@ -606,6 +628,7 @@ public static class ShadowRasterRenderer
         private readonly double farPlane;
         public double Bias { get; }
 
+        /// <summary>Initializes a shadow projection with its basis and clipping planes.</summary>
         private ShadowProjection(Vec3 origin, Vec3 forward, Vec3 right, Vec3 up, bool perspective, double halfExtent, double tanHalfFov, double farPlane, double bias)
         {
             this.origin = origin;
@@ -619,18 +642,21 @@ public static class ShadowRasterRenderer
             Bias = Math.Max(0.0001, bias);
         }
 
+        /// <summary>Creates an orthographic shadow projection.</summary>
         public static ShadowProjection CreateOrthographic(Vec3 origin, Vec3 forward, double halfExtent, double farPlane, double bias)
         {
             CreateBasis(forward, out Vec3 f, out Vec3 r, out Vec3 u);
             return new ShadowProjection(origin, f, r, u, false, halfExtent, 1.0, farPlane, bias);
         }
 
+        /// <summary>Creates a perspective shadow projection.</summary>
         public static ShadowProjection CreatePerspective(Vec3 origin, Vec3 forward, double fovRadians, double farPlane, double bias)
         {
             CreateBasis(forward, out Vec3 f, out Vec3 r, out Vec3 u);
             return new ShadowProjection(origin, f, r, u, true, 1.0, Math.Tan(fovRadians * 0.5), farPlane, bias);
         }
 
+        /// <summary>Projects one world point into shadow map coordinates.</summary>
         public bool TryProject(Vec3 point, int width, int height, out RasterVertex projected)
         {
             Vec3 rel = point - origin;
@@ -678,6 +704,7 @@ public static class ShadowRasterRenderer
             return true;
         }
 
+        /// <summary>Builds an orthonormal basis from one forward vector.</summary>
         private static void CreateBasis(Vec3 forward, out Vec3 f, out Vec3 r, out Vec3 u)
         {
             f = forward.Normalize();

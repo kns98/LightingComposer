@@ -17,6 +17,7 @@ public static class ObjSceneLoader
     private sealed record RawFace(List<FaceVertex> Vertices, string MaterialName, string ObjectName);
     private sealed record ObjMaterial(Vec3 Color, string? TexturePath);
 
+    /// <summary>Loads a Wavefront OBJ file into the scene, fitting it to the editor viewport.</summary>
     public static ObjLoadResult LoadIntoScene(
         Scene scene,
         string filePath,
@@ -152,6 +153,7 @@ public static class ObjSceneLoader
         return new ObjLoadResult(filePath, vertices.Count, faces.Count, triangleCount);
     }
 
+    /// <summary>Returns the import group for an object name, creating it when first seen.</summary>
     private static SceneObjectGroup GetOrCreateGroup(Scene scene, Dictionary<string, SceneObjectGroup> groups, string name)
     {
         string key = string.IsNullOrWhiteSpace(name) ? "OBJ Object" : name;
@@ -161,6 +163,7 @@ public static class ObjSceneLoader
         return group;
     }
 
+    /// <summary>Builds scene materials from parsed MTL definitions and their diffuse textures.</summary>
     private static Dictionary<string, Material> BuildMaterialCache(Dictionary<string, ObjMaterial> materialDefs, string baseDirectory, Material fallback)
     {
         Dictionary<string, Material> result = new(StringComparer.OrdinalIgnoreCase);
@@ -180,9 +183,11 @@ public static class ObjSceneLoader
         return result;
     }
 
+    /// <summary>Returns the cached material for a name, falling back to the given default.</summary>
     private static Material ResolveMaterial(Dictionary<string, Material> materialCache, string name, Material fallback) =>
         !string.IsNullOrWhiteSpace(name) && materialCache.TryGetValue(name, out Material? material) ? material : fallback;
 
+    /// <summary>Parses an MTL file into diffuse color and texture definitions.</summary>
     private static Dictionary<string, ObjMaterial> LoadMaterialLibrary(string filePath)
     {
         Dictionary<string, ObjMaterial> result = new(StringComparer.OrdinalIgnoreCase);
@@ -193,6 +198,7 @@ public static class ObjSceneLoader
         Vec3 currentColor = new(0.82, 0.82, 0.78);
         string? currentTexture = null;
 
+        /// <summary>Stores the material currently being parsed into the result map.</summary>
         void Commit()
         {
             if (!string.IsNullOrWhiteSpace(currentName))
@@ -226,6 +232,7 @@ public static class ObjSceneLoader
         return result;
     }
 
+    /// <summary>Resolves the texture path from map_Kd option tokens.</summary>
     private static string ResolveTextureToken(string mtlDirectory, IEnumerable<string> tokens)
     {
         List<string> useful = tokens.Where(t => !t.StartsWith('-')).ToList();
@@ -233,12 +240,14 @@ public static class ObjSceneLoader
         return ResolveRelativePath(mtlDirectory, textureName);
     }
 
+    /// <summary>Parses the library names from an mtllib line.</summary>
     private static IEnumerable<string> ParseMaterialLibraryNames(string text)
     {
         if (text.Length == 0) yield break;
         yield return text.Trim('"');
     }
 
+    /// <summary>Parses one face vertex token into vertex and texture indices.</summary>
     private static FaceVertex ParseFaceVertex(string token, int vertexCount, int textureCount, int lineNumber)
     {
         string[] parts = token.Split('/');
@@ -251,6 +260,7 @@ public static class ObjSceneLoader
         return new FaceVertex(vertexIndex, textureIndex);
     }
 
+    /// <summary>Converts a one-based OBJ index, or a negative relative index, to a zero-based index.</summary>
     private static int ResolveIndex(int objIndex, int count, int lineNumber, string kind)
     {
         int zeroBased = objIndex > 0 ? objIndex - 1 : count + objIndex;
@@ -259,9 +269,11 @@ public static class ObjSceneLoader
         return zeroBased;
     }
 
+    /// <summary>Returns the texture coordinate at an index, falling back to the given default.</summary>
     private static Vec2 GetUv(List<Vec2> textureCoordinates, int index, Vec2 fallback) =>
         index >= 0 && index < textureCoordinates.Count ? textureCoordinates[index] : fallback;
 
+    /// <summary>Computes the axis-aligned bounds of a vertex list.</summary>
     private static void GetBounds(List<Vec3> vertices, out Vec3 min, out Vec3 max)
     {
         min = vertices[0]; max = vertices[0];
@@ -272,19 +284,28 @@ public static class ObjSceneLoader
         }
     }
 
+    /// <summary>Maps a source vertex into fitted editor space.</summary>
     private static Vec3 Transform(Vec3 p, Vec3 sourceCenter, double scale, Vec3 offset) => (p - sourceCenter) * scale + offset;
+    /// <summary>Returns true when a triangle has near-zero area.</summary>
     private static bool IsDegenerate(Vec3 a, Vec3 b, Vec3 c) => (b - a).Cross(c - a).Length() < 1e-10;
 
+    /// <summary>Strips the trailing comment from one line.</summary>
     private static string StripComment(string line)
     {
         int index = line.IndexOf('#');
         return index >= 0 ? line[..index] : line;
     }
 
+    /// <summary>Splits a line on whitespace, discarding empty entries.</summary>
     private static string[] SplitWhitespace(string line) => line.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+    /// <summary>Parses a floating-point value, throwing a line-numbered error when it is invalid.</summary>
     private static double ParseDouble(string text, int lineNumber) => double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out double value) ? value : throw new InvalidDataException($"Invalid numeric value '{text}' at OBJ line {lineNumber}.");
+    /// <summary>Parses a floating-point value, returning zero when it is invalid.</summary>
     private static double ParseLooseDouble(string text) => double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out double value) ? value : 0.0;
+    /// <summary>Parses an integer value, throwing a line-numbered error when it is invalid.</summary>
     private static int ParseInt(string text, int lineNumber) => int.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out int value) ? value : throw new InvalidDataException($"Invalid integer value '{text}' at OBJ line {lineNumber}.");
+    /// <summary>Resolves a possibly relative path against a base directory.</summary>
     private static string ResolveRelativePath(string baseDirectory, string path) => Path.GetFullPath(Path.IsPathRooted(path) ? path : Path.Combine(baseDirectory, path.Trim('"')));
+    /// <summary>Returns a trimmed object name, falling back to the given default when it is blank.</summary>
     private static string SanitizeObjectName(string name, string fallback) => string.IsNullOrWhiteSpace(name) ? fallback : name.Trim();
 }

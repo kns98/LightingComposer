@@ -18,6 +18,7 @@ internal sealed class CommandLine
     private readonly Dictionary<string, string> _values;
     private readonly HashSet<string> _switches;
 
+    /// <summary>Stores the parsed option values and switches.</summary>
     private CommandLine(Dictionary<string, string> values, HashSet<string> switches)
     {
         _values = values;
@@ -27,6 +28,7 @@ internal sealed class CommandLine
     public IReadOnlyList<string> Positionals { get; private init; } = Array.Empty<string>();
     public IEnumerable<string> OptionNames => _values.Keys.Concat(_switches).Distinct(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>Parses option, switch, and positional arguments into a command line.</summary>
     public static CommandLine Parse(string[] args)
     {
         Dictionary<string, string> values = new(StringComparer.OrdinalIgnoreCase);
@@ -73,12 +75,16 @@ internal sealed class CommandLine
         return new CommandLine(values, switches) { Positionals = positionals };
     }
 
+    /// <summary>Returns the value stored for the given option key.</summary>
     public string? Get(string key) => _values.TryGetValue(key, out string? value) ? value : null;
 
+    /// <summary>Returns true when the given key was supplied as an option or switch.</summary>
     public bool Has(string key) => _switches.Contains(key) || _values.ContainsKey(key);
 
+    /// <summary>Returns true when the given key was supplied as a switch.</summary>
     public bool IsSwitch(string key) => _switches.Contains(key);
 
+    /// <summary>Throws when the command line contains an option outside the known set.</summary>
     public void ValidateKnownOptions(IEnumerable<string> knownOptions)
     {
         HashSet<string> known = new(knownOptions, StringComparer.OrdinalIgnoreCase);
@@ -87,6 +93,7 @@ internal sealed class CommandLine
             throw new ArgumentException($"Unknown option(s): {string.Join(", ", unknown.Select(name => $"--{name}"))}. Run with --help to list supported rendering options.");
     }
 
+    /// <summary>Reads an integer option with a fallback and optional range validation.</summary>
     public int GetInt(string key, int fallback, int? minimum = null, int? maximum = null)
     {
         string? raw = Get(key);
@@ -100,6 +107,7 @@ internal sealed class CommandLine
         return value;
     }
 
+    /// <summary>Reads a floating-point option with a fallback and optional range validation.</summary>
     public double GetDouble(string key, double fallback, double? minimum = null, double? maximum = null)
     {
         string? raw = Get(key);
@@ -113,6 +121,7 @@ internal sealed class CommandLine
         return value;
     }
 
+    /// <summary>Reads a boolean option, treating a bare switch as true.</summary>
     public bool GetBool(string key, bool fallback)
     {
         if (IsSwitch(key)) return true;

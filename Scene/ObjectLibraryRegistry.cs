@@ -14,10 +14,13 @@ public static class ObjectLibraryRegistry
 
     public static string[] Names => ScenePrimitiveRegistry.DisplayNames;
 
+    /// <summary>Ensures the primitive registry has discovered available object definitions.</summary>
     public static void EnsureInitialized() => ScenePrimitiveRegistry.EnsureInitialized();
 
+    /// <summary>Returns true when the registry holds an object with the given name.</summary>
     public static bool Contains(string objectName) => ScenePrimitiveRegistry.Contains(objectName);
 
+    /// <summary>Inserts a library object with default parameters into the scene as a new group.</summary>
     public static SceneObjectGroup Insert(Scene scene, SceneMaterials materials, string objectName)
     {
         if (scene == null) throw new ArgumentNullException(nameof(scene));
@@ -41,6 +44,7 @@ public static class ObjectLibraryRegistry
         return group;
     }
 
+    /// <summary>Resolves the display name for a primitive kind or source name.</summary>
     public static string ReadyMadeNameForPrimitiveKind(string? primitiveKind, string? sourceName)
     {
         EnsureInitialized();
@@ -51,6 +55,7 @@ public static class ObjectLibraryRegistry
         return !string.IsNullOrWhiteSpace(sourceName) ? sourceName!.Trim() : primitiveKind?.Trim() ?? Names.FirstOrDefault() ?? "Object";
     }
 
+    /// <summary>Resolves the primitive kind key for a ready-made display name.</summary>
     public static string PrimitiveKindForReadyMade(string? readyMadeName)
     {
         EnsureInitialized();
@@ -61,6 +66,7 @@ public static class ObjectLibraryRegistry
             : readyMadeName.Trim().Replace(" ", string.Empty, StringComparison.Ordinal).Replace("/", string.Empty, StringComparison.Ordinal).ToLowerInvariant();
     }
 
+    /// <summary>Stores default primitive parameters derived from the group shadow bounds.</summary>
     public static void StoreDefaultPrimitiveParametersFromShadow(SceneObjectGroup group)
     {
         if (group == null) throw new ArgumentNullException(nameof(group));
@@ -74,6 +80,7 @@ public static class ObjectLibraryRegistry
             group.PrimitiveParameters[parameter.Key] = parameter.Value;
     }
 
+    /// <summary>Rebuilds a parametric group shadow mesh from its stored parameters.</summary>
     public static bool RebuildPrimitiveShadowGeometry(SceneObjectGroup group, SceneMaterials materials)
     {
         if (group == null) throw new ArgumentNullException(nameof(group));
@@ -130,6 +137,7 @@ public static class ObjectLibraryRegistry
             group.PrimitiveParameters.Remove(TextureTileMetersKey);
     }
 
+    /// <summary>Clears stored texture projection metadata from the group parameters.</summary>
     public static void ClearParametricTextureProjection(SceneObjectGroup group)
     {
         if (group == null) throw new ArgumentNullException(nameof(group));
@@ -137,6 +145,7 @@ public static class ObjectLibraryRegistry
         group.PrimitiveParameters.Remove(TextureTileMetersKey);
     }
 
+    /// <summary>Reads stored texture projection metadata from the group parameters when present.</summary>
     public static bool TryGetParametricTextureProjection(SceneObjectGroup group, out bool boxProjection, out double tileWorldUnits)
     {
         if (group == null) throw new ArgumentNullException(nameof(group));
@@ -186,10 +195,12 @@ public static class ObjectLibraryRegistry
 
     private const string AffinePrefix = "__composerAffine";
 
+    /// <summary>Returns true when the position, rotation, and scale hold an identity transform.</summary>
     private static bool IsIdentitySrt(Vec3 position, Vec3 rotation, Vec3 scale) =>
         position.Length() <= 1e-12 && rotation.Length() <= 1e-12 &&
         Math.Abs(scale.X - 1.0) <= 1e-12 && Math.Abs(scale.Y - 1.0) <= 1e-12 && Math.Abs(scale.Z - 1.0) <= 1e-12;
 
+    /// <summary>Wraps a triangle callback so emitted vertices pass through the stored authored transform.</summary>
     private static AddTriangleCallback ApplyAuthoredTransform(
         IReadOnlyDictionary<string, double> parameters,
         AddTriangleCallback destination)
@@ -206,8 +217,10 @@ public static class ObjectLibraryRegistry
                 uvA, uvB, uvC, material);
     }
 
+    /// <summary>Reads the stored authored affine transform from the parameter dictionary.</summary>
     private static AuthoredAffine ReadAuthoredAffine(IReadOnlyDictionary<string, double> parameters)
     {
+        /// <summary>Reads one authored affine component with a fallback for missing values.</summary>
         double Read(string suffix, double fallback) =>
             parameters.TryGetValue(AffinePrefix + suffix, out double value) && double.IsFinite(value)
                 ? value
@@ -219,6 +232,7 @@ public static class ObjectLibraryRegistry
             Read("M31", 0.0), Read("M32", 0.0), Read("M33", 1.0), Read("TZ", 0.0));
     }
 
+    /// <summary>Writes the authored affine transform into the parameter dictionary.</summary>
     private static void WriteAuthoredAffine(IDictionary<string, double> parameters, AuthoredAffine value)
     {
         parameters[AffinePrefix + "M11"] = value.M11;
@@ -247,11 +261,13 @@ public static class ObjectLibraryRegistry
             Math.Abs(M31) <= 1e-12 && Math.Abs(M32) <= 1e-12 &&
             Math.Abs(TX) <= 1e-12 && Math.Abs(TY) <= 1e-12 && Math.Abs(TZ) <= 1e-12;
 
+        /// <summary>Transforms a point by the authored affine matrix and translation.</summary>
         public Vec3 TransformPoint(Vec3 point) => new(
             M11 * point.X + M12 * point.Y + M13 * point.Z + TX,
             M21 * point.X + M22 * point.Y + M23 * point.Z + TY,
             M31 * point.X + M32 * point.Y + M33 * point.Z + TZ);
 
+        /// <summary>Builds an authored affine transform from a pivot plus position, rotation, and scale.</summary>
         public static AuthoredAffine FromSrt(Vec3 pivot, Vec3 position, Vec3 rotation, Vec3 scale)
         {
             Vec3 safeScale = TransformConverter.SanitizeScale(scale);

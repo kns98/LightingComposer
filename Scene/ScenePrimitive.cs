@@ -40,6 +40,7 @@ public sealed record PrimitiveParameterDescriptor(
     string UnitLabel = "",
     IReadOnlyList<string>? Choices = null)
 {
+    /// <summary>Clamps the value into range, substituting the minimum for non-finite input and rounding discrete kinds.</summary>
     public double Normalize(double value)
     {
         if (!double.IsFinite(value))

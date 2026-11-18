@@ -36,6 +36,7 @@ internal sealed class ComposerCommandCoordinator
     private readonly Action<string, Exception> reportFailure;
     private readonly CancellationToken lifetimeToken;
 
+    /// <summary>Initializes a new coordinator with the scene session, controllers, and status controls.</summary>
     public ComposerCommandCoordinator(
         ComposerSceneSession session,
         ComposerFileController files,
@@ -78,6 +79,7 @@ internal sealed class ComposerCommandCoordinator
         this.lifetimeToken = lifetimeToken;
     }
 
+    /// <summary>Creates a new empty composition and refreshes the selection, tree, and status text.</summary>
     public async Task NewSceneAsync()
     {
         dialogs.CloseEditors();
@@ -105,6 +107,7 @@ internal sealed class ComposerCommandCoordinator
         }
     }
 
+    /// <summary>Prompts for a scene or model path and loads it.</summary>
     public async Task BrowseAndOpenAsync()
     {
         try
@@ -119,6 +122,7 @@ internal sealed class ComposerCommandCoordinator
         }
     }
 
+    /// <summary>Prompts for a model path and inserts it into the scene.</summary>
     public async Task BrowseAndInsertAsync()
     {
         try
@@ -133,6 +137,7 @@ internal sealed class ComposerCommandCoordinator
         }
     }
 
+    /// <summary>Loads the scene at the given path and requests a fresh render.</summary>
     public async Task LoadSceneAsync(string path)
     {
         dialogs.CloseEditors();
@@ -161,6 +166,7 @@ internal sealed class ComposerCommandCoordinator
         }
     }
 
+    /// <summary>Inserts the model at the given path into the current composition.</summary>
     public async Task InsertModelAsync(string path)
     {
         dialogs.CloseEditors();
@@ -186,6 +192,7 @@ internal sealed class ComposerCommandCoordinator
         }
     }
 
+    /// <summary>Adds the selected primitive to the scene and opens its parameter editor.</summary>
     public async Task AddPrimitiveAsync()
     {
         string primitiveName = primitiveBox.SelectedItem as string ?? primitiveChoices[0];
@@ -216,6 +223,7 @@ internal sealed class ComposerCommandCoordinator
             openPrimitiveParameters();
     }
 
+    /// <summary>Prompts for a save path and saves the current composition.</summary>
     public async Task SaveSceneAsync()
     {
         try
@@ -244,6 +252,7 @@ internal sealed class ComposerCommandCoordinator
         }
     }
 
+    /// <summary>Exports the current composition as a portable package.</summary>
     public async Task ExportPackageAsync()
     {
         try
@@ -268,6 +277,7 @@ internal sealed class ComposerCommandCoordinator
         }
     }
 
+    /// <summary>Undoes the most recent edit and refreshes the selection and render.</summary>
     public async Task UndoAsync()
     {
         dialogs.CloseEditors();
@@ -299,6 +309,7 @@ internal sealed class ComposerCommandCoordinator
         }
     }
 
+    /// <summary>Redoes the most recently undone edit and refreshes the selection and render.</summary>
     public async Task RedoAsync()
     {
         dialogs.CloseEditors();
@@ -330,6 +341,7 @@ internal sealed class ComposerCommandCoordinator
         }
     }
 
+    /// <summary>Groups the selected sibling objects into a new node.</summary>
     public async Task GroupSelectedAsync()
     {
         dialogs.CloseEditors();
@@ -368,6 +380,7 @@ internal sealed class ComposerCommandCoordinator
         }
     }
 
+    /// <summary>Ungroups the selected nodes and selects their promoted children.</summary>
     public async Task UngroupSelectedAsync()
     {
         dialogs.CloseEditors();
@@ -406,6 +419,7 @@ internal sealed class ComposerCommandCoordinator
         }
     }
 
+    /// <summary>Duplicates the active object and refreshes the tree and render.</summary>
     public async Task DuplicateSelectedAsync()
     {
         dialogs.CloseEditors();
@@ -433,6 +447,7 @@ internal sealed class ComposerCommandCoordinator
         }
     }
 
+    /// <summary>Deletes the active object and refreshes the tree and render.</summary>
     public async Task DeleteSelectedAsync()
     {
         dialogs.CloseEditors();
@@ -454,6 +469,7 @@ internal sealed class ComposerCommandCoordinator
         }
     }
 
+    /// <summary>Formats the last import details as a status suffix.</summary>
     private string FormatImportDetails() =>
         string.IsNullOrWhiteSpace(session.LastImportDetails)
             ? string.Empty

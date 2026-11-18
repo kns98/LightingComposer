@@ -104,6 +104,7 @@ public sealed class RayTracer
         return radiance;
     }
 
+    /// <summary>Traces one ray with transparency blending up to the depth limit.</summary>
     private Vec3 Trace(Ray ray, int depth)
     {
         Hit? hit = scene.Intersect(ray);
@@ -133,11 +134,13 @@ public sealed class RayTracer
     }
 
 
+    /// <summary>Reflects a direction about a surface normal.</summary>
     private static Vec3 Reflect(Vec3 direction, Vec3 normal)
     {
         return direction - normal * (2.0 * direction.Dot(normal));
     }
 
+    /// <summary>Samples a cosine-weighted hemisphere direction about a normal.</summary>
     private static Vec3 CosineHemisphere(ref uint state, Vec3 normal)
     {
         double r1 = Next01(ref state);
@@ -156,6 +159,7 @@ public sealed class RayTracer
         return (tangent * x + bitangent * y + n * z).Normalize();
     }
 
+    /// <summary>Hashes pixel coordinates and sample index into a random seed.</summary>
     private static uint Seed(int x, int y, int sampleIndex)
     {
         unchecked
@@ -168,6 +172,7 @@ public sealed class RayTracer
         }
     }
 
+    /// <summary>Advances the xor-shift state and returns a value in [0, 1).</summary>
     private static double Next01(ref uint state)
     {
         unchecked
@@ -179,6 +184,7 @@ public sealed class RayTracer
         }
     }
 
+    /// <summary>Traces one ray for the given debug render mode.</summary>
     private Vec3 TraceDebug(Ray ray, RenderMode mode)
     {
         Hit? hit = scene.Intersect(ray);
@@ -196,14 +202,17 @@ public sealed class RayTracer
         };
     }
 
+    /// <summary>Returns the fractional part of the given value.</summary>
     private static double Frac(double value) => value - Math.Floor(value);
 
+    /// <summary>Maps a hit distance to a grayscale debug color.</summary>
     private static Vec3 DepthColor(double distance)
     {
         double t = Math.Clamp(distance / 25.0, 0.0, 1.0);
         return new Vec3(1.0 - t, 1.0 - t, 1.0 - t);
     }
 
+    /// <summary>Accumulates per-light influence at a hit for the light debug view.</summary>
     private Vec3 LightDebug(Hit hit)
     {
         Vec3 color = Vec3.Zero;
@@ -217,6 +226,7 @@ public sealed class RayTracer
         return color;
     }
 
+    /// <summary>Shades a surface hit with direct, environment, and emission lighting.</summary>
     private Vec3 ShadeHit(Hit hit, Vec3 surfaceColor, Vec3 viewDirection)
     {
         Vec3 normal = ApplyNormalMap(hit);
@@ -238,6 +248,7 @@ public sealed class RayTracer
         return direct + indirect + emission;
     }
 
+    /// <summary>Perturbs the hit normal using the material normal map.</summary>
     private static Vec3 ApplyNormalMap(Hit hit)
     {
         Vec3 normal = hit.Normal.Normalize();
@@ -279,6 +290,7 @@ public sealed class RayTracer
         };
     }
 
+    /// <summary>Computes direct lighting from one point light.</summary>
     private Vec3 DirectPointLight(Hit hit, SceneLight light, Vec3 surfaceColor, Vec3 normal, Vec3 viewDirection, double metallic, double roughness)
     {
         Vec3 toLight = light.Position - hit.Point;
@@ -292,6 +304,7 @@ public sealed class RayTracer
         return LightContribution(surfaceColor, normal, viewDirection, lightDir, light.Color, light.Intensity * attenuation * shadow, metallic, roughness);
     }
 
+    /// <summary>Computes direct lighting from one directional light.</summary>
     private Vec3 DirectDirectionalLight(Hit hit, SceneLight light, Vec3 surfaceColor, Vec3 normal, Vec3 viewDirection, double metallic, double roughness)
     {
         // glTF directional lights shine along local -Z. SceneLight.Direction is
@@ -301,6 +314,7 @@ public sealed class RayTracer
         return LightContribution(surfaceColor, normal, viewDirection, lightDir, light.Color, light.Intensity * shadow, metallic, roughness);
     }
 
+    /// <summary>Computes direct lighting from one spot light.</summary>
     private Vec3 DirectSpotLight(Hit hit, SceneLight light, Vec3 surfaceColor, Vec3 normal, Vec3 viewDirection, double metallic, double roughness)
     {
         Vec3 toLight = light.Position - hit.Point;
@@ -319,6 +333,7 @@ public sealed class RayTracer
         return LightContribution(surfaceColor, normal, viewDirection, lightDir, light.Color, light.Intensity * attenuation * cone * shadow, metallic, roughness);
     }
 
+    /// <summary>Computes the diffuse and specular contribution of one light.</summary>
     private static Vec3 LightContribution(Vec3 surfaceColor, Vec3 normal, Vec3 view, Vec3 lightDir, Vec3 lightColor, double strength, double metallic, double roughness)
     {
         double nDotL = Math.Max(0.0, normal.Dot(lightDir));
@@ -340,6 +355,7 @@ public sealed class RayTracer
         return (diffuse + specular).Multiply(radiance) * nDotL;
     }
 
+    /// <summary>Computes diffuse and specular environment lighting for a surface.</summary>
     private static Vec3 EnvironmentLighting(Vec3 baseColor, Vec3 normal, Vec3 view, double metallic, double roughness)
     {
         double nDotV = Math.Max(0.0001, normal.Dot(view));
@@ -359,6 +375,7 @@ public sealed class RayTracer
         return (diffuse + specular) * 0.72;
     }
 
+    /// <summary>Evaluates the GGX normal distribution term.</summary>
     private static double DistributionGgx(double nDotH, double alphaRoughness)
     {
         double a2 = alphaRoughness * alphaRoughness;
@@ -366,6 +383,7 @@ public sealed class RayTracer
         return a2 / Math.Max(Pi * f * f, 1e-8);
     }
 
+    /// <summary>Evaluates the correlated Smith GGX visibility term.</summary>
     private static double VisibilitySmithGgxCorrelated(double nDotV, double nDotL, double alphaRoughness)
     {
         double a2 = alphaRoughness * alphaRoughness;
@@ -374,12 +392,14 @@ public sealed class RayTracer
         return 0.5 / Math.Max(gv + gl, 1e-8);
     }
 
+    /// <summary>Evaluates the Schlick fresnel approximation.</summary>
     private static Vec3 FresnelSchlick(double vDotH, Vec3 f0)
     {
         double factor = Math.Pow(1.0 - Math.Clamp(vDotH, 0.0, 1.0), 5.0);
         return f0 + (new Vec3(1.0, 1.0, 1.0) - f0) * factor;
     }
 
+    /// <summary>Samples the analytic studio environment in the given direction.</summary>
     private static Vec3 StudioEnvironment(Vec3 direction)
     {
         direction = direction.Normalize();
@@ -392,18 +412,21 @@ public sealed class RayTracer
         return radiance + new Vec3(5.2, 4.8, 4.2) * key + new Vec3(2.0, 2.7, 3.8) * rim;
     }
 
+    /// <summary>Samples the diffuse gradient environment for the given normal.</summary>
     private static Vec3 DiffuseEnvironment(Vec3 normal)
     {
         double skyAmount = Math.Clamp(normal.Y * 0.5 + 0.5, 0.0, 1.0);
         return Vec3.Lerp(new Vec3(0.055, 0.060, 0.070), new Vec3(0.42, 0.47, 0.54), skyAmount);
     }
 
+    /// <summary>Evaluates a clamped smoothstep interpolation.</summary>
     private static double SmoothStep(double edge0, double edge1, double value)
     {
         double t = Math.Clamp((value - edge0) / Math.Max(edge1 - edge0, 1e-8), 0.0, 1.0);
         return t * t * (3.0 - 2.0 * t);
     }
 
+    /// <summary>Computes falloff attenuation for a light distance and range.</summary>
     private static double DistanceAttenuation(double distance, double range)
     {
         double attenuation = 1.0 / (1.0 + 0.11 * distance * distance);
@@ -415,6 +438,7 @@ public sealed class RayTracer
         return attenuation * edgeFade * edgeFade;
     }
 
+    /// <summary>Computes the inner-to-outer cone falloff for a spot light.</summary>
     private static double SpotConeFactor(SceneLight light, Vec3 lightToSurface)
     {
         double theta = light.Direction.Normalize().Dot(lightToSurface.Normalize());
@@ -425,6 +449,7 @@ public sealed class RayTracer
         return (theta - outer) / Math.Max(1e-8, inner - outer);
     }
 
+    /// <summary>Computes the shadowed light multiplier along a shadow ray.</summary>
     private double ShadowFactor(Hit hit, Vec3 lightDir, double distance)
     {
         Ray shadowRay = new(hit.Point + hit.Normal * 0.002, lightDir);
@@ -432,6 +457,7 @@ public sealed class RayTracer
         return Math.Clamp(1.0 - opacity * 0.82, 0.18, 1.0);
     }
 
+    /// <summary>Returns the vertical-gradient background color for a missed ray.</summary>
     private static Vec3 Background(Ray ray)
     {
         double t = Math.Clamp(ray.Direction.Y * 0.5 + 0.5, 0.0, 1.0);
@@ -449,6 +475,7 @@ public sealed class RayTracer
             LinearChannelToSrgb(color.Z));
     }
 
+    /// <summary>Applies Khronos PBR neutral tone mapping to a linear color.</summary>
     private static Vec3 PbrNeutralToneMap(Vec3 color)
     {
         const double startCompression = 0.76;
@@ -468,11 +495,13 @@ public sealed class RayTracer
         return SanitizeLinear(Vec3.Lerp(color, new Vec3(newPeak, newPeak, newPeak), grayMix));
     }
 
+    /// <summary>Clamps a linear color to the finite half-float range.</summary>
     private static Vec3 SanitizeLinear(Vec3 color) => new(
         SanitizeLinearChannel(color.X),
         SanitizeLinearChannel(color.Y),
         SanitizeLinearChannel(color.Z));
 
+    /// <summary>Clamps one linear channel to the finite half-float range.</summary>
     private static double SanitizeLinearChannel(double value)
     {
         if (!double.IsFinite(value) || value <= 0.0)
@@ -480,6 +509,7 @@ public sealed class RayTracer
         return Math.Min(value, 65504.0);
     }
 
+    /// <summary>Converts one linear channel to sRGB.</summary>
     private static double LinearChannelToSrgb(double value)
     {
         value = Math.Max(value, 0.0);

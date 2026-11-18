@@ -18,6 +18,7 @@ public static class SceneProjectFile
 {
     private static readonly JsonSerializerOptions Options = new() { WriteIndented = true, IncludeFields = true };
 
+    /// <summary>Saves the project manifest for the given document to the given path.</summary>
     public static void SaveManifest(SceneDocument document, string filePath)
     {
         if (document == null) throw new ArgumentNullException(nameof(document));
@@ -28,6 +29,7 @@ public static class SceneProjectFile
         File.WriteAllText(filePath, JsonSerializer.Serialize(manifest, Options));
     }
 
+    /// <summary>Loads a project manifest from the given path.</summary>
     public static SceneProjectManifest LoadManifest(string filePath)
     {
         if (string.IsNullOrWhiteSpace(filePath)) throw new ArgumentException("A project path is required.", nameof(filePath));
@@ -46,6 +48,7 @@ public sealed class SceneProjectManifest
     public List<MaterialDefinition> Materials { get; set; } = new();
     public List<TextureAsset> Textures { get; set; } = new();
 
+    /// <summary>Creates a project manifest from the given scene document.</summary>
     public static SceneProjectManifest FromDocument(SceneDocument document)
     {
         AssetRegistry assets = document.Assets;
@@ -74,6 +77,7 @@ public sealed class ProjectObjectRecord
     public Vec3 Scale { get; set; } = new(1, 1, 1);
     public int TriangleCount { get; set; }
 
+    /// <summary>Creates an object record from the given object group.</summary>
     public static ProjectObjectRecord FromGroup(SceneObjectGroup group) => new()
     {
         Id = group.Id,
@@ -105,6 +109,7 @@ public sealed class ProjectLightRecord
     public bool IsImported { get; set; }
     public bool IsDefault { get; set; }
 
+    /// <summary>Creates a light record from the given scene light.</summary>
     public static ProjectLightRecord FromLight(SceneLight light) => new()
     {
         Id = light.Id,

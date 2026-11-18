@@ -17,6 +17,7 @@ public static class VeldridVulkanDevicePreflight
 {
     public const string ChildArgument = "--lighting-showcase-vulkan-device-test";
 
+    /// <summary>Attempts Vulkan device creation and returns the child-process exit code.</summary>
     public static int RunChildDeviceCreationTest()
     {
         try
@@ -39,6 +40,7 @@ public static class VeldridVulkanDevicePreflight
         }
     }
 
+    /// <summary>Runs Vulkan device creation in an isolated child process, throwing when it fails.</summary>
     public static void VerifyInChildProcess(Action<string> stage)
     {
         if (string.Equals(Environment.GetEnvironmentVariable("LIGHTINGSHOWCASE_SKIP_VULKAN_PREFLIGHT"), "1", StringComparison.Ordinal))
@@ -103,6 +105,7 @@ public static class VeldridVulkanDevicePreflight
         }
     }
 
+    /// <summary>Reads the stream to the end, returning an empty string on failure.</summary>
     private static string SafeRead(StreamReader reader)
     {
         try { return reader.ReadToEnd(); }

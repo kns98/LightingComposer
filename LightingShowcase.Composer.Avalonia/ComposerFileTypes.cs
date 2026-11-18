@@ -64,9 +64,11 @@ internal static class ComposerFileTypes
         MimeTypes = ["application/octet-stream"]
     };
 
+    /// <summary>Returns true when the path ends with a supported extension.</summary>
     public static bool IsSupportedPath(string path) =>
         SupportedExtensions.Any(extension => path.EndsWith(extension, StringComparison.OrdinalIgnoreCase));
 
+    /// <summary>Returns true when the path is a binary composer scene file.</summary>
     public static bool IsBinaryScenePath(string path) =>
         path.EndsWith(".lscene", StringComparison.OrdinalIgnoreCase) ||
         path.EndsWith(".lsb", StringComparison.OrdinalIgnoreCase);

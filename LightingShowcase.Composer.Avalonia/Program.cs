@@ -15,6 +15,7 @@ internal static class Program
 {
     internal static string[] StartupArguments { get; private set; } = Array.Empty<string>();
 
+    /// <summary>Dispatches CLI commands or starts the Avalonia desktop UI.</summary>
     [STAThread]
     public static int Main(string[] args)
     {
@@ -36,6 +37,7 @@ internal static class Program
         return 0;
     }
 
+    /// <summary>Builds the Avalonia app with platform detection and optional Wayland support.</summary>
     public static AppBuilder BuildAvaloniaApp()
     {
         AppBuilder builder = AppBuilder.Configure<App>()
@@ -53,6 +55,7 @@ internal static class Program
         return builder.LogToTrace();
     }
 
+    /// <summary>Runs the formats, export, help, or render command from the given arguments.</summary>
     private static async Task<int> RunCommandLineAsync(string[] args)
     {
         using CancellationTokenSource cancellation = new();
@@ -119,6 +122,7 @@ internal static class Program
         }
     }
 
+    /// <summary>Exports the given scene to a portable package and prints the result as JSON.</summary>
     private static int RunExport(string[] args, CancellationToken cancellationToken)
     {
         CommandLineArguments values = CommandLineArguments.Parse(args);
@@ -139,6 +143,7 @@ internal static class Program
         return 0;
     }
 
+    /// <summary>Prints CLI usage and returns a success exit code.</summary>
     private static int PrintHelp()
     {
         Console.WriteLine("""

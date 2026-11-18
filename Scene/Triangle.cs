@@ -104,6 +104,7 @@ public sealed class Triangle
             bitangent);
     }
 
+    /// <summary>Builds the tangent basis for the given shading normal.</summary>
     private void BuildTangentBasis(Vec3 shadingNormal, out Vec3 tangent, out Vec3 bitangent)
     {
         Vec2 deltaUv1 = new(UvB.U - UvA.U, UvB.V - UvA.V);
@@ -130,6 +131,7 @@ public sealed class Triangle
         bitangent = shadingNormal.Cross(tangent).Normalize();
     }
 
+    /// <summary>Normalizes a vector, falling back when its length is degenerate.</summary>
     private static Vec3 NormalizeOrFallback(Vec3 value, Vec3 fallback)
     {
         double length = value.Length();

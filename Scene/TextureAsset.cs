@@ -15,6 +15,7 @@ public sealed class TextureAsset
     public int Height { get; set; }
     public bool IsGenerated { get; set; }
 
+    /// <summary>Creates a texture asset from the metadata of the given texture map.</summary>
     public static TextureAsset FromTextureMap(TextureMap texture)
     {
         if (texture == null) throw new ArgumentNullException(nameof(texture));

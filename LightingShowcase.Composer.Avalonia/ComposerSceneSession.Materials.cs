@@ -93,12 +93,14 @@ internal sealed record ComposerMaterialModel(
         NormalScale,
         OcclusionStrength);
 
+    /// <summary>Returns the model for the given texture slot.</summary>
     public ComposerTextureSlotModel TextureSlot(MaterialTextureSlot slot) =>
         TextureSlots.First(entry => entry.Slot == slot);
 }
 
 internal sealed partial class ComposerSceneSession
 {
+    /// <summary>Returns the material model for the given object, or null when the object has no material.</summary>
     public ComposerMaterialModel? GetMaterialModel(int id)
     {
         sceneGate.Wait();
@@ -148,12 +150,14 @@ internal sealed partial class ComposerSceneSession
         }
     }
 
+    /// <summary>Applies the given preset to the material of the object with the given id.</summary>
     public bool ApplyMaterialPreset(int id, MaterialPreset preset)
     {
         ArgumentNullException.ThrowIfNull(preset);
         return ApplyMaterialEdit(id, $"Apply material: {preset.Name}", group => group.ApplyMaterialPreset(preset.Material));
     }
 
+    /// <summary>Sets the base color of the object with the given id.</summary>
     public bool SetObjectBaseColor(int id, Vec3 color)
     {
         ValidateColor(color);
@@ -201,6 +205,7 @@ internal sealed partial class ComposerSceneSession
                 material.ClearcoatUsesTransmissionTexture)));
     }
 
+    /// <summary>Assigns the image at the given path to the base-color texture of the object with the given id.</summary>
     public bool SetObjectTexture(int id, string path, double tileMeters, bool boxProjection) =>
         SetObjectTexture(id, MaterialTextureSlot.BaseColor, path, tileMeters, boxProjection);
 
@@ -237,8 +242,10 @@ internal sealed partial class ComposerSceneSession
             });
     }
 
+    /// <summary>Clears the base-color texture of the object with the given id.</summary>
     public bool ClearObjectTexture(int id) => ClearObjectTexture(id, MaterialTextureSlot.BaseColor);
 
+    /// <summary>Clears the given texture slot of the object with the given id.</summary>
     public bool ClearObjectTexture(int id, MaterialTextureSlot slot)
     {
         if (!Enum.IsDefined(typeof(MaterialTextureSlot), slot))
@@ -296,6 +303,7 @@ internal sealed partial class ComposerSceneSession
             });
     }
 
+    /// <summary>Applies the UV projection mode and the per-slot mapping transform to the given texture slot in one edit.</summary>
     public bool SetObjectTextureMappingAndProjection(
         int id,
         MaterialTextureSlot slot,
@@ -332,6 +340,7 @@ internal sealed partial class ComposerSceneSession
             });
     }
 
+    /// <summary>Applies a material change to the given object, then records it as an undoable edit.</summary>
     private bool ApplyMaterialEdit(int id, string description, Action<SceneObjectGroup> apply)
     {
         sceneGate.Wait();
@@ -368,6 +377,7 @@ internal sealed partial class ComposerSceneSession
         }
     }
 
+    /// <summary>Creates a texture-slot model for the given slot, converting the stored rotation to degrees.</summary>
     private static ComposerTextureSlotModel CreateTextureSlotModel(MaterialTextureSlot slot, TextureMap? texture) => new(
         slot,
         TextureSlotLabel(slot),
@@ -381,6 +391,7 @@ internal sealed partial class ComposerSceneSession
         texture?.WrapU ?? TextureAddressMode.Repeat,
         texture?.WrapV ?? TextureAddressMode.Repeat);
 
+    /// <summary>Returns the display label for the given texture slot.</summary>
     internal static string TextureSlotLabel(MaterialTextureSlot slot) => slot switch
     {
         MaterialTextureSlot.BaseColor => "Base color",
@@ -392,6 +403,7 @@ internal sealed partial class ComposerSceneSession
         _ => slot.ToString()
     };
 
+    /// <summary>Throws when a texture-mapping offset, scale, rotation, or wrap mode is invalid.</summary>
     private static void ValidateTextureMapping(
         double offsetU,
         double offsetV,
@@ -412,6 +424,7 @@ internal sealed partial class ComposerSceneSession
             throw new ArgumentOutOfRangeException(nameof(wrapU), "Choose a valid texture address mode.");
     }
 
+    /// <summary>Throws when the color has a non-finite channel or a channel outside 0 to 1.</summary>
     private static void ValidateColor(Vec3 color)
     {
         if (!double.IsFinite(color.X) || !double.IsFinite(color.Y) || !double.IsFinite(color.Z) ||
@@ -423,6 +436,7 @@ internal sealed partial class ComposerSceneSession
         }
     }
 
+    /// <summary>Throws when any material property falls outside its valid range.</summary>
     private static void ValidateMaterialProperties(ComposerMaterialProperties properties)
     {
         ValidateUnit(properties.Metallic, nameof(properties.Metallic));
@@ -448,6 +462,7 @@ internal sealed partial class ComposerSceneSession
         ValidateUnit(properties.OcclusionStrength, nameof(properties.OcclusionStrength));
     }
 
+    /// <summary>Throws when the named value falls outside the 0 to 1 range.</summary>
     private static void ValidateUnit(double value, string name)
     {
         if (!double.IsFinite(value) || value < 0.0 || value > 1.0)

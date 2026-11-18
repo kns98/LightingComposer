@@ -18,6 +18,7 @@ public sealed class PrimitiveGizmoEditMetadata
         scaleRule: "Scale transform is baked into mesh geometry",
         rotationRule: "Rotation transform is baked into mesh geometry");
 
+    /// <summary>Creates gizmo edit metadata with the given display name and edit rules.</summary>
     public PrimitiveGizmoEditMetadata(string displayName, bool moveUpdatesOrigin, string scaleRule, string rotationRule)
     {
         DisplayName = displayName;
@@ -31,5 +32,6 @@ public sealed class PrimitiveGizmoEditMetadata
     public string ScaleRule { get; }
     public string RotationRule { get; }
 
+    /// <summary>Returns a human-readable description of the gizmo edit rules.</summary>
     public override string ToString() => $"{DisplayName}; move: {(MoveUpdatesOrigin ? "origin" : "transform")}; scale: {ScaleRule}; rotate: {RotationRule}";
 }

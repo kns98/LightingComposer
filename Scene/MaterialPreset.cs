@@ -15,6 +15,7 @@ public sealed class MaterialPreset
     public Material Material { get; }
     public string Summary { get; }
 
+    /// <summary>Creates a material preset with the given category, name, material, and summary.</summary>
     public MaterialPreset(string category, string name, Material material, string summary)
     {
         Category = category;
@@ -23,6 +24,7 @@ public sealed class MaterialPreset
         Summary = summary;
     }
 
+    /// <summary>Returns the preset label as its category and name.</summary>
     public override string ToString() => $"{Category} - {Name}";
 }
 
@@ -83,8 +85,10 @@ public static class MaterialPresetLibrary
         P("Emission", "Neon Blue", C(0.05, 0.24, 1.00), 0.00, 0.16, 0.0, 1.0, false, 4.0, C(0.10, 0.30, 1.00), "Strong blue emissive sign material."),
     };
 
+    /// <summary>Creates a color vector from the given red, green, and blue channels.</summary>
     private static Vec3 C(double r, double g, double b) => new(r, g, b);
 
+    /// <summary>Builds a material preset entry from the given PBR values.</summary>
     private static MaterialPreset P(string category, string name, Vec3 color, double metallic, double roughness, double transmission, double alpha, bool alphaBlend, double emission, Vec3 emissionColor, string summary)
     {
         return new MaterialPreset(category, name, new Material(color, emission, null, null, emissionColor, null, alpha, alphaBlend, metallic, roughness, transmission), summary);

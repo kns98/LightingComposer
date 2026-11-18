@@ -16,6 +16,7 @@ public static class PngWriter
     private static readonly byte[] Signature = [137, 80, 78, 71, 13, 10, 26, 10];
     private static readonly uint[] CrcTable = BuildCrcTable();
 
+    /// <summary>Writes a render image to a PNG file at the given path.</summary>
     public static void Write(string path, RenderImage image)
     {
         if (string.IsNullOrWhiteSpace(path))
@@ -111,6 +112,7 @@ public static class PngWriter
         WriteChunk(output, "IEND"u8, ReadOnlySpan<byte>.Empty);
     }
 
+    /// <summary>Writes one PNG chunk with length, type, data, and CRC.</summary>
     private static void WriteChunk(Stream output, ReadOnlySpan<byte> type, ReadOnlySpan<byte> data)
     {
         Span<byte> number = stackalloc byte[4];
@@ -126,6 +128,7 @@ public static class PngWriter
         output.Write(number);
     }
 
+    /// <summary>Updates a running CRC-32 checksum with the given bytes.</summary>
     private static uint UpdateCrc(uint crc, ReadOnlySpan<byte> bytes)
     {
         foreach (byte value in bytes)
@@ -133,6 +136,7 @@ public static class PngWriter
         return crc;
     }
 
+    /// <summary>Builds the lookup table for CRC-32 checksums.</summary>
     private static uint[] BuildCrcTable()
     {
         uint[] table = new uint[256];
@@ -154,6 +158,7 @@ public static class PngWriter
         private int count;
         private bool completed;
 
+        /// <summary>Creates a stream that splits zlib output into bounded IDAT chunks.</summary>
         public ChunkedIdatStream(Stream destination, int chunkSize)
         {
             this.destination = destination;
@@ -166,10 +171,13 @@ public static class PngWriter
         public override long Length => throw new NotSupportedException();
         public override long Position { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
 
+        /// <summary>Flushes buffered bytes as one IDAT chunk.</summary>
         public override void Flush() => FlushChunk();
 
+        /// <summary>Writes the given byte range into the IDAT stream.</summary>
         public override void Write(byte[] source, int offset, int length) => Write(source.AsSpan(offset, length));
 
+        /// <summary>Writes the given byte span into the IDAT stream.</summary>
         public override void Write(ReadOnlySpan<byte> source)
         {
             ObjectDisposedException.ThrowIf(completed, this);
@@ -183,6 +191,7 @@ public static class PngWriter
             }
         }
 
+        /// <summary>Flushes the final chunk and marks the stream complete.</summary>
         public void Complete()
         {
             if (completed) return;
@@ -190,12 +199,14 @@ public static class PngWriter
             completed = true;
         }
 
+        /// <summary>Completes the stream and releases its resources.</summary>
         protected override void Dispose(bool disposing)
         {
             if (disposing) Complete();
             base.Dispose(disposing);
         }
 
+        /// <summary>Writes the buffered bytes as one IDAT chunk and resets the buffer.</summary>
         private void FlushChunk()
         {
             if (count == 0) return;
@@ -203,8 +214,11 @@ public static class PngWriter
             count = 0;
         }
 
+        /// <summary>Throws because the IDAT stream does not support reading.</summary>
         public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+        /// <summary>Throws because the IDAT stream does not support seeking.</summary>
         public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+        /// <summary>Throws because the IDAT stream does not support setting its length.</summary>
         public override void SetLength(long value) => throw new NotSupportedException();
     }
 }

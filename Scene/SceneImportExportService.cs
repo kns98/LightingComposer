@@ -16,6 +16,7 @@ public sealed class SceneImportExportService
     private readonly Scene scene;
     private readonly SceneMaterials materials = new();
 
+    /// <summary>Binds the service to a scene and initializes the format registry.</summary>
     public SceneImportExportService(Scene scene)
     {
         this.scene = scene ?? throw new ArgumentNullException(nameof(scene));
@@ -26,19 +27,23 @@ public sealed class SceneImportExportService
     public string InsertDialogFilter => BuildOpenFilter(includePropXml: false);
     public string SaveDialogFilter => BuildSaveFilter();
 
+    /// <summary>Returns true when a dropped file can be imported.</summary>
     public bool IsSupportedDropFile(string filePath)
     {
         string extension = Path.GetExtension(filePath);
         return IsSupportedModelExtension(extension) || IsPropXmlFile(filePath);
     }
 
+    /// <summary>Returns true when the file has a supported model extension.</summary>
     public bool IsSupportedModelFile(string filePath) => IsSupportedModelExtension(Path.GetExtension(filePath));
 
+    /// <summary>Opens a model file as a replacement scene.</summary>
     public ObjLoadResult OpenModel(string filePath, Action<ObjLoadProgress>? progress = null) => OpenModel(filePath, simplifyKeepFraction: null, progress);
 
     /// <summary>Opens a model as a replacement scene and reduces mesh detail during import when requested.</summary>
     public ObjLoadResult OpenModelSimplified(string filePath, double keepFraction, Action<ObjLoadProgress>? progress = null) => OpenModel(filePath, Math.Clamp(keepFraction, 0.02, 1.0), progress);
 
+    /// <summary>Opens a model file as a replacement scene with optional mesh simplification.</summary>
     private ObjLoadResult OpenModel(string filePath, double? simplifyKeepFraction, Action<ObjLoadProgress>? progress)
     {
         ISceneFormatPlugin plugin = SceneFormatRegistry.FindImporter(filePath);
@@ -62,6 +67,7 @@ public sealed class SceneImportExportService
         return result;
     }
 
+    /// <summary>Inserts a model file into the current scene.</summary>
     public ObjLoadResult InsertModel(string filePath, Action<ObjLoadProgress>? progress = null)
     {
         ISceneFormatPlugin plugin = SceneFormatRegistry.FindImporter(filePath);
@@ -75,11 +81,13 @@ public sealed class SceneImportExportService
         return result;
     }
 
+    /// <summary>Opens a prop XML file into the scene.</summary>
     public void OpenPropXml(string filePath)
     {
         scene.LoadPropXmlFile(filePath);
     }
 
+    /// <summary>Normalizes an export file name for the chosen filter.</summary>
     public string NormalizeExportFileName(string fileName, int filterIndex)
     {
         ExportFilterChoice choice = GetExportChoice(filterIndex);
@@ -100,27 +108,32 @@ public sealed class SceneImportExportService
             : Path.ChangeExtension(fileName, choice.Extension);
     }
 
+    /// <summary>Saves the scene using the chosen export filter.</summary>
     public void Save(string fileName, int filterIndex)
     {
         ExportFilterChoice choice = GetExportChoice(filterIndex);
         SceneFormatRegistry.Export(scene, fileName, new SceneSaveOptions { Variant = choice.Variant });
     }
 
+    /// <summary>Returns true when the registry imports the given model extension.</summary>
     private bool IsSupportedModelExtension(string extension) =>
         !string.IsNullOrWhiteSpace(extension) &&
         !extension.Equals(".xml", StringComparison.OrdinalIgnoreCase) &&
         SceneFormatRegistry.IsImportExtension(extension);
 
+    /// <summary>Returns true when the path is a prop XML or plain XML file.</summary>
     private static bool IsPropXmlFile(string filePath) =>
         filePath.EndsWith(".prop.xml", StringComparison.OrdinalIgnoreCase) ||
         Path.GetExtension(filePath).Equals(".xml", StringComparison.OrdinalIgnoreCase);
 
+    /// <summary>Adds default ceiling and lamp lights for viewing imported objects.</summary>
     private void AddDefaultObjectViewingLights()
     {
         scene.Lights.Add(new LightingShowcase.Lighting.SceneLight("ceiling", new Vec3(0.0, 3.25, -0.50), new Vec3(1.0, 0.96, 0.88), 5.2));
         scene.Lights.Add(new LightingShowcase.Lighting.SceneLight("lamp", new Vec3(-3.15, 1.30, 1.55), new Vec3(1.0, 0.78, 0.52), 3.8));
     }
 
+    /// <summary>Builds the file dialog filter for opening scenes and models.</summary>
     private static string BuildOpenFilter(bool includePropXml)
     {
         SceneFormatRegistry.EnsureInitialized();
@@ -150,6 +163,7 @@ public sealed class SceneImportExportService
         return string.Join("|", parts);
     }
 
+    /// <summary>Builds the file dialog filter for saving scenes.</summary>
     private static string BuildSaveFilter()
     {
         List<string> parts = ExportChoices
@@ -160,9 +174,11 @@ public sealed class SceneImportExportService
         return string.Join("|", parts);
     }
 
+    /// <summary>Normalizes an extension to lowercase with a leading dot.</summary>
     private static string NormalizeExtension(string extension) =>
         extension.StartsWith('.') ? extension.ToLowerInvariant() : "." + extension.ToLowerInvariant();
 
+    /// <summary>Maps a dialog filter index to its export choice.</summary>
     private static ExportFilterChoice GetExportChoice(int filterIndex)
     {
         int index = filterIndex - 1;

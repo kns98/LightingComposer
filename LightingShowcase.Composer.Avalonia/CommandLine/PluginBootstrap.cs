@@ -21,6 +21,7 @@ internal static class PluginBootstrap
 {
     private static int initialized;
 
+    /// <summary>Loads all scene format and object library plugin assemblies exactly once.</summary>
     public static void EnsureLoaded()
     {
         if (Interlocked.Exchange(ref initialized, 1) != 0)

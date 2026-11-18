@@ -132,9 +132,11 @@ public sealed partial class TextureMap
                 : throw new ArgumentException("Texture alpha buffer size does not match dimensions.", nameof(alpha));
     }
 
+    /// <summary>Returns a copy of this texture with the given U and V address modes.</summary>
     public TextureMap WithAddressing(TextureAddressMode wrapU, TextureAddressMode wrapV) =>
         new(Name, Width, Height, pixels, alpha, SourcePath, IsBuiltInChecker, wrapU, wrapV, offsetU, offsetV, scaleU, scaleV, rotation);
 
+    /// <summary>Returns a copy of this texture with the given offset, scale, and rotation transform.</summary>
     public TextureMap WithTextureTransform(double offsetU, double offsetV, double scaleU, double scaleV, double rotation) =>
         new(Name, Width, Height, pixels, alpha, SourcePath, IsBuiltInChecker, wrapU, wrapV, offsetU, offsetV, scaleU, scaleV, rotation);
 
@@ -224,6 +226,7 @@ public sealed partial class TextureMap
         return FromEncodedStream(name, stream, sourcePath);
     }
 
+    /// <summary>Decodes a texture from the given encoded image stream.</summary>
     private static TextureMap FromEncodedStream(string name, Stream stream, string? sourcePath)
     {
         ImageResult image = ImageResult.FromStream(stream, ColorComponents.RedGreenBlueAlpha);
@@ -351,6 +354,7 @@ public sealed partial class TextureMap
         return packed;
     }
 
+    /// <summary>Converts a normalized pixel value to a byte.</summary>
     private static byte ToByte(double value) =>
         (byte)Math.Clamp((int)Math.Round(Math.Clamp(value, 0.0, 1.0) * 255.0, MidpointRounding.AwayFromZero), 0, 255);
 
@@ -379,6 +383,7 @@ public sealed partial class TextureMap
         return value < 0 ? value + 1.0 : value;
     }
 
+    /// <summary>Applies the texture scale, rotation, and offset transform to the given UV coordinates.</summary>
     private void ApplyTransform(ref double u, ref double v)
     {
         double scaledU = u * scaleU;

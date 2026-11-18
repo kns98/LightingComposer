@@ -21,6 +21,7 @@ public static class ScenePrimitiveRegistry
 
     public static string[] DisplayNames => Primitives.Select(p => p.DisplayName).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
 
+    /// <summary>Initializes the primitive registry exactly once in a thread-safe manner.</summary>
     public static void EnsureInitialized()
     {
         if (initialized) return;
@@ -33,8 +34,10 @@ public static class ScenePrimitiveRegistry
         }
     }
 
+    /// <summary>Returns true when a primitive matches the given name or kind.</summary>
     public static bool Contains(string? nameOrKind) => Find(nameOrKind) != null;
 
+    /// <summary>Finds the primitive matching the given name or kind, or null when none matches.</summary>
     public static ISceneObjectDefinition? Find(string? nameOrKind)
     {
         if (string.IsNullOrWhiteSpace(nameOrKind)) return null;
@@ -43,6 +46,7 @@ public static class ScenePrimitiveRegistry
         return primitives.FirstOrDefault(p => Normalize(p.Kind) == key || Normalize(p.DisplayName) == key);
     }
 
+    /// <summary>Loads object-library assemblies from the application directory.</summary>
     private static void LoadPrimitiveAssemblies()
     {
         string baseDirectory = AppContext.BaseDirectory;
@@ -61,6 +65,7 @@ public static class ScenePrimitiveRegistry
         }
     }
 
+    /// <summary>Discovers parameterless object definitions across loaded assemblies.</summary>
     private static void DiscoverPrimitives()
     {
         foreach (Assembly assembly in AppDomain.CurrentDomain.GetAssemblies())
@@ -87,10 +92,12 @@ public static class ScenePrimitiveRegistry
         primitives.Sort((a, b) => string.Compare(a.DisplayName, b.DisplayName, StringComparison.OrdinalIgnoreCase));
     }
 
+    /// <summary>Returns true when two definitions share a kind or display name.</summary>
     private static bool SamePrimitive(ISceneObjectDefinition a, ISceneObjectDefinition b) =>
         string.Equals(a.Kind, b.Kind, StringComparison.OrdinalIgnoreCase) ||
         string.Equals(a.DisplayName, b.DisplayName, StringComparison.OrdinalIgnoreCase);
 
+    /// <summary>Lowercases the alphanumeric characters of the given value.</summary>
     private static string Normalize(string value) =>
         new(value.Where(char.IsLetterOrDigit).Select(char.ToLowerInvariant).ToArray());
 }

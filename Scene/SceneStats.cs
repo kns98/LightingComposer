@@ -12,6 +12,7 @@ namespace LightingShowcase.SceneGraph;
 /// <summary>Compact summary of scene size for status display.</summary>
 public readonly record struct SceneStats(int ObjectCount, int TriangleCount, int LightCount)
 {
+    /// <summary>Formats the object, triangle, and light counts for display.</summary>
     public override string ToString()
         => $"{ObjectCount:N0} objects, {TriangleCount:N0} triangles, {LightCount:N0} lights";
 }

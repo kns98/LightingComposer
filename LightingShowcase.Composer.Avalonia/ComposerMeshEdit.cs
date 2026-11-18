@@ -83,6 +83,7 @@ internal sealed class ComposerMeshTopology
     private readonly int[] triangleFaceIds;
     private readonly Dictionary<EdgeKey, int> edgeIndexByKey;
 
+    /// <summary>Initializes a mesh topology from welded vertices, edges, faces, and lookup tables.</summary>
     private ComposerMeshTopology(
         Vec3[] vertices,
         ComposerMeshEdge[] edges,
@@ -107,6 +108,7 @@ internal sealed class ComposerMeshTopology
     public double WeldTolerance { get; }
     public int TriangleCount => triangleVertexIds.GetLength(0);
 
+    /// <summary>Builds a mesh topology from the given group and stores its validated face grouping on the group.</summary>
     public static ComposerMeshTopology Build(SceneObjectGroup group, double? requestedTolerance = null)
     {
         ArgumentNullException.ThrowIfNull(group);
@@ -124,9 +126,11 @@ internal sealed class ComposerMeshTopology
         return topology;
     }
 
+    /// <summary>Builds a mesh topology from the given triangles.</summary>
     public static ComposerMeshTopology Build(IReadOnlyList<Triangle> triangles, double? requestedTolerance = null) =>
         BuildCore(triangles, null, null, null, requestedTolerance);
 
+    /// <summary>Welds vertices within tolerance and groups triangles into logical polygon faces.</summary>
     private static ComposerMeshTopology BuildCore(
         IReadOnlyList<Triangle> triangles,
         string? primitiveKind,
@@ -231,6 +235,7 @@ internal sealed class ComposerMeshTopology
             edgeIndexByKey,
             tolerance);
 
+        /// <summary>Returns the welded vertex index for a point, adding it when no nearby vertex exists.</summary>
         int GetVertex(Vec3 point)
         {
             VertexKey key = VertexKey.From(point, tolerance);
@@ -273,6 +278,7 @@ internal sealed class ComposerMeshTopology
             return index;
         }
 
+        /// <summary>Adds a boundary edge between two vertices unless it already exists.</summary>
         void AddEdge(int a, int b)
         {
             if (a == b) return;
@@ -283,22 +289,27 @@ internal sealed class ComposerMeshTopology
         }
     }
 
+    /// <summary>Returns the face index for the given triangle, or -1 when out of range.</summary>
     public int FaceIndexForTriangle(int triangleIndex) =>
         triangleIndex >= 0 && triangleIndex < triangleFaceIds.Length ? triangleFaceIds[triangleIndex] : -1;
 
+    /// <summary>Returns the welded vertex id for the given triangle corner, or -1 when out of range.</summary>
     public int TriangleVertexId(int triangleIndex, int corner) =>
         triangleIndex >= 0 && triangleIndex < TriangleCount && corner >= 0 && corner < 3
             ? triangleVertexIds[triangleIndex, corner]
             : -1;
 
+    /// <summary>Returns the first triangle index of the given face, or -1 when out of range.</summary>
     public int PrimaryTriangleIndex(int faceIndex) =>
         faceIndex >= 0 && faceIndex < Faces.Count && Faces[faceIndex].TriangleIndices.Length > 0
             ? Faces[faceIndex].TriangleIndices[0]
             : -1;
 
+    /// <summary>Returns the edge index for the given vertex pair, or -1 when absent.</summary>
     public int FindEdgeIndex(int a, int b) =>
         edgeIndexByKey.TryGetValue(new EdgeKey(a, b), out int index) ? index : -1;
 
+    /// <summary>Collects the vertex indices covered by the given mesh selection.</summary>
     public IReadOnlySet<int> VertexSet(ComposerMeshSelection selection)
     {
         HashSet<int> result = new();
@@ -322,6 +333,7 @@ internal sealed class ComposerMeshTopology
         return result;
     }
 
+    /// <summary>Lists the triangles touched by the given selection with per-corner move masks.</summary>
     public IReadOnlyList<ComposerMeshTriangleMove> TriangleMoves(ComposerMeshSelection selection)
     {
         IReadOnlySet<int> selectedVertices = VertexSet(selection);
@@ -341,6 +353,7 @@ internal sealed class ComposerMeshTopology
         return result;
     }
 
+    /// <summary>Moves the selected mesh components by the given delta and returns the updated triangles.</summary>
     public List<Triangle> CreateMovedTriangles(IReadOnlyList<Triangle> source, ComposerMeshSelection selection, Vec3 delta)
     {
         ArgumentNullException.ThrowIfNull(source);
@@ -368,9 +381,11 @@ internal sealed class ComposerMeshTopology
         return result;
     }
 
+    /// <summary>Extrudes the given face by the given distance and returns the updated triangles.</summary>
     public List<Triangle> CreateExtrudedFaceTriangles(IReadOnlyList<Triangle> source, int faceIndex, double distance) =>
         CreateExtrudedFaceEdit(source, faceIndex, distance).Triangles.ToList();
 
+    /// <summary>Extrudes the given face by the given distance and returns the updated triangles with face groups.</summary>
     public ComposerMeshTopologyEditResult CreateExtrudedFaceEdit(IReadOnlyList<Triangle> source, int faceIndex, double distance)
     {
         if (faceIndex < 0 || faceIndex >= Faces.Count)
@@ -462,12 +477,15 @@ internal sealed class ComposerMeshTopology
         return new ComposerMeshTopologyEditResult(result, logicalFaces);
     }
 
+    /// <summary>Insets the given face by the given distance and returns the updated triangles.</summary>
     public List<Triangle> CreateInsetFaceTriangles(IReadOnlyList<Triangle> source, int faceIndex, double insetMeters) =>
         CreateInsetFaceEdit(source, faceIndex, insetMeters, recessDepthMeters: 0.0, profile: ComposerInsetProfile.Square).Triangles.ToList();
 
+    /// <summary>Insets the given face by the given distance and returns the updated triangles with face groups.</summary>
     public ComposerMeshTopologyEditResult CreateInsetFaceEdit(IReadOnlyList<Triangle> source, int faceIndex, double insetMeters) =>
         CreateInsetFaceEdit(source, faceIndex, insetMeters, recessDepthMeters: 0.0, profile: ComposerInsetProfile.Square);
 
+    /// <summary>Insets the given face and recesses it by the given depth using a square profile.</summary>
     public ComposerMeshTopologyEditResult CreateInsetFaceEdit(
         IReadOnlyList<Triangle> source,
         int faceIndex,
@@ -475,6 +493,7 @@ internal sealed class ComposerMeshTopology
         double recessDepthMeters) =>
         CreateInsetFaceEdit(source, faceIndex, insetMeters, recessDepthMeters, ComposerInsetProfile.Square);
 
+    /// <summary>Insets the given face with the given depth and profile and returns the updated triangles with face groups.</summary>
     public ComposerMeshTopologyEditResult CreateInsetFaceEdit(
         IReadOnlyList<Triangle> source,
         int faceIndex,
@@ -701,6 +720,7 @@ internal sealed class ComposerMeshTopology
         logicalFaces.Add(Enumerable.Range(innerCapStart, loop.Length).ToArray());
         return new ComposerMeshTopologyEditResult(result, logicalFaces);
 
+        /// <summary>Computes the signed area of the given 2D polygon points.</summary>
         static double SignedArea(IReadOnlyList<(double X, double Y)> points)
         {
             double area = 0.0;
@@ -712,6 +732,7 @@ internal sealed class ComposerMeshTopology
             return area * 0.5;
         }
 
+        /// <summary>Intersects two 2D lines and returns false when they are parallel.</summary>
         static bool TryIntersectLines(
             (double X, double Y) p,
             (double X, double Y) r,
@@ -733,9 +754,11 @@ internal sealed class ComposerMeshTopology
         }
     }
 
+    /// <summary>Returns the source triangles unchanged with the current face grouping.</summary>
     private ComposerMeshTopologyEditResult UnchangedEdit(IReadOnlyList<Triangle> source) =>
         new(source.ToList(), Faces.Select(face => face.TriangleIndices.ToArray()).ToArray());
 
+    /// <summary>Remaps every face except the excluded one to the new triangle indices.</summary>
     private List<int[]> RemapUnaffectedFaces(int excludedFaceIndex, IReadOnlyDictionary<int, int> oldToNew)
     {
         List<int[]> result = new(Math.Max(0, Faces.Count - 1));
@@ -753,6 +776,7 @@ internal sealed class ComposerMeshTopology
         return result;
     }
 
+    /// <summary>Builds an affine UV mapper from the face-plane coordinates of the given face.</summary>
     private Func<double, double, Vec2> BuildPlanarUvMapper(
         IReadOnlyList<Triangle> source,
         ComposerMeshFace face,
@@ -798,6 +822,7 @@ internal sealed class ComposerMeshTopology
         return (_, _) => average;
     }
 
+    /// <summary>Averages the triangle normals of the given face into a single normal.</summary>
     private Vec3 FaceNormal(IReadOnlyList<Triangle> source, ComposerMeshFace face)
     {
         Vec3 sum = Vec3.Zero;
@@ -806,6 +831,7 @@ internal sealed class ComposerMeshTopology
         return sum.Normalize();
     }
 
+    /// <summary>Orients the face normal toward the exterior using the mesh centroid.</summary>
     private Vec3 ResolveExteriorNormal(Vec3 faceNormal, Vec3 faceCenter)
     {
         Vec3 outwardNormal = faceNormal.Normalize();
@@ -825,6 +851,7 @@ internal sealed class ComposerMeshTopology
         return outwardNormal;
     }
 
+    /// <summary>Finds the UV assigned to the given vertex within the given face.</summary>
     private Vec2 UvForVertex(IReadOnlyList<Triangle> source, ComposerMeshFace face, int vertexId)
     {
         foreach (int triangleIndex in face.TriangleIndices)
@@ -837,6 +864,7 @@ internal sealed class ComposerMeshTopology
         return Vec2.Zero;
     }
 
+    /// <summary>Groups triangle indices into authored faces for the given primitive kind.</summary>
     private static List<int[]>? BuildPrimitiveFaceGroups(
         string? kind,
         IReadOnlyDictionary<string, double>? p,
@@ -847,11 +875,16 @@ internal sealed class ComposerMeshTopology
         string normalized = new(kind.Where(char.IsLetterOrDigit).Select(char.ToLowerInvariant).ToArray());
         List<int[]> groups = new();
         int cursor = 0;
+        /// <summary>Reads an integer primitive parameter clamped to the given range.</summary>
         int ReadInt(string key, int fallback, int min, int max) =>
             Math.Clamp(p.TryGetValue(key, out double value) && double.IsFinite(value) ? (int)Math.Round(value) : fallback, min, max);
+        /// <summary>Reads a numeric primitive parameter or returns the fallback.</summary>
         double Read(string key, double fallback) => p.TryGetValue(key, out double value) && double.IsFinite(value) ? value : fallback;
+        /// <summary>Groups the next triangle as a single-triangle face.</summary>
         void One() { if (cursor < triangleCount) groups.Add([cursor++]); }
+        /// <summary>Groups the next two triangles as one quad face.</summary>
         void Pair() { if (cursor + 1 < triangleCount) groups.Add([cursor++, cursor++]); else One(); }
+        /// <summary>Groups the next count triangles as one face.</summary>
         void Range(int count)
         {
             count = Math.Min(count, triangleCount - cursor);
@@ -1022,6 +1055,7 @@ internal sealed class ComposerMeshTopology
         return groups;
     }
 
+    /// <summary>Validates that the candidates partition every triangle into well-formed faces.</summary>
     private static bool TryValidateFacePartition(
         IReadOnlyList<int[]> candidates,
         IReadOnlyList<Triangle> triangles,
@@ -1211,6 +1245,7 @@ internal sealed class ComposerMeshTopology
         boundaryLoop = loop.ToArray();
         return true;
 
+        /// <summary>Records a directed edge use for the given triangle.</summary>
         void AddUse(int triangle, int from, int to)
         {
             EdgeKey key = new(from, to);
@@ -1219,6 +1254,7 @@ internal sealed class ComposerMeshTopology
             list.Add((triangle, from, to));
         }
 
+        /// <summary>Adds a boundary neighbor link between two vertices.</summary>
         void AddNeighbor(int from, int to)
         {
             if (!boundaryAdjacency.TryGetValue(from, out List<int>? list))
@@ -1228,6 +1264,7 @@ internal sealed class ComposerMeshTopology
         }
     }
 
+    /// <summary>Returns true when the triangle group forms one planar patch.</summary>
     private static bool IsPlanarPatch(
         IReadOnlyList<int> group,
         IReadOnlyList<Triangle> triangles,
@@ -1256,6 +1293,7 @@ internal sealed class ComposerMeshTopology
         return vertexIds.All(vertexId => Math.Abs((vertices[vertexId] - reference.A).Dot(normal)) <= planeTolerance);
     }
 
+    /// <summary>Returns true when two materials are close enough to share a logical face.</summary>
     private static bool MaterialsEquivalentForLogicalFace(Material a, Material b)
     {
         if (ReferenceEquals(a, b))
@@ -1281,12 +1319,16 @@ internal sealed class ComposerMeshTopology
                SameTexture(a.TransmissionTexture, b.TransmissionTexture) &&
                SameTexture(a.OcclusionTexture, b.OcclusionTexture);
 
+        /// <summary>Returns true when two values differ by at most 1e-9.</summary>
         static bool Nearly(double x, double y) => Math.Abs(x - y) <= 1e-9;
+        /// <summary>Returns true when two vectors match component-wise within tolerance.</summary>
         static bool SameVec(Vec3 x, Vec3 y) =>
             Nearly(x.X, y.X) && Nearly(x.Y, y.Y) && Nearly(x.Z, y.Z);
+        /// <summary>Returns true when both texture references are the same instance.</summary>
         static bool SameTexture(TextureMap? x, TextureMap? y) => ReferenceEquals(x, y);
     }
 
+    /// <summary>Returns true when both triangles share matching UVs along the given edge.</summary>
     private static bool SharedEdgeUvIsContinuous(
         int firstTriangle,
         int secondTriangle,
@@ -1300,6 +1342,7 @@ internal sealed class ComposerMeshTopology
                TryUv(secondTriangle, edge.B, out Vec2 secondB) &&
                SameUv(firstA, secondA) && SameUv(firstB, secondB);
 
+        /// <summary>Reads the UV for the given vertex from the given triangle.</summary>
         bool TryUv(int triangleIndex, int vertexId, out Vec2 uv)
         {
             Triangle tri = triangles[triangleIndex];
@@ -1310,10 +1353,12 @@ internal sealed class ComposerMeshTopology
             return false;
         }
 
+        /// <summary>Returns true when two UVs match within 1e-6.</summary>
         static bool SameUv(Vec2 a, Vec2 b) =>
             Math.Abs(a.U - b.U) <= 1e-6 && Math.Abs(a.V - b.V) <= 1e-6;
     }
 
+    /// <summary>Returns true when the shared edge is the longest edge of both triangles.</summary>
     private static bool IsLikelyTriangulationDiagonal(
         int firstTriangle,
         int secondTriangle,
@@ -1336,17 +1381,20 @@ internal sealed class ComposerMeshTopology
                sharedLengthSquared + epsilon >= LongestTriangleEdgeSquared(secondTriangle, ids, vertices);
     }
 
+    /// <summary>Returns the squared length of the longest edge of the given triangle.</summary>
     private static double LongestTriangleEdgeSquared(int triangleIndex, int[,] ids, IReadOnlyList<Vec3> vertices)
     {
         return TriangleEdges(triangleIndex, ids).Max(edge => EdgeLengthSquared(edge, vertices));
     }
 
+    /// <summary>Returns the squared length of the given edge.</summary>
     private static double EdgeLengthSquared(EdgeKey edge, IReadOnlyList<Vec3> vertices)
     {
         Vec3 delta = vertices[edge.A] - vertices[edge.B];
         return delta.Dot(delta);
     }
 
+    /// <summary>Enumerates the three edges of the given triangle.</summary>
     private static IEnumerable<EdgeKey> TriangleEdges(int triangleIndex, int[,] ids)
     {
         yield return new EdgeKey(ids[triangleIndex, 0], ids[triangleIndex, 1]);
@@ -1354,6 +1402,7 @@ internal sealed class ComposerMeshTopology
         yield return new EdgeKey(ids[triangleIndex, 2], ids[triangleIndex, 0]);
     }
 
+    /// <summary>Maps every edge to the triangles that use it.</summary>
     private static Dictionary<EdgeKey, List<int>> BuildTriangleEdgeMap(int triangleCount, int[,] ids)
     {
         Dictionary<EdgeKey, List<int>> byEdge = new();
@@ -1369,6 +1418,7 @@ internal sealed class ComposerMeshTopology
         return byEdge;
     }
 
+    /// <summary>Returns true when the projected boundary loop crosses itself.</summary>
     private static bool BoundarySelfIntersects(
         IReadOnlyList<int> loop,
         IReadOnlyList<Vec3> vertices,
@@ -1380,6 +1430,7 @@ internal sealed class ComposerMeshTopology
 
         int dropAxis = Math.Abs(normal.X) >= Math.Abs(normal.Y) && Math.Abs(normal.X) >= Math.Abs(normal.Z) ? 0 :
                        Math.Abs(normal.Y) >= Math.Abs(normal.Z) ? 1 : 2;
+        /// <summary>Projects a point onto the plane perpendicular to the dominant normal axis.</summary>
         (double X, double Y) Project(Vec3 p) => dropAxis switch
         {
             0 => (p.Y, p.Z),
@@ -1405,6 +1456,7 @@ internal sealed class ComposerMeshTopology
         }
         return false;
 
+        /// <summary>Returns true when two 2D segments cross within the given tolerance.</summary>
         static bool SegmentsIntersect(
             (double X, double Y) a,
             (double X, double Y) b,
@@ -1417,10 +1469,12 @@ internal sealed class ComposerMeshTopology
                    ((o3 > eps && o4 < -eps) || (o3 < -eps && o4 > eps));
         }
 
+        /// <summary>Computes the 2D cross product of the vectors from a to b and a to c.</summary>
         static double Cross((double X, double Y) a, (double X, double Y) b, (double X, double Y) c) =>
             (b.X - a.X) * (c.Y - a.Y) - (b.Y - a.Y) * (c.X - a.X);
     }
 
+    /// <summary>Returns true when no triangle outside the fan could join the same surface.</summary>
     private static bool FanBoundaryIsAFeatureBoundary(
         IReadOnlyList<int> candidateTriangles,
         IReadOnlyDictionary<EdgeKey, List<int>> globalByEdge,
@@ -1463,6 +1517,7 @@ internal sealed class ComposerMeshTopology
         return true;
     }
 
+    /// <summary>Returns true when the center vertex has no boundary edge within the fan.</summary>
     private static bool IsInteriorFanCenter(int centerVertex, IReadOnlyList<int> triangleIndices, int[,] ids)
     {
         Dictionary<EdgeKey, int> edgeCounts = new();
@@ -1476,6 +1531,7 @@ internal sealed class ComposerMeshTopology
         return !edgeCounts.Any(pair => pair.Value == 1 &&
             (pair.Key.A == centerVertex || pair.Key.B == centerVertex));
 
+        /// <summary>Counts one use of the edge between the given vertices.</summary>
         void Count(int a, int b)
         {
             EdgeKey key = new(a, b);
@@ -1483,6 +1539,7 @@ internal sealed class ComposerMeshTopology
         }
     }
 
+    /// <summary>Derives a weld tolerance from the diagonal of the triangle bounds.</summary>
     private static double ComputeTolerance(IReadOnlyList<Triangle> triangles)
     {
         if (triangles.Count == 0) return 1e-7;
@@ -1491,6 +1548,7 @@ internal sealed class ComposerMeshTopology
         foreach (Triangle triangle in triangles) { Include(triangle.A); Include(triangle.B); Include(triangle.C); }
         double diagonal = initialized ? (max - min).Length() : 1.0;
         return Math.Clamp(diagonal * 1e-7, 1e-9, 1e-4);
+        /// <summary>Expands the running bounds to include the given point.</summary>
         void Include(Vec3 point)
         {
             if (!initialized) { min = max = point; initialized = true; return; }
@@ -1501,8 +1559,11 @@ internal sealed class ComposerMeshTopology
 
     private readonly record struct VertexKey(long X, long Y, long Z)
     {
+        /// <summary>Quantizes the given point into a grid cell key for the given tolerance.</summary>
         public static VertexKey From(Vec3 value, double tolerance) => new(Quantize(value.X, tolerance), Quantize(value.Y, tolerance), Quantize(value.Z, tolerance));
+        /// <summary>Returns the neighboring grid key offset by the given cell steps.</summary>
         public VertexKey Offset(int x, int y, int z) => new(X + x, Y + y, Z + z);
+        /// <summary>Quantizes the given value to a grid step clamped to long range.</summary>
         private static long Quantize(double value, double tolerance)
         {
             double scaled = Math.Round(value / tolerance);
@@ -1514,6 +1575,7 @@ internal sealed class ComposerMeshTopology
 
     private readonly record struct EdgeKey
     {
+        /// <summary>Initializes an order-independent edge key for the given vertices.</summary>
         public EdgeKey(int a, int b) { A = Math.Min(a, b); B = Math.Max(a, b); }
         public int A { get; }
         public int B { get; }
@@ -1529,6 +1591,7 @@ internal sealed class MeshComponentMoveEditCommand : IComposerEditCommand
     private readonly Triangle[] after;
     private readonly string description;
 
+    /// <summary>Snapshots the before and after triangles for an undoable component move.</summary>
     public MeshComponentMoveEditCommand(
         int groupId,
         IEnumerable<Triangle> before,
@@ -1545,9 +1608,12 @@ internal sealed class MeshComponentMoveEditCommand : IComposerEditCommand
     public int? UndoSelectionId => groupId;
     public int? RedoSelectionId => groupId;
 
+    /// <summary>Restores the before triangles into the edited group.</summary>
     public void Undo(Scene scene) => Restore(scene, before);
+    /// <summary>Restores the after triangles into the edited group.</summary>
     public void Redo(Scene scene) => Restore(scene, after);
 
+    /// <summary>Replaces the edited group triangles and rebuilds world geometry.</summary>
     private void Restore(Scene scene, IReadOnlyList<Triangle> triangles)
     {
         SceneObjectGroup group = scene.GroupById(groupId)

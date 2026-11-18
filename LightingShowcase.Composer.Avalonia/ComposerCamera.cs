@@ -20,6 +20,7 @@ internal sealed class ComposerCamera
 
     public double FieldOfViewDegrees { get; set; } = 72.0;
 
+    /// <summary>Builds a camera definition from the current orbit target, radius, yaw, pitch, and field of view.</summary>
     public CameraDefinition Snapshot()
     {
         double horizontal = radius * Math.Cos(pitch);
@@ -39,6 +40,7 @@ internal sealed class ComposerCamera
         };
     }
 
+    /// <summary>Resets the orbit camera to the default view or frames the scene triangles.</summary>
     public void Reset(Scene scene)
     {
         if (scene.Triangles.Count == 0)
@@ -53,6 +55,7 @@ internal sealed class ComposerCamera
         Frame(ComputeBounds(scene.Triangles));
     }
 
+    /// <summary>Frames the given bounds by recentering the target and fitting the radius to the extent.</summary>
     public void Frame(Aabb bounds)
     {
         target = (bounds.Min + bounds.Max) * 0.5;
@@ -62,12 +65,14 @@ internal sealed class ComposerCamera
         pitch = 0.18;
     }
 
+    /// <summary>Rotates the camera yaw and clamped pitch by the given pointer deltas.</summary>
     public void Orbit(double deltaX, double deltaY)
     {
         yaw -= deltaX * 0.008;
         pitch = Math.Clamp(pitch + deltaY * 0.008, -1.45, 1.45);
     }
 
+    /// <summary>Pans the camera target from screen deltas using world units per pixel.</summary>
     public void Pan(double deltaX, double deltaY, double viewportHeight)
     {
         if (!double.IsFinite(deltaX) || !double.IsFinite(deltaY))
@@ -87,6 +92,7 @@ internal sealed class ComposerCamera
         target += basis.Up * (deltaY * worldUnitsPerPixel);
     }
 
+    /// <summary>Zooms the camera by scaling the orbit radius from the wheel delta.</summary>
     public void Zoom(double wheelDelta)
     {
         radius *= Math.Exp(-wheelDelta * 0.12);
@@ -113,6 +119,7 @@ internal sealed class ComposerCamera
             yaw += Math.PI * 2.0;
     }
 
+    /// <summary>Computes the axis-aligned bounds of the given triangles.</summary>
     private static Aabb ComputeBounds(IReadOnlyList<Triangle> triangles)
     {
         Vec3 first = triangles[0].A;
@@ -128,6 +135,7 @@ internal sealed class ComposerCamera
 
         return new Aabb(new Vec3(minX, minY, minZ), new Vec3(maxX, maxY, maxZ));
 
+        /// <summary>Expands the running bounds to include the given vertex.</summary>
         void Expand(Vec3 value)
         {
             minX = Math.Min(minX, value.X);

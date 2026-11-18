@@ -30,6 +30,7 @@ internal sealed record ComposerRenderOptions(
     public static readonly Vec3 DefaultBackgroundTop = new(0.055, 0.060, 0.072);
     public static readonly Vec3 DefaultBackgroundBottom = new(0.010, 0.012, 0.016);
 
+    /// <summary>Returns the default composer render options for the given renderer kind.</summary>
     public static ComposerRenderOptions DefaultsFor(ComposerRendererKind kind) => kind switch
     {
         ComposerRendererKind.Raster => new(
@@ -83,6 +84,7 @@ internal sealed record ComposerRenderOptions(
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Unknown renderer.")
     };
 
+    /// <summary>Returns command-line default render options for the given renderer kind.</summary>
     public static ComposerRenderOptions CommandLineDefaultsFor(ComposerRendererKind kind) =>
         DefaultsFor(kind) with
         {
@@ -98,27 +100,35 @@ internal sealed record ComposerRenderOptions(
             BackgroundBottom = DefaultBackgroundBottom
         };
 
+    /// <summary>Returns true when the given renderer consumes the samples setting.</summary>
     public static bool SupportsSamples(ComposerRendererKind kind) =>
         kind is ComposerRendererKind.VulkanCompute or ComposerRendererKind.Cpu;
 
+    /// <summary>Returns true when the given renderer consumes the bounces setting.</summary>
     public static bool SupportsBounces(ComposerRendererKind kind) =>
         kind is ComposerRendererKind.VulkanCompute or ComposerRendererKind.Cpu;
 
+    /// <summary>Returns true when the given renderer consumes the field-of-view setting.</summary>
     public static bool SupportsFieldOfView(ComposerRendererKind kind) =>
         kind is ComposerRendererKind.VulkanCompute or ComposerRendererKind.Cpu;
 
+    /// <summary>Returns true when the given renderer consumes the exposure setting.</summary>
     public static bool SupportsExposure(ComposerRendererKind kind) =>
         kind is ComposerRendererKind.VulkanCompute or ComposerRendererKind.Cpu;
 
+    /// <summary>Returns true when the given renderer consumes the ambient strength setting.</summary>
     public static bool SupportsAmbient(ComposerRendererKind kind) =>
         kind == ComposerRendererKind.VulkanCompute;
 
+    /// <summary>Returns true when the given renderer consumes the shadows setting.</summary>
     public static bool SupportsShadows(ComposerRendererKind kind) =>
         kind == ComposerRendererKind.VulkanCompute;
 
+    /// <summary>Returns true when the given renderer consumes the background color settings.</summary>
     public static bool SupportsBackground(ComposerRendererKind kind) =>
         kind == ComposerRendererKind.VulkanCompute;
 
+    /// <summary>Validates resolution, sampling, bounce, exposure, and background ranges.</summary>
     public void Validate()
     {
         if (Width is < 1 or > 32768)
@@ -141,6 +151,7 @@ internal sealed record ComposerRenderOptions(
         ValidateColor(BackgroundBottom, nameof(BackgroundBottom));
     }
 
+    /// <summary>Describes the active settings for the given renderer as a short text summary.</summary>
     public string Describe(ComposerRendererKind kind)
     {
         List<string> parts = [$"{Width}x{Height}"];
@@ -153,6 +164,7 @@ internal sealed record ComposerRenderOptions(
         return string.Join(", ", parts);
     }
 
+    /// <summary>Throws when a background color holds non-finite or negative components.</summary>
     private static void ValidateColor(Vec3 value, string name)
     {
         if (!double.IsFinite(value.X) || !double.IsFinite(value.Y) || !double.IsFinite(value.Z) ||

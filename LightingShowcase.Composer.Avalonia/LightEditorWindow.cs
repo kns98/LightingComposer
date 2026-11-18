@@ -55,6 +55,7 @@ internal sealed class LightEditorWindow : Window
     private IReadOnlyList<SceneObjectInfo> aimTargets = Array.Empty<SceneObjectInfo>();
     private bool synchronizing;
 
+    /// <summary>Initializes the lighting editor window with its session, callbacks, and controls.</summary>
     public LightEditorWindow(
         ComposerSceneSession session,
         Action<int?> selectLight,
@@ -128,12 +129,14 @@ internal sealed class LightEditorWindow : Window
         Closed += (_, _) => this.onClosed();
     }
 
+    /// <summary>Selects the given light and brings the editor window to the front.</summary>
     public void SelectLight(int? index)
     {
         RefreshFromScene(index);
         Activate();
     }
 
+    /// <summary>Reloads the light list and property fields from the scene.</summary>
     public void RefreshFromScene(int? preferredIndex = null)
     {
         IReadOnlyList<ComposerLightModel> lights = session.GetLightInfos();
@@ -155,6 +158,7 @@ internal sealed class LightEditorWindow : Window
         }
     }
 
+    /// <summary>Builds the editor layout with its header, light list, and property panel.</summary>
     private Control BuildContent()
     {
         Grid root = new()
@@ -192,6 +196,7 @@ internal sealed class LightEditorWindow : Window
         return root;
     }
 
+    /// <summary>Builds the light list panel with add and delete buttons.</summary>
     private Control BuildListPanel()
     {
         Grid panel = new() { RowDefinitions = new RowDefinitions("Auto,*,Auto,Auto"), RowSpacing = 7 };
@@ -221,6 +226,7 @@ internal sealed class LightEditorWindow : Window
         return panel;
     }
 
+    /// <summary>Builds the scrollable property panel for the selected light.</summary>
     private Control BuildPropertyPanel()
     {
         StackPanel stack = new() { Spacing = 8 };
@@ -278,6 +284,7 @@ internal sealed class LightEditorWindow : Window
         };
     }
 
+    /// <summary>Loads the newly selected light into the property fields.</summary>
     private void OnListSelectionChanged()
     {
         if (synchronizing)
@@ -289,6 +296,7 @@ internal sealed class LightEditorWindow : Window
         onPreviewChanged();
     }
 
+    /// <summary>Adds a new light of the given kind to the scene.</summary>
     private async Task AddAsync(SceneLightKind kind)
     {
         try
@@ -310,6 +318,7 @@ internal sealed class LightEditorWindow : Window
         }
     }
 
+    /// <summary>Deletes the selected light from the scene.</summary>
     private async Task DeleteAsync()
     {
         int index = lightList.SelectedIndex;
@@ -337,6 +346,7 @@ internal sealed class LightEditorWindow : Window
         }
     }
 
+    /// <summary>Validates the property fields and saves them to the selected light.</summary>
     private async Task ApplyAsync()
     {
         int index = lightList.SelectedIndex;
@@ -373,6 +383,7 @@ internal sealed class LightEditorWindow : Window
         }
     }
 
+    /// <summary>Reads the property fields into a light model, returning false with an error when validation fails.</summary>
     private bool TryReadModel(ComposerLightModel current, out ComposerLightModel? model, out string error)
     {
         model = null;
@@ -413,6 +424,7 @@ internal sealed class LightEditorWindow : Window
         return true;
     }
 
+    /// <summary>Loads the given light model into the property fields.</summary>
     private void LoadModel(ComposerLightModel? model)
     {
         bool enabled = model != null;
@@ -463,6 +475,7 @@ internal sealed class LightEditorWindow : Window
         UpdateKindFieldState();
     }
 
+    /// <summary>Enables or disables property fields based on the selected light type.</summary>
     private void UpdateKindFieldState()
     {
         if (kindBox.SelectedItem is not SceneLightKind kind)
@@ -498,6 +511,7 @@ internal sealed class LightEditorWindow : Window
         }
     }
 
+    /// <summary>Reloads the aim-target list from scene objects that contain geometry.</summary>
     private void RefreshAimTargets()
     {
         int previousTargetId = aimObjectBox.SelectedIndex >= 0 && aimObjectBox.SelectedIndex < aimTargets.Count
@@ -520,6 +534,7 @@ internal sealed class LightEditorWindow : Window
         aimObjectBox.SelectedIndex = selectedIndex;
     }
 
+    /// <summary>Fills the direction fields with a normalized vector toward the chosen object.</summary>
     private void AimAtObject()
     {
         if (kindBox.SelectedItem is not SceneLightKind kind ||
@@ -566,6 +581,7 @@ internal sealed class LightEditorWindow : Window
             $"Direction filled toward {target.Name}: ({Format(direction.X)}, {Format(direction.Y)}, {Format(direction.Z)}).{kindNote} Press Apply to save.";
     }
 
+    /// <summary>Normalizes a direction for display, substituting a default when it is invalid.</summary>
     private static Vec3 NormalizeDirectionForEditor(Vec3 direction, SceneLightKind kind)
     {
         if (IsFinite(direction))
@@ -580,9 +596,11 @@ internal sealed class LightEditorWindow : Window
             : new Vec3(0.0, 0.0, -1.0);
     }
 
+    /// <summary>Returns true when all components of the vector are finite.</summary>
     private static bool IsFinite(Vec3 value) =>
         double.IsFinite(value.X) && double.IsFinite(value.Y) && double.IsFinite(value.Z);
 
+    /// <summary>Builds a label and control row for the property panel.</summary>
     private static Grid Labeled(string label, Control control)
     {
         Grid row = new() { ColumnDefinitions = new ColumnDefinitions("175,*"), ColumnSpacing = 8 };
@@ -592,6 +610,7 @@ internal sealed class LightEditorWindow : Window
         return row;
     }
 
+    /// <summary>Builds an X, Y, and Z row of numeric fields.</summary>
     private static Grid VectorRow(TextBox x, TextBox y, TextBox z)
     {
         Grid row = new() { ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto,*,Auto,*"), ColumnSpacing = 5 };
@@ -600,6 +619,7 @@ internal sealed class LightEditorWindow : Window
         Add("Z", z, 4);
         return row;
 
+        /// <summary>Adds one labeled field to the vector row at the given column.</summary>
         void Add(string label, TextBox box, int column)
         {
             TextBlock text = new() { Text = label, VerticalAlignment = VerticalAlignment.Center };
@@ -610,6 +630,7 @@ internal sealed class LightEditorWindow : Window
         }
     }
 
+    /// <summary>Creates a section heading for the property panel.</summary>
     private static TextBlock Heading(string text) => new()
     {
         Text = text,
@@ -617,11 +638,16 @@ internal sealed class LightEditorWindow : Window
         FontSize = 14
     };
 
+    /// <summary>Creates a standard text field.</summary>
     private static TextBox FieldBox() => new() { MinHeight = 28 };
+    /// <summary>Creates a right-aligned numeric text field.</summary>
     private static TextBox NumberBox() => new() { MinHeight = 28, TextAlignment = TextAlignment.Right };
+    /// <summary>Creates a button with the given text.</summary>
     private static Button NewButton(string text) => new() { Content = text, MinHeight = 30 };
+    /// <summary>Formats a number with invariant culture.</summary>
     private static string Format(double value) => value.ToString("0.######", CultureInfo.InvariantCulture);
 
+    /// <summary>Writes a vector into three text fields.</summary>
     private static void SetVec(TextBox x, TextBox y, TextBox z, Vec3 value)
     {
         x.Text = Format(value.X);
@@ -629,6 +655,7 @@ internal sealed class LightEditorWindow : Window
         z.Text = Format(value.Z);
     }
 
+    /// <summary>Reads three text fields into a vector.</summary>
     private static bool TryVec(TextBox x, TextBox y, TextBox z, out Vec3 value)
     {
         if (TryDouble(x.Text, out double vx) && TryDouble(y.Text, out double vy) && TryDouble(z.Text, out double vz))
@@ -640,12 +667,15 @@ internal sealed class LightEditorWindow : Window
         return false;
     }
 
+    /// <summary>Parses a finite number from the given text.</summary>
     private static bool TryDouble(string? text, out double value) =>
         double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out value) && double.IsFinite(value);
 
+    /// <summary>Parses a zero-or-greater number from the given text.</summary>
     private static bool TryNonNegative(string? text, out double value) =>
         TryDouble(text, out value) && value >= 0.0;
 
+    /// <summary>Parses a 0-to-90 degree angle from the given text into radians.</summary>
     private static bool TryAngle(string? text, out double radians)
     {
         radians = 0.0;
@@ -655,6 +685,7 @@ internal sealed class LightEditorWindow : Window
         return true;
     }
 
+    /// <summary>Parses a hex RGB color from the given text.</summary>
     private static bool TryHex(string? text, out Vec3 color)
     {
         color = Vec3.Zero;
@@ -667,6 +698,7 @@ internal sealed class LightEditorWindow : Window
         return true;
     }
 
+    /// <summary>Formats a color as a hex RGB string.</summary>
     private static string ToHex(Vec3 color)
     {
         int r = Math.Clamp((int)Math.Round(color.X * 255.0), 0, 255);
@@ -675,6 +707,7 @@ internal sealed class LightEditorWindow : Window
         return $"#{r:X2}{g:X2}{b:X2}";
     }
 
+    /// <summary>Stores an error message and returns false.</summary>
     private static bool Fail(string message, out string error)
     {
         error = message;

@@ -17,6 +17,7 @@ namespace LightingShowcase.SceneGraph;
 /// <summary>Exports the current scene as STL triangle geometry.</summary>
 public static class StlSceneSaver
 {
+    /// <summary>Saves the scene as binary or ASCII STL triangle geometry.</summary>
     public static void Save(Scene scene, string filePath, bool binary = true)
     {
         if (scene == null) throw new ArgumentNullException(nameof(scene));
@@ -32,6 +33,7 @@ public static class StlSceneSaver
             SaveAscii(fullPath, triangles);
     }
 
+    /// <summary>Writes the given triangles to a binary STL file.</summary>
     private static void SaveBinary(string filePath, List<Triangle> triangles)
     {
         using BinaryWriter writer = new(File.Create(filePath), Encoding.ASCII);
@@ -51,6 +53,7 @@ public static class StlSceneSaver
         }
     }
 
+    /// <summary>Writes the given triangles to an ASCII STL file.</summary>
     private static void SaveAscii(string filePath, List<Triangle> triangles)
     {
         using StreamWriter writer = new(filePath, false, Encoding.UTF8);
@@ -69,12 +72,14 @@ public static class StlSceneSaver
         writer.WriteLine("endsolid LightingShowcase");
     }
 
+    /// <summary>Computes a unit surface normal for a triangle, defaulting to up for degenerate faces.</summary>
     private static Vec3 SurfaceNormal(Triangle triangle)
     {
         Vec3 normal = (triangle.B - triangle.A).Cross(triangle.C - triangle.A).Normalize();
         return normal.Length() < 1e-10 ? new Vec3(0.0, 1.0, 0.0) : normal;
     }
 
+    /// <summary>Writes a vector to a binary writer as three single-precision floats.</summary>
     private static void WriteFloatVec3(BinaryWriter writer, Vec3 value)
     {
         writer.Write((float)value.X);
@@ -82,6 +87,7 @@ public static class StlSceneSaver
         writer.Write((float)value.Z);
     }
 
+    /// <summary>Writes one vertex line to an ASCII STL file.</summary>
     private static void WriteAsciiVertex(StreamWriter writer, Vec3 value) =>
         writer.WriteLine(FormattableString.Invariant($"      vertex {value.X:G17} {value.Y:G17} {value.Z:G17}"));
 }

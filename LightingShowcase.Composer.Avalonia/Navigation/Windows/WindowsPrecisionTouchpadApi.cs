@@ -31,21 +31,26 @@ internal sealed unsafe class WindowsPrecisionTouchpadApi : IDisposable
         ref uint pointerCount,
         WindowsPointerTouchInfo* touchpadInfo);
 
+    /// <summary>Declares the user32 GetPointerType import used to classify pointer input.</summary>
     [DllImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool GetPointerType(
         uint pointerId,
         out WindowsPointerInputType pointerType);
 
+    /// <summary>Declares the kernel32 LoadLibraryW import used to load user32 dynamically.</summary>
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     private static extern nint LoadLibraryW(string lpLibFileName);
 
+    /// <summary>Declares the kernel32 GetProcAddress import used to resolve exports by name.</summary>
     [DllImport("kernel32.dll", CharSet = CharSet.Ansi, ExactSpelling = true)]
     private static extern nint GetProcAddress(nint hModule, string lpProcName);
 
+    /// <summary>Declares the kernel32 GetProcAddress import used to resolve exports by ordinal.</summary>
     [DllImport("kernel32.dll", EntryPoint = "GetProcAddress", ExactSpelling = true)]
     private static extern nint GetProcAddressByOrdinal(nint hModule, nint ordinal);
 
+    /// <summary>Declares the kernel32 FreeLibrary import used to release the loaded module.</summary>
     [DllImport("kernel32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool FreeLibrary(nint hLibModule);
@@ -55,6 +60,7 @@ internal sealed unsafe class WindowsPrecisionTouchpadApi : IDisposable
     private readonly GetPointerFrameTouchpadInfoDelegate getFrame;
     private bool disposed;
 
+    /// <summary>Stores the loaded user32 handle and resolved touchpad delegates.</summary>
     private WindowsPrecisionTouchpadApi(
         nint user32,
         RegisterTouchpadCapableWindowDelegate registerWindow,
@@ -65,6 +71,7 @@ internal sealed unsafe class WindowsPrecisionTouchpadApi : IDisposable
         this.getFrame = getFrame;
     }
 
+    /// <summary>Loads user32 and resolves the Windows 11 precision touchpad entry points.</summary>
     public static WindowsPrecisionTouchpadApi Load()
     {
         if (!OperatingSystem.IsWindowsVersionAtLeast(10, 0, 22000))
@@ -91,6 +98,7 @@ internal sealed unsafe class WindowsPrecisionTouchpadApi : IDisposable
         }
     }
 
+    /// <summary>Resolves a user32 export by name, falling back to its ordinal.</summary>
     private static nint GetExport(nint module, string name, int ordinal)
     {
         nint address = GetProcAddress(module, name);
@@ -106,24 +114,28 @@ internal sealed unsafe class WindowsPrecisionTouchpadApi : IDisposable
         return address;
     }
 
+    /// <summary>Registers a window handle for precision touchpad input.</summary>
     public void RegisterWindow(nint hwnd)
     {
         if (!registerWindow(hwnd, true))
             throw new Win32Exception(Marshal.GetLastWin32Error(), "RegisterTouchpadCapableWindow failed.");
     }
 
+    /// <summary>Unregisters a window handle from precision touchpad input.</summary>
     public void UnregisterWindow(nint hwnd)
     {
         if (hwnd != 0)
             registerWindow(hwnd, false);
     }
 
+    /// <summary>Returns true when the given pointer id is a touchpad pointer.</summary>
     public bool IsTouchpadPointer(uint pointerId)
     {
         return GetPointerType(pointerId, out WindowsPointerInputType pointerType)
             && pointerType == WindowsPointerInputType.Touchpad;
     }
 
+    /// <summary>Reads the active touch contacts for the given pointer id, returning false when no frame is available.</summary>
     public bool TryGetFrame(uint pointerId, out WindowsTouchContact[] contacts)
     {
         contacts = Array.Empty<WindowsTouchContact>();
@@ -162,6 +174,7 @@ internal sealed unsafe class WindowsPrecisionTouchpadApi : IDisposable
         return true;
     }
 
+    /// <summary>Releases the loaded user32 module.</summary>
     public void Dispose()
     {
         if (disposed)

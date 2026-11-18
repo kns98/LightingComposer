@@ -18,6 +18,7 @@ namespace LightingShowcase.SceneGraph;
 /// <summary>Saves the native .prop.xml scene format.</summary>
 public static class PropXmlSceneSaver
 {
+    /// <summary>Saves the scene in the native .prop.xml XML format.</summary>
     public static void Save(Scene scene, string filePath, SceneSaveOptions? options = null)
     {
         if (scene == null) throw new ArgumentNullException(nameof(scene));

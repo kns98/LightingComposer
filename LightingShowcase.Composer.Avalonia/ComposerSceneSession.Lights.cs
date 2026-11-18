@@ -58,6 +58,7 @@ internal sealed partial class ComposerSceneSession
         }
     }
 
+    /// <summary>Returns editor models for every light in the scene.</summary>
     public IReadOnlyList<ComposerLightModel> GetLightInfos()
     {
         sceneGate.Wait();
@@ -71,6 +72,7 @@ internal sealed partial class ComposerSceneSession
         }
     }
 
+    /// <summary>Returns the editor model for the light at the given index, or null when out of range.</summary>
     public ComposerLightModel? GetLightInfo(int index)
     {
         sceneGate.Wait();
@@ -84,6 +86,7 @@ internal sealed partial class ComposerSceneSession
         }
     }
 
+    /// <summary>Selects the light at the given index and clears the object selection.</summary>
     public bool SetSelectedLight(int? index)
     {
         sceneGate.Wait();
@@ -117,6 +120,7 @@ internal sealed partial class ComposerSceneSession
         }
     }
 
+    /// <summary>Shows or hides light markers and returns true when the setting changed.</summary>
     public bool SetShowLightMarkers(bool visible)
     {
         sceneGate.Wait();
@@ -133,6 +137,7 @@ internal sealed partial class ComposerSceneSession
         }
     }
 
+    /// <summary>Adds a light of the given kind above the scene center and selects it.</summary>
     public int AddLight(SceneLightKind kind)
     {
         sceneGate.Wait();
@@ -178,6 +183,7 @@ internal sealed partial class ComposerSceneSession
         }
     }
 
+    /// <summary>Deletes the light at the given index and repairs the selection.</summary>
     public bool DeleteLight(int index)
     {
         sceneGate.Wait();
@@ -206,6 +212,7 @@ internal sealed partial class ComposerSceneSession
         }
     }
 
+    /// <summary>Applies the edited model to the light at the given index after validating its values.</summary>
     public bool UpdateLight(int index, ComposerLightModel model)
     {
         sceneGate.Wait();
@@ -249,6 +256,7 @@ internal sealed partial class ComposerSceneSession
         }
     }
 
+    /// <summary>Returns the world-space center of the object with the given id.</summary>
     public Vec3? GetObjectAimCenter(int objectId)
     {
         sceneGate.Wait();
@@ -268,6 +276,7 @@ internal sealed partial class ComposerSceneSession
         }
     }
 
+    /// <summary>Returns the index of the light marker under the given normalized viewport position.</summary>
     public int? PickLightMarker(
         CameraDefinition camera,
         double normalizedX,
@@ -299,6 +308,7 @@ internal sealed partial class ComposerSceneSession
         }
     }
 
+    /// <summary>Returns a point bounding box at the selected light position for gizmo hit testing.</summary>
     public Aabb? GetSelectedLightGizmoBounds()
     {
         sceneGate.Wait();
@@ -315,6 +325,7 @@ internal sealed partial class ComposerSceneSession
         }
     }
 
+    /// <summary>Starts a move of the selected light and returns its current model.</summary>
     public ComposerLightModel? BeginSelectedLightMove()
     {
         sceneGate.Wait();
@@ -332,6 +343,7 @@ internal sealed partial class ComposerSceneSession
         }
     }
 
+    /// <summary>Moves the selected light to the given position without committing an undo step.</summary>
     public bool PreviewSelectedLightPosition(Vec3 position)
     {
         sceneGate.Wait();
@@ -352,6 +364,7 @@ internal sealed partial class ComposerSceneSession
         }
     }
 
+    /// <summary>Commits the in-progress light move to the undo history.</summary>
     public bool CommitSelectedLightMove()
     {
         sceneGate.Wait();
@@ -377,6 +390,7 @@ internal sealed partial class ComposerSceneSession
         }
     }
 
+    /// <summary>Restores the light positions from before the in-progress move.</summary>
     public void CancelSelectedLightMove()
     {
         sceneGate.Wait();
@@ -395,6 +409,7 @@ internal sealed partial class ComposerSceneSession
         }
     }
 
+    /// <summary>Pushes a light collection change onto the undo history when the lights differ.</summary>
     private void CommitLightCollectionEdit(string description, SceneLight[] before)
     {
         if (SameLights(before, scene.Lights))
@@ -404,8 +419,10 @@ internal sealed partial class ComposerSceneSession
         InvalidateRendererCaches();
     }
 
+    /// <summary>Returns a deep copy of the current scene lights.</summary>
     private SceneLight[] CloneLights() => scene.Lights.Select(LightCollectionEditCommand.Clone).ToArray();
 
+    /// <summary>Replaces the scene lights with clones of the given lights and repairs the selection.</summary>
     private void RestoreLights(IEnumerable<SceneLight> lights)
     {
         scene.Lights.Clear();
@@ -415,6 +432,7 @@ internal sealed partial class ComposerSceneSession
             selectedLightIndex = scene.Lights.Count == 0 ? null : scene.Lights.Count - 1;
     }
 
+    /// <summary>Returns a light id that is unique in the scene by appending a number when needed.</summary>
     private string UniqueLightId(string baseName)
     {
         HashSet<string> used = scene.Lights.Select(light => light.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -428,6 +446,7 @@ internal sealed partial class ComposerSceneSession
         }
     }
 
+    /// <summary>Converts the scene light at the given index into an editor model.</summary>
     private static ComposerLightModel ToModel(int index, SceneLight light) => new(
         index,
         light.Id,
@@ -444,17 +463,21 @@ internal sealed partial class ComposerSceneSession
         light.IsImported,
         light.IsDefault);
 
+    /// <summary>Clamps each color component to the 0 to 1 range.</summary>
     private static Vec3 ClampColor(Vec3 color) => new(
         Math.Clamp(color.X, 0.0, 1.0),
         Math.Clamp(color.Y, 0.0, 1.0),
         Math.Clamp(color.Z, 0.0, 1.0));
 
+    /// <summary>Returns true when every component of the vector is finite.</summary>
     private static bool IsFinite(Vec3 value) =>
         double.IsFinite(value.X) && double.IsFinite(value.Y) && double.IsFinite(value.Z);
 
+    /// <summary>Returns true when both vectors hold identical components.</summary>
     private static bool EqualVec(Vec3 a, Vec3 b) =>
         a.X == b.X && a.Y == b.Y && a.Z == b.Z;
 
+    /// <summary>Returns true when both light lists hold identical lights in the same order.</summary>
     private static bool SameLights(IReadOnlyList<SceneLight> a, IReadOnlyList<SceneLight> b)
     {
         if (a.Count != b.Count)

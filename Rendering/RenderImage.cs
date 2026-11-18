@@ -14,6 +14,7 @@ public sealed class RenderImage
     public int Height { get; }
     public uint[] PackedRgba32 { get; }
 
+    /// <summary>Initializes a render image with its pixel buffer.</summary>
     public RenderImage(int width, int height, uint[] packedRgba32)
     {
         if (width <= 0) throw new ArgumentOutOfRangeException(nameof(width));
@@ -27,5 +28,6 @@ public sealed class RenderImage
         PackedRgba32 = packedRgba32;
     }
 
+    /// <summary>Saves the image to a PNG file.</summary>
     public void SavePng(string path) => PngWriter.Write(path, this);
 }

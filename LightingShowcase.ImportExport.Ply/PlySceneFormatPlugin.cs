@@ -20,9 +20,11 @@ public sealed class PlySceneFormatPlugin : ISceneFormatPlugin
     public bool CarriesLights => false;
     public IReadOnlyList<string> ExportVariants => new[] { "binary", "ascii" };
 
+    /// <summary>Imports a PLY file into the scene.</summary>
     public ObjLoadResult Import(Scene scene, string filePath, SceneLoadOptions options) =>
         PlySceneLoader.LoadIntoScene(scene, filePath, options.FallbackMaterial, options.TargetSize, options.TargetCenter, options.FloorY, options.Progress);
 
+    /// <summary>Exports the scene to a PLY file, using ascii output when the ascii variant is requested.</summary>
     public void Export(Scene scene, string filePath, SceneSaveOptions options) =>
         PlySceneSaver.Save(scene, filePath, binary: !string.Equals(options.Variant, "ascii", StringComparison.OrdinalIgnoreCase));
 }

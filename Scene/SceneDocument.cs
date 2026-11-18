@@ -27,6 +27,7 @@ public sealed class SceneDocument
     public Scene Scene { get; }
     public RenderSettings RenderSettings { get; } = new();
 
+    /// <summary>Wraps the given scene as an editor document.</summary>
     public SceneDocument(Scene scene)
     {
         Scene = scene ?? throw new ArgumentNullException(nameof(scene));
@@ -36,6 +37,7 @@ public sealed class SceneDocument
     public IReadOnlyList<SceneLight> Lights => Scene.Lights;
     public AssetRegistry Assets => AssetRegistry.FromScene(Scene);
 
+    /// <summary>Builds render data for the document with optional settings.</summary>
     public SceneRenderData BuildRenderData(RenderSettings? settings = null) => SceneRenderDataBuilder.Build(this, settings);
 
     /// <summary>Returns a flattened, depth-aware view of editable objects for list/tree UI controls.</summary>
@@ -47,6 +49,7 @@ public sealed class SceneDocument
         return infos;
     }
 
+    /// <summary>Appends one object record and recurses into its children.</summary>
     private static void AddObjectInfo(List<SceneObjectInfo> infos, SceneObjectGroup group, int depth)
     {
         int triangleCount = group.CountLocalTrianglesRecursively();
@@ -66,6 +69,7 @@ public sealed class SceneDocument
             AddObjectInfo(infos, child, depth + 1);
     }
 
+    /// <summary>Classifies an object as a group, primitive, triangle, or mesh.</summary>
     private static string GetObjectKind(SceneObjectGroup group, int triangleCount)
     {
         if (group.Children.Count > 0) return "group";
@@ -73,8 +77,10 @@ public sealed class SceneDocument
         return triangleCount == 1 ? "triangle" : "mesh";
     }
 
+    /// <summary>Finds the object with the given id or returns null.</summary>
     public SceneObjectGroup? FindObject(int id) => Scene.GroupById(id);
 
+    /// <summary>Renames one object and reports whether it changed.</summary>
     public bool RenameObject(int id, string name)
     {
         SceneObjectGroup? group = FindObject(id);
@@ -88,6 +94,7 @@ public sealed class SceneDocument
         return true;
     }
 
+    /// <summary>Sets one object visibility and rebuilds world geometry.</summary>
     public bool SetObjectVisibility(int id, bool visible)
     {
         SceneObjectGroup? group = FindObject(id);
@@ -99,6 +106,7 @@ public sealed class SceneDocument
         return true;
     }
 
+    /// <summary>Sets visibility for several objects and returns the change count.</summary>
     public int SetObjectsVisibility(IEnumerable<int> ids, bool visible)
     {
         int changed = 0;
@@ -117,6 +125,7 @@ public sealed class SceneDocument
         return changed;
     }
 
+    /// <summary>Shows every hidden object and returns the change count.</summary>
     public int ShowAllObjects()
     {
         List<int> hiddenIds = Scene.ObjectGroups
@@ -128,6 +137,7 @@ public sealed class SceneDocument
         return SetObjectsVisibility(hiddenIds, visible: true);
     }
 
+    /// <summary>Returns one summary per scene material.</summary>
     public IReadOnlyList<MaterialSummary> GetMaterialSummaries()
     {
         AssetRegistry registry = Assets;

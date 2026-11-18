@@ -20,8 +20,10 @@ public sealed class ThreeDsSceneFormatPlugin : ISceneFormatPlugin
     public bool CarriesLights => false;
     public IReadOnlyList<string> ExportVariants => Array.Empty<string>();
 
+    /// <summary>Imports a 3DS file into the given scene.</summary>
     public ObjLoadResult Import(Scene scene, string filePath, SceneLoadOptions options) =>
         ThreeDsSceneLoader.LoadIntoScene(scene, filePath, options.FallbackMaterial, options.TargetSize, options.TargetCenter, options.FloorY, options.Progress);
 
+    /// <summary>Exports the given scene to a 3DS file.</summary>
     public void Export(Scene scene, string filePath, SceneSaveOptions options) => ThreeDsSceneSaver.Save(scene, filePath);
 }

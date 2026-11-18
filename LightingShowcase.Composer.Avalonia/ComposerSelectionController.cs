@@ -61,6 +61,7 @@ internal sealed class ComposerSelectionController
     private int? selectedTriangleGroupId;
     private int? selectedTriangleIndex;
 
+    /// <summary>Initializes the selection controller with the session, render, dialog, menu, tree, and inspector controls.</summary>
     public ComposerSelectionController(
         ComposerSceneSession session,
         ComposerRenderController renderer,
@@ -134,6 +135,7 @@ internal sealed class ComposerSelectionController
     public HashSet<int> SelectedObjectIds => selectedObjectIds;
     public int SelectedObjectCount => selectedObjectIds.Count;
 
+    /// <summary>Clears selection, expanded nodes, and face paging for a new scene.</summary>
     public void ResetForScene()
     {
         selectedObjectId = null;
@@ -144,6 +146,7 @@ internal sealed class ComposerSelectionController
         treeExpansionInitialized = false;
     }
 
+    /// <summary>Replaces the selection with one object and clears face selection.</summary>
     public void SetSingleSelection(int? objectId, bool expand = false)
     {
         selectedObjectIds.Clear();
@@ -157,6 +160,7 @@ internal sealed class ComposerSelectionController
         ClearVirtualTriangleSelection();
     }
 
+    /// <summary>Replaces the selection with the given objects and active id.</summary>
     public void SetMultipleSelection(IEnumerable<int> ids, int? active)
     {
         selectedObjectIds.Clear();
@@ -166,14 +170,17 @@ internal sealed class ComposerSelectionController
         ClearVirtualTriangleSelection();
     }
 
+    /// <summary>Marks an object node as expanded in the tree.</summary>
     public void AddExpanded(int id) => expandedObjectIds.Add(id);
 
+    /// <summary>Drops cached expansion and face paging state for an object.</summary>
     public void RemoveCachedObject(int id)
     {
         expandedObjectIds.Remove(id);
         trianglePageOffsets.Remove(id);
     }
 
+    /// <summary>Frames the active object in the viewport and requests a render.</summary>
     public void FrameSelected()
     {
         if (selectedObjectId is not int id || !session.FrameObject(id))
@@ -181,6 +188,7 @@ internal sealed class ComposerSelectionController
         _ = renderer.RequestRenderAsync(interactive: false);
     }
 
+    /// <summary>Rebuilds the object tree, synchronizes session selection, and refreshes the inspector.</summary>
     public void RefreshObjectTree(int? preferredSelection = null, bool syncSessionSelection = true)
     {
         IReadOnlyList<SceneObjectInfo> infos = session.GetObjectInfos();
@@ -233,6 +241,7 @@ internal sealed class ComposerSelectionController
         updateHistory();
     }
 
+    /// <summary>Builds one tree row with its expander, select button, children, and lazily loaded faces.</summary>
     private Control BuildObjectTreeControl(ObjectTreeNode node, int depth)
     {
         StackPanel branch = new() { Spacing = 2 };
@@ -313,6 +322,7 @@ internal sealed class ComposerSelectionController
         return branch;
     }
 
+    /// <summary>Appends paged face rows with previous, next, and hide controls.</summary>
     private void AddLazyFaceRows(StackPanel branch, ObjectTreeNode node, int depth)
     {
         int faceCount = session.GetFaceCount(node.Id);
@@ -417,6 +427,7 @@ internal sealed class ComposerSelectionController
         branch.Children.Add(controls);
     }
 
+    /// <summary>Loads the active object state into the inspector controls.</summary>
     public void LoadInspectorFromSelection()
     {
         if (selectedObjectId is not int id || session.GetObjectState(id) is not ComposerObjectState state)
@@ -434,6 +445,7 @@ internal sealed class ComposerSelectionController
         WriteVector(transformState.Scale, scaleX, scaleY, scaleZ);
     }
 
+    /// <summary>Enables or disables inspector controls and action buttons for the current selection.</summary>
     public void SetInspectorEnabled(bool enabled)
     {
         nameBox.IsEnabled = enabled;
@@ -460,6 +472,7 @@ internal sealed class ComposerSelectionController
         menu.SyncEnabledState();
     }
 
+    /// <summary>Clears viewport selection and refreshes the tree and status text.</summary>
     public void DeselectObjectFromViewport()
     {
         dialogs.CloseEditors();
@@ -471,6 +484,7 @@ internal sealed class ComposerSelectionController
         statusText.Text = "Selection cleared.";
     }
 
+    /// <summary>Selects an object, synchronizes editors and session state, and requests a render.</summary>
     public void SelectObject(int id, bool toggle = false)
     {
         if (session.GetObjectState(id) == null)
@@ -522,6 +536,7 @@ internal sealed class ComposerSelectionController
         _ = renderer.RequestRenderAsync(interactive: false);
     }
 
+    /// <summary>Selects one logical face and switches the editor to face mode.</summary>
     public void SelectTriangle(int groupId, int triangleIndex)
     {
         if (!session.SetSelectedTriangle(groupId, triangleIndex))
@@ -538,12 +553,14 @@ internal sealed class ComposerSelectionController
         _ = renderer.RequestRenderAsync(interactive: false);
     }
 
+    /// <summary>Clears the selected face without touching object selection.</summary>
     public void ClearVirtualTriangleSelection()
     {
         selectedTriangleGroupId = null;
         selectedTriangleIndex = null;
     }
 
+    /// <summary>Writes one vector into three inspector text boxes.</summary>
     private static void WriteVector(Vec3 value, TextBox x, TextBox y, TextBox z)
     {
         x.Text = value.X.ToString("0.######", System.Globalization.CultureInfo.InvariantCulture);

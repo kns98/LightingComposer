@@ -204,11 +204,13 @@ public sealed class Material
         return 1.0 + (sampled - 1.0) * OcclusionStrength;
     }
 
+    /// <summary>Converts an sRGB color to linear-light space.</summary>
     private static Vec3 SrgbToLinear(Vec3 value) => new(
         SrgbChannelToLinear(value.X),
         SrgbChannelToLinear(value.Y),
         SrgbChannelToLinear(value.Z));
 
+    /// <summary>Converts one sRGB channel to linear-light space.</summary>
     private static double SrgbChannelToLinear(double value)
     {
         value = Math.Clamp(value, 0.0, 1.0);

@@ -27,6 +27,7 @@ internal sealed class FaceOperationDialog : Window
     private readonly bool allowSecondaryZero;
     private readonly TaskCompletionSource<FaceOperationValues?> completion = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
+    /// <summary>Builds the numeric face-operation dialog with distance, secondary, and profile fields.</summary>
     public FaceOperationDialog(
         string operationName,
         string label,
@@ -109,6 +110,7 @@ internal sealed class FaceOperationDialog : Window
         Closed += (_, _) => completion.TrySetResult(null);
     }
 
+    /// <summary>Shows the dialog and returns the accepted values or null.</summary>
     public async Task<FaceOperationValues?> ShowForResultAsync(Window owner)
     {
         Show(owner);
@@ -117,6 +119,7 @@ internal sealed class FaceOperationDialog : Window
         return await completion.Task;
     }
 
+    /// <summary>Validates the dialog fields and closes with the entered values.</summary>
     private void Accept()
     {
         amountBox.Classes.Remove("error");
@@ -143,6 +146,7 @@ internal sealed class FaceOperationDialog : Window
         Close();
     }
 
+    /// <summary>Parses a meter value honoring the sign and zero rules.</summary>
     private static bool TryReadMeters(TextBox box, bool allowNegative, bool allowZero, out double value)
     {
         if (!double.TryParse(box.Text, System.Globalization.NumberStyles.Float,

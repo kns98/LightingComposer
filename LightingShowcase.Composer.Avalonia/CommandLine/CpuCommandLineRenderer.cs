@@ -16,6 +16,7 @@ namespace LightingShowcase.CommandLine;
 /// <summary>Cross-platform CPU ray/path tracer used by the command-line application.</summary>
 internal static class CpuCommandLineRenderer
 {
+    /// <summary>Renders the scene with the CPU ray and path tracer using the given camera and request.</summary>
     public static RenderImage Render(
         Scene scene,
         CameraDefinition camera,
@@ -67,6 +68,7 @@ internal static class CpuCommandLineRenderer
         return new RenderImage(request.Width, request.Height, pixels);
     }
 
+    /// <summary>Packs a linear color into a display-ready packed pixel value.</summary>
     private static uint PackDisplayColor(Vec3 linear)
     {
         byte red = ToDisplayByte(linear.X);
@@ -75,6 +77,7 @@ internal static class CpuCommandLineRenderer
         return red | ((uint)green << 8) | ((uint)blue << 16) | 0xff000000u;
     }
 
+    /// <summary>Converts one linear channel value into a tone-mapped display byte.</summary>
     private static byte ToDisplayByte(double value)
     {
         if (!double.IsFinite(value) || value <= 0.0) return 0;
@@ -83,6 +86,7 @@ internal static class CpuCommandLineRenderer
         return (byte)Math.Clamp((int)Math.Round(gamma * 255.0), 0, 255);
     }
 
+    /// <summary>Returns a deterministic pseudo-random value in [0,1) for pixel sample jitter.</summary>
     private static double Jitter01(int x, int y, int sampleIndex, int axis)
     {
         unchecked

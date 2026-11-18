@@ -24,6 +24,7 @@ public static class FbxSceneIO
     private static readonly byte[] BinaryHeader = Encoding.ASCII.GetBytes("Kaydara FBX Binary  \0\x1A\0");
     private const uint BinaryVersion = 7400;
 
+    /// <summary>Imports the FBX mesh at the given path into the scene, normalized to the target size and floor height.</summary>
     public static ObjLoadResult LoadIntoScene(
         Scene scene,
         string filePath,
@@ -44,6 +45,7 @@ public static class FbxSceneIO
         return AddMeshToScene(scene, filePath, mesh.Vertices, mesh.PolygonVertexIndices, mesh.PolygonVertexColors, fallbackMaterial, targetSize, targetCenter, floorY, progress);
     }
 
+    /// <summary>Writes the scene to the given path as binary FBX, or ASCII FBX for the ascii variant.</summary>
     public static void Save(Scene scene, string filePath, string? variant = null)
     {
         if (scene == null) throw new ArgumentNullException(nameof(scene));
@@ -55,6 +57,7 @@ public static class FbxSceneIO
             SaveBinary(scene, filePath);
     }
 
+    /// <summary>Writes the scene geometry to the given path as ASCII FBX 7.4.</summary>
     public static void SaveAscii(Scene scene, string filePath)
     {
         string fullPath = PrepareSavePath(filePath);
@@ -112,6 +115,7 @@ Objects:  {
         File.WriteAllText(fullPath, content, Encoding.UTF8);
     }
 
+    /// <summary>Writes the scene geometry to the given path as binary FBX 7.4.</summary>
     public static void SaveBinary(Scene scene, string filePath)
     {
         string fullPath = PrepareSavePath(filePath);
@@ -176,6 +180,7 @@ Objects:  {
         WriteNullRecord(writer);
     }
 
+    /// <summary>Normalizes the parsed mesh to the target size and floor, then adds it to the scene as a new group.</summary>
     private static ObjLoadResult AddMeshToScene(
         Scene scene,
         string filePath,
@@ -203,6 +208,7 @@ Objects:  {
         double scaledMinY = (min.Y - sourceCenter.Y) * scale + center.Y;
         Vec3 offset = new(center.X, center.Y + (floorY - scaledMinY), center.Z);
 
+        /// <summary>Transforms one source vertex into its normalized scene position.</summary>
         Vec3 Transform(Vec3 v) => (v - sourceCenter) * scale + offset;
 
         SceneObjectGroup group = scene.AddImportedGroup(Path.GetFileNameWithoutExtension(filePath));
@@ -245,12 +251,14 @@ Objects:  {
         return new ObjLoadResult(filePath, sourceVertices.Count, faceCount, triangleCount);
     }
 
+    /// <summary>Reads the mesh vertices, indices, and colors from an ASCII FBX file.</summary>
     private static FbxMeshData LoadAsciiMesh(string filePath)
     {
         string text = File.ReadAllText(filePath);
         return new FbxMeshData(ParseAsciiVertices(text), ParseAsciiPolygonVertexIndices(text), ParseAsciiPolygonVertexColors(text));
     }
 
+    /// <summary>Reads the mesh vertices, indices, and colors from a binary FBX file.</summary>
     private static FbxMeshData LoadBinaryMesh(string filePath)
     {
         using FileStream stream = File.OpenRead(filePath);
@@ -279,6 +287,7 @@ Objects:  {
         return new FbxMeshData(vertices, indices, polygonVertexColors);
     }
 
+    /// <summary>Walks the binary node tree to collect the vertex, index, and color arrays.</summary>
     private static void FindMeshArrays(FbxBinaryNode node, ref List<Vec3>? vertices, ref List<int>? indices, ref List<Vec3>? polygonVertexColors)
     {
         if (node.Name.Equals("Vertices", StringComparison.OrdinalIgnoreCase) && node.Properties.FirstOrDefault() is double[] doubleArray)
@@ -299,6 +308,7 @@ Objects:  {
         }
     }
 
+    /// <summary>Reads a single binary FBX node, including its properties and child nodes.</summary>
     private static FbxBinaryNode? ReadBinaryNode(BinaryReader reader, bool wideOffsets)
     {
         long nodeStart = reader.BaseStream.Position;
@@ -335,6 +345,7 @@ Objects:  {
         return new FbxBinaryNode(name, properties, children);
     }
 
+    /// <summary>Reads one typed binary FBX property from the stream.</summary>
     private static object ReadBinaryProperty(BinaryReader reader)
     {
         char type = (char)reader.ReadByte();
@@ -358,6 +369,7 @@ Objects:  {
         };
     }
 
+    /// <summary>Reads one binary FBX array property, inflating zlib-compressed payloads.</summary>
     private static T[] ReadArrayProperty<T>(BinaryReader reader, int elementSize, Func<BinaryReader, T> readValue)
     {
         int count = reader.ReadInt32();
@@ -380,6 +392,7 @@ Objects:  {
         }
     }
 
+    /// <summary>Peeks ahead to test whether the stream holds an all-zero node terminator.</summary>
     private static bool IsNullRecordAhead(BinaryReader reader, bool wideOffsets)
     {
         int length = wideOffsets ? 25 : 13;
@@ -392,12 +405,14 @@ Objects:  {
         return bytes.All(b => b == 0);
     }
 
+    /// <summary>Returns true when the file starts with the binary FBX header.</summary>
     private static bool IsBinaryFbx(string filePath)
     {
         byte[] prefix = File.ReadAllBytes(filePath).Take(BinaryHeader.Length).ToArray();
         return prefix.SequenceEqual(BinaryHeader);
     }
 
+    /// <summary>Extracts the Vertices array from ASCII FBX text as points.</summary>
     private static List<Vec3> ParseAsciiVertices(string text)
     {
         string array = ExtractArray(text, "Vertices");
@@ -405,12 +420,14 @@ Objects:  {
         return ConvertVertices(values.ToArray());
     }
 
+    /// <summary>Extracts the PolygonVertexIndex array from ASCII FBX text as integers.</summary>
     private static List<int> ParseAsciiPolygonVertexIndices(string text)
     {
         string array = ExtractArray(text, "PolygonVertexIndex");
         return Regex.Matches(array, @"[-+]?\d+").Select(m => int.Parse(m.Value, CultureInfo.InvariantCulture)).ToList();
     }
 
+    /// <summary>Extracts the Colors array from ASCII FBX text, or null when the file has none.</summary>
     private static List<Vec3>? ParseAsciiPolygonVertexColors(string text)
     {
         string? array = TryExtractArray(text, "Colors");
@@ -418,6 +435,7 @@ Objects:  {
         return ConvertColors(ParseDoubleArray(array));
     }
 
+    /// <summary>Converts flat coordinate values into points, three values at a time.</summary>
     private static List<Vec3> ConvertVertices(IReadOnlyList<double> values)
     {
         List<Vec3> vertices = new(values.Count / 3);
@@ -426,6 +444,7 @@ Objects:  {
         return vertices;
     }
 
+    /// <summary>Converts flat color values into clamped colors, skipping each alpha channel.</summary>
     private static List<Vec3> ConvertColors(IReadOnlyList<double> values)
     {
         List<Vec3> colors = new(values.Count / 4);
@@ -434,6 +453,7 @@ Objects:  {
         return colors;
     }
 
+    /// <summary>Returns the named array body from ASCII FBX text, or null when it is missing.</summary>
     private static string? TryExtractArray(string text, string name)
     {
         Match header = Regex.Match(text, name + @"\s*:\s*\*?\d*\s*\{\s*a\s*:", RegexOptions.IgnoreCase);
@@ -444,6 +464,7 @@ Objects:  {
         return end < 0 ? null : text[start..end];
     }
 
+    /// <summary>Returns the named array body from ASCII FBX text and throws when it is missing.</summary>
     private static string ExtractArray(string text, string name)
     {
         Match header = Regex.Match(text, name + @"\s*:\s*\*?\d*\s*\{\s*a\s*:", RegexOptions.IgnoreCase);
@@ -458,11 +479,13 @@ Objects:  {
         return text[start..end];
     }
 
+    /// <summary>Parses all numbers in the array body as doubles.</summary>
     private static List<double> ParseDoubleArray(string array) =>
         Regex.Matches(array, @"[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?")
             .Select(m => double.Parse(m.Value, CultureInfo.InvariantCulture))
             .ToList();
 
+    /// <summary>Fan-triangulates one polygon face into the group and returns the triangle count.</summary>
     private static int AddPolygon(SceneObjectGroup group, List<Vec3> vertices, List<int> face, List<Vec3>? faceColors, Func<Vec3, Vec3> transform, Material material)
     {
         if (face.Count < 3) return 0;
@@ -484,6 +507,7 @@ Objects:  {
         return count;
     }
 
+    /// <summary>Computes the minimum and maximum corners enclosing the given vertices.</summary>
     private static void GetBounds(List<Vec3> vertices, out Vec3 min, out Vec3 max)
     {
         double minX = double.PositiveInfinity, minY = double.PositiveInfinity, minZ = double.PositiveInfinity;
@@ -497,6 +521,7 @@ Objects:  {
         max = new Vec3(maxX, maxY, maxZ);
     }
 
+    /// <summary>Resolves the save path to an absolute path and creates its directory.</summary>
     private static string PrepareSavePath(string filePath)
     {
         string fullPath = Path.GetFullPath(filePath);
@@ -504,6 +529,7 @@ Objects:  {
         return fullPath;
     }
 
+    /// <summary>Writes a binary FBX node, backpatching its end offset and property length.</summary>
     private static void WriteNode(BinaryWriter writer, string name, IReadOnlyList<Action<BinaryWriter>> writeProperties, Action? writeChildren)
     {
         long nodeStart = writer.BaseStream.Position;
@@ -539,20 +565,24 @@ Objects:  {
         writer.BaseStream.Position = endOffset;
     }
 
+    /// <summary>Writes the 13-byte null record that terminates a binary FBX child list.</summary>
     private static void WriteNullRecord(BinaryWriter writer) => writer.Write(new byte[13]);
 
+    /// <summary>Writes one 32-bit integer binary FBX property.</summary>
     private static void WriteIntProperty(BinaryWriter writer, int value)
     {
         writer.Write((byte)'I');
         writer.Write(value);
     }
 
+    /// <summary>Writes one 64-bit integer binary FBX property.</summary>
     private static void WriteLongProperty(BinaryWriter writer, long value)
     {
         writer.Write((byte)'L');
         writer.Write(value);
     }
 
+    /// <summary>Writes one UTF-8 string binary FBX property.</summary>
     private static void WriteStringProperty(BinaryWriter writer, string value)
     {
         byte[] bytes = Encoding.UTF8.GetBytes(value);
@@ -561,6 +591,7 @@ Objects:  {
         writer.Write(bytes);
     }
 
+    /// <summary>Writes one double-array binary FBX property without compression.</summary>
     private static void WriteDoubleArrayProperty(BinaryWriter writer, double[] values)
     {
         writer.Write((byte)'d');
@@ -571,6 +602,7 @@ Objects:  {
             writer.Write(value);
     }
 
+    /// <summary>Writes one integer-array binary FBX property without compression.</summary>
     private static void WriteIntArrayProperty(BinaryWriter writer, int[] values)
     {
         writer.Write((byte)'i');
@@ -581,12 +613,15 @@ Objects:  {
             writer.Write(value);
     }
 
+    /// <summary>Appends one vertex to the ASCII array builder.</summary>
     private static void AppendVertex(StringBuilder builder, Vec3 value) =>
         builder.Append(FormattableString.Invariant($"{value.X:G17},{value.Y:G17},{value.Z:G17}"));
 
+    /// <summary>Appends one clamped color plus an opaque alpha to the ASCII array builder.</summary>
     private static void AppendColor(StringBuilder builder, Vec3 value) =>
         builder.Append(FormattableString.Invariant($"{Math.Clamp(value.X, 0.0, 1.0):G17},{Math.Clamp(value.Y, 0.0, 1.0):G17},{Math.Clamp(value.Z, 0.0, 1.0):G17},1"));
 
+    /// <summary>Writes one clamped color plus an opaque alpha into the color array.</summary>
     private static void WriteColorArrayEntry(double[] values, int offset, Vec3 color)
     {
         values[offset + 0] = Math.Clamp(color.X, 0.0, 1.0);

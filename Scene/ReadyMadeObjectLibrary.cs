@@ -139,6 +139,7 @@ public static class ReadyMadeObjectLibrary
         };
     }
 
+    /// <summary>Normalizes a primitive name into a lowercase lookup key.</summary>
     private static string NormalizePrimitiveKey(string? value)
     {
         if (string.IsNullOrWhiteSpace(value))
@@ -154,6 +155,7 @@ public static class ReadyMadeObjectLibrary
             .ToLowerInvariant();
     }
 
+    /// <summary>Inserts the named ready-made object into the scene.</summary>
     public static SceneObjectGroup Insert(Scene scene, SceneMaterials materials, string name)
     {
         if (string.IsNullOrWhiteSpace(name))
@@ -283,11 +285,14 @@ public static class ReadyMadeObjectLibrary
         return true;
     }
 
+    /// <summary>Builds a primitive mesh from its authored parameters at the stored origin.</summary>
     private static void BuildParameterizedPrimitive(Scene scene, SceneMaterials materials, string name, IReadOnlyDictionary<string, double> parameters, Material material)
     {
         Vec3 origin = new(Read(parameters, "originX", 0.0), Read(parameters, "originY", 0.0), Read(parameters, "originZ", 3.55));
         string key = name.Trim().ToLowerInvariant();
+        /// <summary>Reads a radius parameter with the given fallback, clamped above zero.</summary>
         double Radius(string parameter = "radius", double fallback = 0.5) => Math.Max(1e-6, Read(parameters, parameter, fallback));
+        /// <summary>Reads a size parameter with the given fallback, clamped above zero.</summary>
         double Size(string parameter, double fallback) => Math.Max(1e-6, Read(parameters, parameter, fallback));
 
         switch (key)
@@ -353,10 +358,12 @@ public static class ReadyMadeObjectLibrary
         }
     }
 
+    /// <summary>Reads a finite parameter value or returns the fallback.</summary>
     private static double Read(IReadOnlyDictionary<string, double> parameters, string key, double fallback) =>
         parameters.TryGetValue(key, out double value) && double.IsFinite(value) ? value : fallback;
 
     // Primitive mesh builders. Every curved primitive is approximated by composite triangles.
+    /// <summary>Adds a plane quad to the scene.</summary>
     private static void BuildPlane(Scene scene, SceneMaterials m)
     {
         AddQuad(scene, new Vec3(-0.85, -0.90, 3.10), new Vec3(0.85, -0.90, 3.10), new Vec3(0.85, -0.90, 4.10), new Vec3(-0.85, -0.90, 4.10), m.WhiteWall);
@@ -466,6 +473,7 @@ public static class ReadyMadeObjectLibrary
     }
 
     // Furniture builders retained from the previous ready-made object library.
+    /// <summary>Adds a dining table with a top and four legs to the scene.</summary>
     private static void BuildDiningTable(Scene scene, SceneMaterials m)
     {
         scene.BeginGroup("Table top");
@@ -595,6 +603,7 @@ public static class ReadyMadeObjectLibrary
         scene.Box(new Vec3(x - 0.06, y0, z - 0.06), new Vec3(x + 0.06, y1, z + 0.06), m.DarkWood);
     }
 
+    /// <summary>Adds one table leg in its own group to the scene.</summary>
     private static void BuildLegGroup(Scene scene, SceneMaterials m, string name, double x, double z, double y0 = -1.25, double y1 = -0.05)
     {
         scene.BeginGroup(name);

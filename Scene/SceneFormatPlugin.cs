@@ -59,6 +59,8 @@ public interface ISceneFormatPlugin
     bool CarriesLights { get; }
     IReadOnlyList<string> ExportVariants { get; }
 
+    /// <summary>Imports a model file into the scene with the given options.</summary>
     ObjLoadResult Import(Scene scene, string filePath, SceneLoadOptions options);
+    /// <summary>Exports the scene to a model file with the given options.</summary>
     void Export(Scene scene, string filePath, SceneSaveOptions options);
 }

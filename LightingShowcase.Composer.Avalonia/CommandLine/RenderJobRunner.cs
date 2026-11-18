@@ -17,6 +17,7 @@ public sealed class RenderJobRunner
 {
     private static readonly SemaphoreSlim RenderGate = new(1, 1);
 
+    /// <summary>Runs the Vulkan device preflight check and returns true when the renderer child argument is present.</summary>
     public static bool TryHandleRendererProcessArgument(string[] args, out int exitCode)
     {
         if (args.Length == 1 && string.Equals(args[0], VeldridVulkanDevicePreflight.ChildArgument, StringComparison.Ordinal))
@@ -29,12 +30,14 @@ public sealed class RenderJobRunner
         return false;
     }
 
+    /// <summary>Disposes the shared Vulkan compute and raster renderer devices.</summary>
     public static void DisposeSharedResources()
     {
         VulkanSceneComputeRenderer.DisposeSharedDevice();
         VulkanRasterRenderer.DisposeSharedDevice();
     }
 
+    /// <summary>Validates the request and runs the render job while holding the exclusive render gate.</summary>
     public async Task<RenderJobResult> RunAsync(RenderRequest request, CancellationToken cancellationToken)
     {
         request.Validate();
@@ -49,6 +52,7 @@ public sealed class RenderJobRunner
         }
     }
 
+    /// <summary>Loads the scene, builds the camera, renders with the requested backend, and saves the output image.</summary>
     private static RenderJobResult RunExclusive(RenderRequest request, CancellationToken cancellationToken)
     {
         Stopwatch stopwatch = Stopwatch.StartNew();
@@ -157,6 +161,7 @@ public sealed class RenderJobRunner
             outputPath);
     }
 
+    /// <summary>Loads a scene from a binary scene file or an importable model file.</summary>
     private static Scene LoadScene(string scenePath)
     {
         PluginBootstrap.EnsureLoaded();
@@ -176,6 +181,7 @@ public sealed class RenderJobRunner
         return scene;
     }
 
+    /// <summary>Builds the render camera from explicit request vectors or scene-bounds defaults.</summary>
     private static CameraDefinition BuildCamera(Scene scene, RenderRequest request)
     {
         Aabb? bounds = ComputeTriangleBounds(scene.Triangles);
@@ -198,6 +204,7 @@ public sealed class RenderJobRunner
         };
     }
 
+    /// <summary>Computes the bounding box of the given triangles, or null when there are none.</summary>
     private static Aabb? ComputeTriangleBounds(IReadOnlyList<Triangle> triangles)
     {
         if (triangles.Count == 0) return null;
@@ -213,6 +220,7 @@ public sealed class RenderJobRunner
         }
         return new Aabb(new Vec3(minX, minY, minZ), new Vec3(maxX, maxY, maxZ));
 
+        /// <summary>Expands the running bounding box to include the given point.</summary>
         void Expand(Vec3 value)
         {
             minX = Math.Min(minX, value.X);
@@ -224,6 +232,7 @@ public sealed class RenderJobRunner
         }
     }
 
+    /// <summary>Resolves the render output path, defaulting to a render image beside the scene file.</summary>
     private static string ResolveOutputPath(string? requested, string scenePath)
     {
         if (!string.IsNullOrWhiteSpace(requested))

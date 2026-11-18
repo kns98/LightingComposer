@@ -26,6 +26,7 @@ internal sealed partial class ComposerSceneSession
 
     private PrimitiveParameterPreviewState? primitiveParameterPreview;
 
+    /// <summary>Returns true when the given object has editable primitive parameters.</summary>
     public bool CanEditPrimitiveParameters(int id)
     {
         sceneGate.Wait();
@@ -39,6 +40,7 @@ internal sealed partial class ComposerSceneSession
         }
     }
 
+    /// <summary>Returns the editable parameter model for the given object.</summary>
     public ComposerPrimitiveParameterModel? GetPrimitiveParameterModel(int id)
     {
         sceneGate.Wait();
@@ -60,6 +62,7 @@ internal sealed partial class ComposerSceneSession
         }
     }
 
+    /// <summary>Begins a parameter edit session and snapshots the current geometry.</summary>
     public ComposerPrimitiveParameterModel? BeginPrimitiveParameterEdit(int id)
     {
         sceneGate.Wait();
@@ -89,6 +92,7 @@ internal sealed partial class ComposerSceneSession
         }
     }
 
+    /// <summary>Previews new parameter values by rebuilding the parametric object.</summary>
     public bool PreviewPrimitiveParameters(int id, IReadOnlyDictionary<string, double> values)
     {
         ArgumentNullException.ThrowIfNull(values);
@@ -146,6 +150,7 @@ internal sealed partial class ComposerSceneSession
         }
     }
 
+    /// <summary>Commits the pending parameter edit for the given object.</summary>
     public bool CommitPrimitiveParameterEdit(int id)
     {
         sceneGate.Wait();
@@ -159,6 +164,7 @@ internal sealed partial class ComposerSceneSession
         }
     }
 
+    /// <summary>Cancels the pending parameter edit and restores the original geometry.</summary>
     public bool CancelPrimitiveParameterEdit(int id)
     {
         sceneGate.Wait();
@@ -193,6 +199,7 @@ internal sealed partial class ComposerSceneSession
         }
     }
 
+    /// <summary>Converts a parametric object into an ordinary mesh.</summary>
     public bool ConvertParametricObjectToMesh(int id)
     {
         sceneGate.Wait();
@@ -227,6 +234,7 @@ internal sealed partial class ComposerSceneSession
         }
     }
 
+    /// <summary>Records the pending parameter edit in the undo history when values changed.</summary>
     private bool CommitPrimitiveParameterEditCore(int id)
     {
         PrimitiveParameterPreviewState? preview = primitiveParameterPreview;
@@ -252,6 +260,7 @@ internal sealed partial class ComposerSceneSession
         return true;
     }
 
+    /// <summary>Tries to resolve the editable primitive backing the given object.</summary>
     private bool TryGetEditablePrimitive(
         int id,
         out SceneObjectGroup group,
@@ -277,6 +286,7 @@ internal sealed partial class ComposerSceneSession
         return true;
     }
 
+    /// <summary>Returns true when two parameter sets hold equal values.</summary>
     private static bool ParameterSetsEqual(
         IReadOnlyCollection<KeyValuePair<string, double>> before,
         IReadOnlyDictionary<string, double> after)

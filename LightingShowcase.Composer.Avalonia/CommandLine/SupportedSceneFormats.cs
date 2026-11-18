@@ -36,11 +36,14 @@ public static class SupportedSceneFormats
         ".lsb"
     };
 
+    /// <summary>Returns true when the path ends with a supported scene extension.</summary>
     public static bool IsSupportedPath(string path) =>
         Extensions.Any(extension => path.EndsWith(extension, StringComparison.OrdinalIgnoreCase));
 
+    /// <summary>Returns true when the path ends with a binary scene extension.</summary>
     public static bool IsBinaryScenePath(string path) =>
         BinarySceneExtensions.Any(extension => path.EndsWith(extension, StringComparison.OrdinalIgnoreCase));
 
+    /// <summary>Returns the supported scene extensions as a comma-separated list.</summary>
     public static string Describe() => string.Join(", ", Extensions);
 }

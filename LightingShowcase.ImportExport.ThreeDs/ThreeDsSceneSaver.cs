@@ -39,6 +39,7 @@ public static class ThreeDsSceneSaver
         public string Name { get; }
         public Material Material { get; }
 
+        /// <summary>Initializes an export material with its chunk name and source material.</summary>
         public ExportMaterial(string name, Material material)
         {
             Name = name;
@@ -51,6 +52,7 @@ public static class ThreeDsSceneSaver
         public Triangle Triangle { get; }
         public string MaterialName { get; }
 
+        /// <summary>Initializes an export triangle with its source triangle and material name.</summary>
         public ExportTriangle(Triangle triangle, string materialName)
         {
             Triangle = triangle;
@@ -58,6 +60,7 @@ public static class ThreeDsSceneSaver
         }
     }
 
+    /// <summary>Saves the scene as a legacy Autodesk 3DS mesh file.</summary>
     public static void Save(Scene scene, string filePath)
     {
         if (scene == null) throw new ArgumentNullException(nameof(scene));
@@ -86,6 +89,7 @@ public static class ThreeDsSceneSaver
         File.WriteAllBytes(fullPath, main);
     }
 
+    /// <summary>Collects world-space triangles per object group with deduplicated materials.</summary>
     private static List<(string Name, List<ExportTriangle> Triangles)> BuildExportObjects(Scene scene, Dictionary<string, ExportMaterial> materials)
     {
         List<(string Name, List<ExportTriangle> Triangles)> objects = new();
@@ -108,6 +112,7 @@ public static class ThreeDsSceneSaver
         return objects;
     }
 
+    /// <summary>Builds a 3DS material chunk with diffuse color and optional texture filename.</summary>
     private static byte[] BuildMaterialChunk(ExportMaterial exportMaterial) =>
         BuildChunk(MaterialBlock, writer =>
         {
@@ -130,6 +135,7 @@ public static class ThreeDsSceneSaver
             }
         });
 
+    /// <summary>Builds a 3DS object chunk with vertex, mapping, and face subchunks.</summary>
     private static byte[] BuildObjectChunk(string objectName, List<ExportTriangle> triangles) =>
         BuildChunk(ObjectBlock, writer =>
         {
@@ -142,6 +148,7 @@ public static class ThreeDsSceneSaver
             }));
         });
 
+    /// <summary>Builds a 3DS vertex list chunk from export triangles.</summary>
     private static byte[] BuildVertexListChunk(List<ExportTriangle> triangles) =>
         BuildChunk(VertexList, writer =>
         {
@@ -154,6 +161,7 @@ public static class ThreeDsSceneSaver
             }
         });
 
+    /// <summary>Builds a 3DS texture-coordinate chunk from export triangle UVs.</summary>
     private static byte[] BuildMappingCoordsChunk(List<ExportTriangle> triangles) =>
         BuildChunk(MappingCoords, writer =>
         {
@@ -166,6 +174,7 @@ public static class ThreeDsSceneSaver
             }
         });
 
+    /// <summary>Builds a 3DS face list chunk with per-material face assignments.</summary>
     private static byte[] BuildFaceListChunk(List<ExportTriangle> triangles) =>
         BuildChunk(FaceList, writer =>
         {
@@ -190,12 +199,14 @@ public static class ThreeDsSceneSaver
                 }));
         });
 
+    /// <summary>Splits a list into consecutive batches of the given size.</summary>
     private static IEnumerable<List<T>> Batch<T>(List<T> values, int size)
     {
         for (int offset = 0; offset < values.Count; offset += size)
             yield return values.GetRange(offset, Math.Min(size, values.Count - offset));
     }
 
+    /// <summary>Builds a length-prefixed 3DS chunk from a payload writer.</summary>
     private static byte[] BuildChunk(ushort id, Action<BinaryWriter> writePayload)
     {
         using MemoryStream payloadStream = new();
@@ -210,6 +221,7 @@ public static class ThreeDsSceneSaver
         return chunkStream.ToArray();
     }
 
+    /// <summary>Returns the deduplicated export name for a material, creating it on first use.</summary>
     private static string MaterialNameFor(Material material, Dictionary<string, ExportMaterial> materials)
     {
         string key = FormattableString.Invariant($"{material.Color.X:G17}|{material.Color.Y:G17}|{material.Color.Z:G17}|{material.Texture?.SourcePath ?? string.Empty}");
@@ -221,8 +233,10 @@ public static class ThreeDsSceneSaver
         return name;
     }
 
+    /// <summary>Writes raw bytes to a binary writer.</summary>
     private static void WriteBytes(BinaryWriter writer, byte[] bytes) => writer.Write(bytes);
 
+    /// <summary>Writes a null-terminated ASCII string, stripping non-printable characters.</summary>
     private static void WriteCString(BinaryWriter writer, string value)
     {
         byte[] bytes = Encoding.ASCII.GetBytes(value.Where(ch => ch >= 32 && ch <= 126).ToArray());
@@ -230,6 +244,7 @@ public static class ThreeDsSceneSaver
         writer.Write((byte)0);
     }
 
+    /// <summary>Writes a vector to a binary writer as three single-precision floats.</summary>
     private static void WriteFloatVec3(BinaryWriter writer, Vec3 value)
     {
         writer.Write((float)value.X);
@@ -237,19 +252,23 @@ public static class ThreeDsSceneSaver
         writer.Write((float)value.Z);
     }
 
+    /// <summary>Writes a UV coordinate to a binary writer as two single-precision floats.</summary>
     private static void WriteFloatVec2(BinaryWriter writer, Vec2 value)
     {
         writer.Write((float)value.U);
         writer.Write((float)value.V);
     }
 
+    /// <summary>Converts a clamped color vector to 8-bit RGB bytes.</summary>
     private static (byte R, byte G, byte B) ToRgb(Vec3 color) =>
         ((byte)Math.Round(Clamp01(color.X) * 255.0),
          (byte)Math.Round(Clamp01(color.Y) * 255.0),
          (byte)Math.Round(Clamp01(color.Z) * 255.0));
 
+    /// <summary>Clamps a value into the 0..1 range.</summary>
     private static double Clamp01(double value) => Math.Max(0.0, Math.Min(1.0, value));
 
+    /// <summary>Sanitizes an object name to short ASCII letters, digits, and separators.</summary>
     private static string SanitizeObjectName(string name)
     {
         if (string.IsNullOrWhiteSpace(name))

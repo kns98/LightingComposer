@@ -11,6 +11,7 @@ public sealed class AssetRegistry
     public List<MaterialDefinition> Materials { get; } = new();
     public List<TextureAsset> Textures { get; } = new();
 
+    /// <summary>Builds a deduplicated material and texture registry from the scene.</summary>
     public static AssetRegistry FromScene(Scene scene)
     {
         if (scene == null) throw new ArgumentNullException(nameof(scene));
@@ -40,6 +41,7 @@ public sealed class AssetRegistry
         return registry;
     }
 
+    /// <summary>Registers a texture in the registry unless it is null or already present.</summary>
     private static void RegisterTexture(AssetRegistry registry, Dictionary<TextureMap, TextureAsset> byRef, TextureMap? texture)
     {
         if (texture == null || byRef.ContainsKey(texture))
@@ -49,6 +51,7 @@ public sealed class AssetRegistry
         registry.Textures.Add(asset);
     }
 
+    /// <summary>Builds a deduplication key from every material property and texture name.</summary>
     private static string MaterialKey(Material material)
     {
         return string.Join("|",

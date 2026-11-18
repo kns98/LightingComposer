@@ -102,6 +102,7 @@ struct Hit
 
 uint rngState;
 
+// Hashes an integer with Wang's integer hash for the shader RNG.
 uint wangHash(uint s)
 {
     s = (s ^ 61u) ^ (s >> 16u);
@@ -112,12 +113,14 @@ uint wangHash(uint s)
     return s;
 }
 
+// Returns the next uniform random value in [0, 1).
 float rand01()
 {
     rngState = wangHash(rngState);
     return float(rngState & 0x00ffffffu) / 16777216.0;
 }
 
+// Tests a ray against a triangle with the Moller-Trumbore algorithm.
 bool intersectTriangle(vec3 ro, vec3 rd, vec3 v0, vec3 v1, vec3 v2, out float t, out vec3 n, out vec2 baryUv)
 {
     const float eps = 0.000001;
@@ -145,6 +148,7 @@ bool intersectTriangle(vec3 ro, vec3 rd, vec3 v0, vec3 v1, vec3 v2, out float t,
     return true;
 }
 
+// Wraps a coordinate for repeat addressing while keeping exact 1.0 on the edge.
 float wrap01PreserveEdge(float value)
 {
     if (isnan(value) || isinf(value)) return 0.0;
@@ -153,6 +157,7 @@ float wrap01PreserveEdge(float value)
     return value < 0.0 ? value + 1.0 : value;
 }
 
+// Unpacks a packed RGBA32 texel into linear float components.
 vec4 unpackTexturePixel(uint packed)
 {
     float r = float(packed & 0xFFu) / 255.0;
@@ -162,6 +167,7 @@ vec4 unpackTexturePixel(uint packed)
     return vec4(r, g, b, a);
 }
 
+// Samples a packed GPU texture at a UV coordinate with bilinear filtering.
 vec4 sampleBaseTexture(uint textureIndex, vec2 uv)
 {
     GpuTextureInfo info = textureInfos[textureIndex];
@@ -189,12 +195,14 @@ vec4 sampleBaseTexture(uint textureIndex, vec2 uv)
     return mix(top, bottom, ty);
 }
 
+// Converts one sRGB channel to linear space.
 float srgbChannelToLinear(float value)
 {
     value = clamp(value, 0.0, 1.0);
     return value <= 0.04045 ? value / 12.92 : pow((value + 0.055) / 1.055, 2.4);
 }
 
+// Converts an sRGB color to linear space.
 vec3 srgbToLinear(vec3 value)
 {
     return vec3(
@@ -203,12 +211,14 @@ vec3 srgbToLinear(vec3 value)
         srgbChannelToLinear(value.b));
 }
 
+// Converts one linear channel to sRGB space.
 float linearChannelToSrgb(float value)
 {
     value = max(value, 0.0);
     return value <= 0.0031308 ? value * 12.92 : 1.055 * pow(value, 1.0 / 2.4) - 0.055;
 }
 
+// Converts a linear color to sRGB space.
 vec3 linearToSrgb(vec3 value)
 {
     return vec3(
@@ -217,6 +227,7 @@ vec3 linearToSrgb(vec3 value)
         linearChannelToSrgb(value.b));
 }
 
+// Applies the Khronos PBR neutral tone mapping operator.
 vec3 pbrNeutralToneMap(vec3 color)
 {
     const float startCompression = 0.76;
@@ -236,6 +247,7 @@ vec3 pbrNeutralToneMap(vec3 color)
     return max(mix(color, newPeak * vec3(1.0), grayMix), vec3(0.0));
 }
 
+// Evaluates the GGX normal distribution term.
 float distributionGgx(float nDotH, float alphaRoughness)
 {
     float a2 = alphaRoughness * alphaRoughness;
@@ -243,6 +255,7 @@ float distributionGgx(float nDotH, float alphaRoughness)
     return a2 / max(PI * f * f, 0.000001);
 }
 
+// Evaluates the correlated Smith GGX visibility term.
 float visibilitySmithGgxCorrelated(float nDotV, float nDotL, float alphaRoughness)
 {
     float a2 = alphaRoughness * alphaRoughness;
@@ -251,32 +264,38 @@ float visibilitySmithGgxCorrelated(float nDotV, float nDotL, float alphaRoughnes
     return 0.5 / max(gv + gl, 0.000001);
 }
 
+// Evaluates Schlick's Fresnel approximation.
 vec3 fresnelSchlick(float vDotH, vec3 f0)
 {
     float factor = pow(1.0 - clamp(vDotH, 0.0, 1.0), 5.0);
     return f0 + (vec3(1.0) - f0) * factor;
 }
 
+// Decodes a stored float into a texture table index.
 int textureIndex(float encoded)
 {
     return int(round(encoded));
 }
 
+// Unpacks the first vertex normal stored in a GPU triangle.
 vec3 triangleNormalA(GpuTriangle tri)
 {
     return vec3(tri.a.w, tri.b.w, tri.c.w);
 }
 
+// Unpacks the second vertex normal stored in a GPU triangle.
 vec3 triangleNormalB(GpuTriangle tri)
 {
     return vec3(tri.uvA.z, tri.uvA.w, tri.uvB.z);
 }
 
+// Unpacks the third vertex normal stored in a GPU triangle.
 vec3 triangleNormalC(GpuTriangle tri)
 {
     return vec3(tri.uvB.w, tri.uvC.z, tri.uvC.w);
 }
 
+// Samples the base color of a triangle at a UV coordinate.
 vec4 triangleBaseColorAt(GpuTriangle tri, vec2 uv)
 {
     vec4 color = tri.baseColor;
@@ -290,6 +309,7 @@ vec4 triangleBaseColorAt(GpuTriangle tri, vec2 uv)
     return clamp(color, vec4(0.0), vec4(64.0));
 }
 
+// Computes the emission of a triangle at a UV coordinate.
 vec3 triangleEmissionAt(GpuTriangle tri, vec2 uv, vec3 linearBaseColor)
 {
     float strength = max(tri.emission.a, 0.0);
@@ -302,6 +322,7 @@ vec3 triangleEmissionAt(GpuTriangle tri, vec2 uv, vec3 linearBaseColor)
     return clamp(source * tri.emission.rgb * strength, vec3(0.0), vec3(64.0));
 }
 
+// Samples metallic and roughness of a triangle at a UV coordinate.
 vec2 triangleMetallicRoughnessAt(GpuTriangle tri, vec2 uv)
 {
     float metallic = clamp(tri.materialParams.x, 0.0, 1.0);
@@ -316,6 +337,7 @@ vec2 triangleMetallicRoughnessAt(GpuTriangle tri, vec2 uv)
     return vec2(clamp(metallic, 0.0, 1.0), clamp(roughness, 0.045, 1.0));
 }
 
+// Samples ambient occlusion of a triangle at a UV coordinate.
 float triangleOcclusionAt(GpuTriangle tri, vec2 uv)
 {
     int index = textureIndex(tri.textureInfo2.z);
@@ -326,6 +348,7 @@ float triangleOcclusionAt(GpuTriangle tri, vec2 uv)
     return mix(1.0, sampled, clamp(tri.textureInfo2.w, 0.0, 1.0));
 }
 
+// Interpolates vertex normals across a triangle from barycentric coordinates.
 vec3 interpolatedNormal(GpuTriangle tri, vec2 bary, vec3 geometricNormal)
 {
     float w = 1.0 - bary.x - bary.y;
@@ -338,6 +361,7 @@ vec3 interpolatedNormal(GpuTriangle tri, vec2 bary, vec3 geometricNormal)
     return normal;
 }
 
+// Perturbs the shading normal with the triangle normal map.
 vec3 applyNormalMap(GpuTriangle tri, vec2 uv, vec3 shadingNormal)
 {
     vec3 normal = normalize(shadingNormal);
@@ -375,6 +399,7 @@ vec3 applyNormalMap(GpuTriangle tri, vec2 uv, vec3 shadingNormal)
     return normalize(tangent * tangentNormal.x + bitangent * tangentNormal.y + normal * tangentNormal.z);
 }
 
+// Tests a ray against an axis-aligned box with the slab method.
 bool intersectAabb(vec3 ro, vec3 invRd, vec3 bmin, vec3 bmax, float maxT)
 {
     vec3 t0 = (bmin - ro) * invRd;
@@ -390,6 +415,7 @@ bool intersectAabb(vec3 ro, vec3 invRd, vec3 bmin, vec3 bmax, float maxT)
     return tmax + 0.00001 >= tmin;
 }
 
+// Traverses the GPU BVH to find the closest ray hit.
 Hit traceClosest(vec3 ro, vec3 rd, float maxT, uint ignoreIndex)
 {
     Hit h;
@@ -488,6 +514,7 @@ Hit traceClosest(vec3 ro, vec3 rd, float maxT, uint ignoreIndex)
     return h;
 }
 
+// Returns the vertical gradient background color for a ray direction.
 vec3 background(vec3 rd)
 {
     vec3 skyTop = max(constants.backgroundTopFov.xyz, vec3(0.0));
@@ -495,6 +522,7 @@ vec3 background(vec3 rd)
     return mix(skyBottom, skyTop, clamp(rd.y * 0.5 + 0.5, 0.0, 1.0));
 }
 
+// Computes inverse-square light falloff with range edge fading.
 float distanceAttenuation(float distance, float range)
 {
     float attenuation = 1.0 / (1.0 + 0.11 * distance * distance);
@@ -504,6 +532,7 @@ float distanceAttenuation(float distance, float range)
     return attenuation * edgeFade * edgeFade;
 }
 
+// Traces a shadow ray and returns the transmitted light fraction.
 float shadowFactor(vec3 point, vec3 normal, vec3 lightDir, float maxDistance, uint sourceIndex)
 {
     vec3 ro = point + normal * 0.004;
@@ -516,6 +545,7 @@ float shadowFactor(vec3 point, vec3 normal, vec3 lightDir, float maxDistance, ui
     return clamp(1.0 - opacity * 0.82, 0.18, 1.0);
 }
 
+// Computes diffuse plus specular PBR lighting from one light.
 vec3 lightContribution(vec3 baseColor, vec3 normal, vec3 view, vec3 lightDir, vec3 lightColor, float strength, float metallic, float roughness)
 {
     float nDotL = max(dot(normal, lightDir), 0.0);
@@ -536,6 +566,7 @@ vec3 lightContribution(vec3 baseColor, vec3 normal, vec3 view, vec3 lightDir, ve
     return (diffuse + specular) * radiance * nDotL;
 }
 
+// Computes the smooth cone falloff of a spot light.
 float spotConeFactor(GpuLight light, vec3 lightToSurface)
 {
     vec3 direction = normalize(light.directionRange.xyz);
@@ -547,6 +578,7 @@ float spotConeFactor(GpuLight light, vec3 lightToSurface)
     return clamp((theta - outer) / max(inner - outer, 0.0001), 0.0, 1.0);
 }
 
+// Evaluates the analytic studio environment radiance.
 vec3 studioEnvironment(vec3 direction)
 {
     direction = normalize(direction);
@@ -559,12 +591,14 @@ vec3 studioEnvironment(vec3 direction)
     return radiance;
 }
 
+// Evaluates the diffuse-only environment ambient.
 vec3 diffuseEnvironment(vec3 normal)
 {
     float skyAmount = clamp(normal.y * 0.5 + 0.5, 0.0, 1.0);
     return mix(vec3(0.055, 0.060, 0.070), vec3(0.42, 0.47, 0.54), skyAmount);
 }
 
+// Computes image-based diffuse and specular environment lighting.
 vec3 environmentLighting(Hit h, vec3 view)
 {
     float nDotV = max(dot(h.normal, view), 0.0001);
@@ -578,6 +612,7 @@ vec3 environmentLighting(Hit h, vec3 view)
     return (diffuse + specular) * h.occlusion * 0.72 * max(constants.lightingOptions.x, 0.0);
 }
 
+// Accumulates direct lighting from every enabled scene light.
 vec3 directLighting(Hit h, vec3 incomingDirection)
 {
     vec3 view = normalize(-incomingDirection);
@@ -627,6 +662,7 @@ vec3 directLighting(Hit h, vec3 incomingDirection)
     return color;
 }
 
+// Generates a cosine-weighted hemisphere direction.
 vec3 cosineHemisphere(vec3 n)
 {
     float r1 = rand01();
@@ -642,6 +678,7 @@ vec3 cosineHemisphere(vec3 n)
     return normalize(tangent * x + bitangent * y + n * z);
 }
 
+// Chooses the next path bounce direction with its throughput weight.
 vec3 nextBounceDirection(vec3 incoming, Hit h, out vec3 bounceWeight)
 {
     vec3 normal = h.normal;
@@ -668,6 +705,7 @@ vec3 nextBounceDirection(vec3 incoming, Hit h, out vec3 bounceWeight)
     return cosineHemisphere(normal);
 }
 
+// Replaces NaN or infinite colors with black and clamps the range.
 vec3 sanitizeColor(vec3 c)
 {
     if (any(isnan(c)) || any(isinf(c)))
@@ -675,6 +713,7 @@ vec3 sanitizeColor(vec3 c)
     return clamp(c, vec3(0.0), vec3(64.0));
 }
 
+// Traces a ray while blending through translucent surfaces.
 vec3 traceDirectTransparent(vec3 ro, vec3 rd)
 {
     vec3 result = vec3(0.0);
@@ -714,6 +753,7 @@ vec3 traceDirectTransparent(vec3 ro, vec3 rd)
     return sanitizeColor(result);
 }
 
+// Traces a full path with emission, direct light, and indirect bounces.
 vec3 tracePath(vec3 ro, vec3 rd, uint maxBounces)
 {
     if (maxBounces == 0u)
@@ -753,6 +793,7 @@ vec3 tracePath(vec3 ro, vec3 rd, uint maxBounces)
     return radiance;
 }
 
+// Applies exposure, tone mapping, and sRGB conversion, then packs RGBA8.
 uint packColor(vec3 c)
 {
     c = sanitizeColor(c) * max(constants.backgroundBottomExposure.w, 0.01);
@@ -764,6 +805,7 @@ uint packColor(vec3 c)
     return r | (g << 8) | (b << 16) | (255u << 24);
 }
 
+// Renders one pixel per invocation with multi-sample accumulation.
 void main()
 {
     uint x = gl_GlobalInvocationID.x;

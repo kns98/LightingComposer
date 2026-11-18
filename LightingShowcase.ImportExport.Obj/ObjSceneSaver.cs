@@ -13,6 +13,7 @@ namespace LightingShowcase.ImportExport.Obj;
 /// <summary>Exports visible scene geometry as Wavefront OBJ with a companion MTL file.</summary>
 public static class ObjSceneSaver
 {
+    /// <summary>Saves visible scene geometry as Wavefront OBJ with a companion material file.</summary>
     public static void Save(Scene scene, string filePath, SceneSaveOptions? options = null)
     {
         if (scene == null) throw new ArgumentNullException(nameof(scene));
@@ -75,12 +76,15 @@ public static class ObjSceneSaver
 
     private readonly record struct MaterialKey(double R, double G, double B, TextureMap? Texture)
     {
+        /// <summary>Builds a material key from a material using rounded color values.</summary>
         public static MaterialKey FromMaterial(Material material) =>
             new(Round(material.Color.X), Round(material.Color.Y), Round(material.Color.Z), material.Texture);
 
+        /// <summary>Rounds a color component for material key comparison.</summary>
         private static double Round(double value) => Math.Round(value, 6);
     }
 
+    /// <summary>Assigns sequential material names to the distinct materials in the triangles.</summary>
     private static Dictionary<MaterialKey, string> BuildMaterialNames(List<Triangle> triangles)
     {
         Dictionary<MaterialKey, string> names = new();
@@ -94,6 +98,7 @@ public static class ObjSceneSaver
         return names;
     }
 
+    /// <summary>Writes the companion MTL file with colors and texture references.</summary>
     private static void WriteMaterialFile(string mtlPath, Dictionary<MaterialKey, string> materialNames, string objDirectory, Func<TextureMap, string?>? texturePathResolver)
     {
         using StreamWriter writer = new(mtlPath, false, new UTF8Encoding(false));
@@ -127,12 +132,15 @@ public static class ObjSceneSaver
         }
     }
 
+    /// <summary>Writes one OBJ vertex line for the given position.</summary>
     private static void WriteVertex(StreamWriter writer, Vec3 value) =>
         writer.WriteLine(FormattableString.Invariant($"v {value.X:G17} {value.Y:G17} {value.Z:G17}"));
 
+    /// <summary>Writes one OBJ texture-coordinate line for the given UV.</summary>
     private static void WriteTexCoord(StreamWriter writer, Vec2 value) =>
         writer.WriteLine(FormattableString.Invariant($"vt {value.U:G17} {value.V:G17}"));
 
+    /// <summary>Replaces control characters in an object name for OBJ output.</summary>
     private static string SanitizeName(string value)
     {
         if (string.IsNullOrWhiteSpace(value)) return "Object";

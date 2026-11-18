@@ -14,12 +14,14 @@ namespace LightingShowcase.Composer;
 
 internal sealed class App : Application
 {
+    /// <summary>Applies the dark Fluent theme to the composer application.</summary>
     public override void Initialize()
     {
         RequestedThemeVariant = ThemeVariant.Dark;
         Styles.Add(new FluentTheme());
     }
 
+    /// <summary>Opens the main composer window when desktop startup completes.</summary>
     public override void OnFrameworkInitializationCompleted()
     {
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)

@@ -94,6 +94,7 @@ internal static class MeshSimplifier
         return result;
     }
 
+    /// <summary>Simplifies triangles by clustering vertices into a spatial grid of the given cell size.</summary>
     private static List<Triangle> SimplifyWithCellSize(IReadOnlyList<Triangle> triangles, Vec3 min, double cellSize)
     {
         Dictionary<CellKey, ClusterAccumulator> clusters = new(triangles.Count);
@@ -153,6 +154,7 @@ internal static class MeshSimplifier
         return result;
     }
 
+    /// <summary>Accumulates a vertex position and UV into its spatial cluster.</summary>
     private static void AddVertex(Dictionary<CellKey, ClusterAccumulator> clusters, Vec3 p, Vec2 uv, Vec3 min, double cellSize)
     {
         CellKey key = ToCell(p, min, cellSize);
@@ -168,6 +170,7 @@ internal static class MeshSimplifier
         clusters[key] = c;
     }
 
+    /// <summary>Maps a point to its spatial grid cell key.</summary>
     private static CellKey ToCell(Vec3 p, Vec3 min, double cellSize)
     {
         return new CellKey(
@@ -176,6 +179,7 @@ internal static class MeshSimplifier
             (int)Math.Floor((p.Z - min.Z) / cellSize));
     }
 
+    /// <summary>Computes the minimum and maximum vertex bounds of the triangles.</summary>
     private static void GetVertexBounds(IReadOnlyList<Triangle> triangles, out Vec3 min, out Vec3 max)
     {
         double minX = double.PositiveInfinity, minY = double.PositiveInfinity, minZ = double.PositiveInfinity;
@@ -191,6 +195,7 @@ internal static class MeshSimplifier
         min = new Vec3(minX, minY, minZ);
         max = new Vec3(maxX, maxY, maxZ);
 
+        /// <summary>Expands the running bounds to include a point.</summary>
         void Include(Vec3 p)
         {
             minX = Math.Min(minX, p.X); minY = Math.Min(minY, p.Y); minZ = Math.Min(minZ, p.Z);
@@ -198,6 +203,7 @@ internal static class MeshSimplifier
         }
     }
 
+    /// <summary>Computes the squared area of a triangle.</summary>
     private static double TriangleAreaSquared(Vec3 a, Vec3 b, Vec3 c)
     {
         Vec3 cross = (b - a).Cross(c - a);
@@ -224,6 +230,7 @@ internal static class MeshSimplifier
     /// </summary>
     private readonly record struct TriangleKey(CellKey A, CellKey B, CellKey C)
     {
+        /// <summary>Creates an orientation-independent face key from three sorted cell keys.</summary>
         public static TriangleKey From(CellKey a, CellKey b, CellKey c)
         {
             CellKey[] keys = new[] { a, b, c };
@@ -231,6 +238,7 @@ internal static class MeshSimplifier
             return new TriangleKey(keys[0], keys[1], keys[2]);
         }
 
+        /// <summary>Compares two cell keys by X, then Y, then Z.</summary>
         private static int Compare(CellKey left, CellKey right)
         {
             int x = left.X.CompareTo(right.X);

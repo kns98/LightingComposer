@@ -13,6 +13,7 @@ namespace LightingShowcase.Composer;
 /// <summary>Headless end-to-end regression test for baked transforms and hierarchy.</summary>
 internal static class TransformRegressionTest
 {
+    /// <summary>Runs the headless baked-transform regression test and returns its exit code.</summary>
     public static int Run()
     {
         string temporaryDirectory = Path.Combine(Path.GetTempPath(), "LightingShowcaseComposerTests", Guid.NewGuid().ToString("N"));
@@ -81,6 +82,7 @@ internal static class TransformRegressionTest
         }
     }
 
+    /// <summary>Returns true when two vectors match within tolerance.</summary>
     private static bool Near(Vec3 left, Vec3 right)
     {
         const double tolerance = 1e-7;
@@ -89,6 +91,7 @@ internal static class TransformRegressionTest
                Math.Abs(left.Z - right.Z) <= tolerance;
     }
 
+    /// <summary>Throws when the actual vector differs from the expected one.</summary>
     private static void AssertNear(Vec3 actual, Vec3 expected, string operation)
     {
         if (!Near(actual, expected))
@@ -97,6 +100,7 @@ internal static class TransformRegressionTest
                 $"got ({actual.X}, {actual.Y}, {actual.Z}).");
     }
 
+    /// <summary>Writes the given message to stderr and returns a failure exit code.</summary>
     private static int Fail(string message)
     {
         Console.Error.WriteLine(message);

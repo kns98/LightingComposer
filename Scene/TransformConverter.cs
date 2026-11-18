@@ -14,6 +14,7 @@ public static class TransformConverter
     public static readonly Vec3 WorldForward = new(0, 0, 1);
     public static readonly Vec3 WorldRight = new(1, 0, 0);
 
+    /// <summary>Replaces near-zero scale components with one.</summary>
     public static Vec3 SanitizeScale(Vec3 scale)
     {
         return new Vec3(
@@ -22,6 +23,7 @@ public static class TransformConverter
             Math.Abs(scale.Z) < 1e-8 ? 1.0 : scale.Z);
     }
 
+    /// <summary>Rotates a point by Euler angles applied in X, Y, then Z order.</summary>
     public static Vec3 RotateEuler(Vec3 point, Vec3 rotation)
     {
         double cx = Math.Cos(rotation.X), sx = Math.Sin(rotation.X);
@@ -35,6 +37,7 @@ public static class TransformConverter
         return p;
     }
 
+    /// <summary>Applies scale, rotation, and translation to a point about a pivot.</summary>
     public static Vec3 ApplySrt(Vec3 point, Vec3 pivot, Vec3 position, Vec3 rotation, Vec3 scale)
     {
         Vec3 q = point - pivot;
@@ -92,7 +95,10 @@ public static class TransformConverter
         return p;
     }
 
+    /// <summary>Converts a right-handed Z-forward vector to the canonical frame.</summary>
     public static Vec3 FromRightHandedZForwardToCanonical(Vec3 value) => new(value.X, value.Y, value.Z);
+    /// <summary>Converts a Z-up vector to canonical Y-up space.</summary>
     public static Vec3 FromZUpToCanonicalYUp(Vec3 value) => new(value.X, value.Z, -value.Y);
+    /// <summary>Mirrors the given vector by negating its X component.</summary>
     public static Vec3 MirrorX(Vec3 value) => new(-value.X, value.Y, value.Z);
 }

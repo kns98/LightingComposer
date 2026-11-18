@@ -20,6 +20,7 @@ public sealed class PropXmlSceneFormatPlugin : ISceneFormatPlugin
     public bool CarriesLights => true;
     public IReadOnlyList<string> ExportVariants => Array.Empty<string>();
 
+    /// <summary>Imports a prop XML file into the scene and reports the triangle count.</summary>
     public ObjLoadResult Import(Scene scene, string filePath, SceneLoadOptions options)
     {
         PropXmlSceneLoader.LoadIntoScene(scene, filePath);
@@ -28,5 +29,6 @@ public sealed class PropXmlSceneFormatPlugin : ISceneFormatPlugin
         return new ObjLoadResult(filePath, 0, triangles, triangles);
     }
 
+    /// <summary>Exports the scene to a prop XML file.</summary>
     public void Export(Scene scene, string filePath, SceneSaveOptions options) => PropXmlSceneSaver.Save(scene, filePath, options);
 }

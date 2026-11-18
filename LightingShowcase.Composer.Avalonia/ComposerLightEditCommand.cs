@@ -20,6 +20,7 @@ internal sealed class LightCollectionEditCommand : IComposerEditCommand, IFullRe
     private readonly SceneLight[] before;
     private readonly SceneLight[] after;
 
+    /// <summary>Snapshots the before and after light collections for an undoable edit.</summary>
     public LightCollectionEditCommand(string description, IEnumerable<SceneLight> before, IEnumerable<SceneLight> after)
     {
         Description = description;
@@ -31,9 +32,12 @@ internal sealed class LightCollectionEditCommand : IComposerEditCommand, IFullRe
     public int? UndoSelectionId => null;
     public int? RedoSelectionId => null;
 
+    /// <summary>Restores the light collection to its before snapshot.</summary>
     public void Undo(Scene scene) => Restore(scene, before);
+    /// <summary>Restores the light collection to its after snapshot.</summary>
     public void Redo(Scene scene) => Restore(scene, after);
 
+    /// <summary>Replaces the scene light collection with clones of the given snapshot.</summary>
     private static void Restore(Scene scene, IReadOnlyList<SceneLight> snapshot)
     {
         scene.Lights.Clear();
@@ -41,6 +45,7 @@ internal sealed class LightCollectionEditCommand : IComposerEditCommand, IFullRe
             scene.Lights.Add(Clone(light));
     }
 
+    /// <summary>Creates an independent copy of the given scene light.</summary>
     internal static SceneLight Clone(SceneLight source) => new(
         source.Id,
         source.Position,

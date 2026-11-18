@@ -28,6 +28,7 @@ public abstract class ReadyMadeObjectDefinitionBase : ISceneObjectDefinition
         "X/Y/Z scale updates width/height/depth while preserving the authored multi-part geometry",
         "stored as object rotation");
 
+    /// <summary>Creates default origin and size parameters from the authored part bounds.</summary>
     public Dictionary<string, double> CreateDefaultParameters()
     {
         List<EmittedTriangle> source = CaptureSource(new SceneMaterials());
@@ -39,12 +40,14 @@ public abstract class ReadyMadeObjectDefinitionBase : ISceneObjectDefinition
         return CreateParameters((min + max) * 0.5, Math.Max(1e-6, size.X), Math.Max(1e-6, size.Y), Math.Max(1e-6, size.Z));
     }
 
+    /// <summary>Creates origin and size parameters centered on the given bounds.</summary>
     public Dictionary<string, double> CreateParametersFromBounds(Aabb bounds)
     {
         Vec3 size = bounds.Max - bounds.Min;
         return CreateParameters((bounds.Min + bounds.Max) * 0.5, Math.Max(1e-6, size.X), Math.Max(1e-6, size.Y), Math.Max(1e-6, size.Z));
     }
 
+    /// <summary>Builds the object triangles by remapping the authored parts into the target origin and size.</summary>
     public void Build(SceneMaterials materials, IReadOnlyDictionary<string, double> parameters, Material material, AddTriangleCallback addTriangle)
     {
         if (materials == null) throw new ArgumentNullException(nameof(materials));
@@ -77,6 +80,7 @@ public abstract class ReadyMadeObjectDefinitionBase : ISceneObjectDefinition
         }
     }
 
+    /// <summary>Moves the object origin parameters by the given delta.</summary>
     public virtual bool ApplyMoveDelta(IDictionary<string, double> parameters, Vec3 delta)
     {
         bool changed = false;
@@ -86,6 +90,7 @@ public abstract class ReadyMadeObjectDefinitionBase : ISceneObjectDefinition
         return changed;
     }
 
+    /// <summary>Scales the size parameter for the given axis by the given factor.</summary>
     public virtual bool ApplyScaleDelta(IDictionary<string, double> parameters, char axis, double factor)
     {
         factor = SanitizeScale(factor);
@@ -101,6 +106,7 @@ public abstract class ReadyMadeObjectDefinitionBase : ISceneObjectDefinition
         };
     }
 
+    /// <summary>Applies the given position and scale to the object parameters.</summary>
     public virtual bool ApplyPendingTransform(IDictionary<string, double> parameters, Vec3 position, Vec3 scale)
     {
         bool changed = ApplyMoveDelta(parameters, position);
@@ -110,12 +116,15 @@ public abstract class ReadyMadeObjectDefinitionBase : ISceneObjectDefinition
         return changed;
     }
 
+    /// <summary>Creates the authored box parts for this object.</summary>
     protected abstract IReadOnlyList<BoxPart> CreateParts(SceneMaterials materials);
 
     protected virtual string YSizeParameter => "height";
 
+    /// <summary>Creates a box part from the given corners and material.</summary>
     protected static BoxPart Box(Vec3 min, Vec3 max, Material material) => new(min, max, material);
 
+    /// <summary>Creates an origin and size parameter dictionary from the given values.</summary>
     private Dictionary<string, double> CreateParameters(Vec3 origin, double width, double height, double depth) =>
         new(StringComparer.OrdinalIgnoreCase)
         {
@@ -127,6 +136,7 @@ public abstract class ReadyMadeObjectDefinitionBase : ISceneObjectDefinition
             ["depth"] = depth
         };
 
+    /// <summary>Captures the authored part triangles into a source triangle list.</summary>
     private List<EmittedTriangle> CaptureSource(SceneMaterials materials)
     {
         List<EmittedTriangle> triangles = new();
@@ -135,6 +145,7 @@ public abstract class ReadyMadeObjectDefinitionBase : ISceneObjectDefinition
         return triangles;
     }
 
+    /// <summary>Computes the minimum and maximum corners over the given triangles.</summary>
     private static (Vec3 Min, Vec3 Max) Bounds(IEnumerable<EmittedTriangle> triangles)
     {
         bool any = false;
@@ -147,6 +158,7 @@ public abstract class ReadyMadeObjectDefinitionBase : ISceneObjectDefinition
         }
         return (new Vec3(minX, minY, minZ), new Vec3(maxX, maxY, maxZ));
 
+        /// <summary>Expands the running bounds to include the given point.</summary>
         void Accumulate(Vec3 p)
         {
             if (!any)
@@ -167,6 +179,7 @@ public abstract class ReadyMadeObjectDefinitionBase : ISceneObjectDefinition
         }
     }
 
+    /// <summary>Remaps a source point into the target box using normalized coordinates.</summary>
     private static Vec3 Remap(Vec3 point, Vec3 sourceMin, Vec3 sourceSize, Vec3 targetMin, Vec3 targetSize)
     {
         double tx = sourceSize.X <= 1e-9 ? 0.5 : (point.X - sourceMin.X) / sourceSize.X;
@@ -175,6 +188,7 @@ public abstract class ReadyMadeObjectDefinitionBase : ISceneObjectDefinition
         return new Vec3(targetMin.X + tx * targetSize.X, targetMin.Y + ty * targetSize.Y, targetMin.Z + tz * targetSize.Z);
     }
 
+    /// <summary>Adds the given delta to the named parameter and returns true when it changed.</summary>
     protected static bool Add(IDictionary<string, double> parameters, string key, double delta)
     {
         if (Math.Abs(delta) <= 1e-12)
@@ -183,6 +197,7 @@ public abstract class ReadyMadeObjectDefinitionBase : ISceneObjectDefinition
         return true;
     }
 
+    /// <summary>Multiplies the named parameter by the given factor and returns true when it changed.</summary>
     protected static bool Multiply(IDictionary<string, double> parameters, string key, double factor)
     {
         factor = SanitizeScale(factor);
@@ -192,18 +207,23 @@ public abstract class ReadyMadeObjectDefinitionBase : ISceneObjectDefinition
         return true;
     }
 
+    /// <summary>Reads the named parameter or returns the fallback when it is missing or not finite.</summary>
     protected static double Read(IReadOnlyDictionary<string, double> parameters, string key, double fallback) =>
         parameters.TryGetValue(key, out double value) && double.IsFinite(value) ? value : fallback;
 
+    /// <summary>Reads the named parameter or returns the fallback when it is missing or not finite.</summary>
     protected static double Read(IDictionary<string, double> parameters, string key, double fallback) =>
         parameters.TryGetValue(key, out double value) && double.IsFinite(value) ? value : fallback;
 
+    /// <summary>Reads the named size parameter clamped to a positive minimum.</summary>
     protected static double Size(IReadOnlyDictionary<string, double> parameters, string key, double fallback) =>
         Math.Max(1e-6, Read(parameters, key, fallback));
 
+    /// <summary>Returns the absolute scale factor, or 1.0 when it is not a usable finite value.</summary>
     protected static double SanitizeScale(double value) =>
         double.IsFinite(value) && Math.Abs(value) > 1e-9 ? Math.Abs(value) : 1.0;
 
+    /// <summary>Emits the six faces of the given box part as triangles.</summary>
     private static void EmitBox(BoxPart part, AddTriangleCallback addTriangle)
     {
         double x0 = part.Min.X, y0 = part.Min.Y, z0 = part.Min.Z, x1 = part.Max.X, y1 = part.Max.Y, z1 = part.Max.Z;
@@ -217,6 +237,7 @@ public abstract class ReadyMadeObjectDefinitionBase : ISceneObjectDefinition
         AddQuad(addTriangle, p000, p100, p101, p001, part.Material);
     }
 
+    /// <summary>Emits the given quad as two triangles with unit UVs.</summary>
     private static void AddQuad(AddTriangleCallback addTriangle, Vec3 a, Vec3 b, Vec3 c, Vec3 d, Material material)
     {
         addTriangle(a, b, c, new Vec2(0, 0), new Vec2(1, 0), new Vec2(1, 1), material);
@@ -228,6 +249,7 @@ public sealed class DiningTableObject : ReadyMadeObjectDefinitionBase
 {
     public override string Kind => "diningTable";
     public override string DisplayName => "Dining Table";
+    /// <summary>Creates the tabletop and leg parts of the dining table.</summary>
     protected override IReadOnlyList<BoxPart> CreateParts(SceneMaterials materials) => new[]
     {
         Box(new Vec3(-1.20, -0.45, 3.00), new Vec3(1.20, -0.28, 4.10), materials.Wood),
@@ -242,6 +264,7 @@ public sealed class CoffeeTableObject : ReadyMadeObjectDefinitionBase
 {
     public override string Kind => "coffeeTable";
     public override string DisplayName => "Coffee Table";
+    /// <summary>Creates the tabletop and leg parts of the coffee table.</summary>
     protected override IReadOnlyList<BoxPart> CreateParts(SceneMaterials materials) => new[]
     {
         Box(new Vec3(-0.75, -0.68, 3.15), new Vec3(0.75, -0.50, 3.95), materials.Wood),
@@ -256,6 +279,7 @@ public sealed class ChairObject : ReadyMadeObjectDefinitionBase
 {
     public override string Kind => "chair";
     public override string DisplayName => "Chair";
+    /// <summary>Creates the seat, backrest, and leg parts of the chair.</summary>
     protected override IReadOnlyList<BoxPart> CreateParts(SceneMaterials materials) => new[]
     {
         Box(new Vec3(-0.42, -0.78, 3.10), new Vec3(0.42, -0.60, 3.88), materials.Wood),
@@ -271,6 +295,7 @@ public sealed class SofaObject : ReadyMadeObjectDefinitionBase
 {
     public override string Kind => "sofa";
     public override string DisplayName => "Sofa";
+    /// <summary>Creates the seat, back, arm, and cushion parts of the sofa.</summary>
     protected override IReadOnlyList<BoxPart> CreateParts(SceneMaterials materials) => new[]
     {
         Box(new Vec3(-1.35, -1.18, 3.08), new Vec3(1.35, -0.70, 3.86), materials.Sofa),
@@ -286,6 +311,7 @@ public sealed class BedObject : ReadyMadeObjectDefinitionBase
 {
     public override string Kind => "bed";
     public override string DisplayName => "Bed";
+    /// <summary>Creates the frame, headboard, and pillow parts of the bed.</summary>
     protected override IReadOnlyList<BoxPart> CreateParts(SceneMaterials materials) => new[]
     {
         Box(new Vec3(-1.20, -1.10, 2.80), new Vec3(1.20, -0.70, 4.50), materials.Sofa),
@@ -299,6 +325,7 @@ public sealed class BookshelfObject : ReadyMadeObjectDefinitionBase
 {
     public override string Kind => "bookshelf";
     public override string DisplayName => "Bookshelf";
+    /// <summary>Creates the case, shelf, and book parts of the bookshelf.</summary>
     protected override IReadOnlyList<BoxPart> CreateParts(SceneMaterials materials) => new[]
     {
         Box(new Vec3(-0.95, -1.25, 3.85), new Vec3(0.95, 0.75, 4.05), materials.Wood),
@@ -317,6 +344,7 @@ public sealed class StorageCabinetObject : ReadyMadeObjectDefinitionBase
 {
     public override string Kind => "storageCabinet";
     public override string DisplayName => "Storage Cabinet";
+    /// <summary>Creates the cabinet body, divider, and handle parts of the storage cabinet.</summary>
     protected override IReadOnlyList<BoxPart> CreateParts(SceneMaterials materials) => new[]
     {
         Box(new Vec3(-0.70, -1.20, 3.12), new Vec3(0.70, 0.18, 3.92), materials.Wood),
@@ -331,6 +359,7 @@ public sealed class TvScreenObject : ReadyMadeObjectDefinitionBase
 {
     public override string Kind => "tvScreen";
     public override string DisplayName => "TV / Screen";
+    /// <summary>Creates the frame and screen parts of the television.</summary>
     protected override IReadOnlyList<BoxPart> CreateParts(SceneMaterials materials) => new[]
     {
         Box(new Vec3(-0.95, -0.45, 3.86), new Vec3(0.95, 0.80, 3.91), materials.ScreenFrame),
@@ -342,6 +371,7 @@ public sealed class FloorLampObject : ReadyMadeObjectDefinitionBase
 {
     public override string Kind => "floorLamp";
     public override string DisplayName => "Floor Lamp";
+    /// <summary>Creates the base, pole, and shade parts of the floor lamp.</summary>
     protected override IReadOnlyList<BoxPart> CreateParts(SceneMaterials materials) => new[]
     {
         Box(new Vec3(-0.22, -1.30, 3.33), new Vec3(0.22, -1.24, 3.77), materials.DarkWood),
@@ -354,6 +384,7 @@ public sealed class PottedPlantObject : ReadyMadeObjectDefinitionBase
 {
     public override string Kind => "pottedPlant";
     public override string DisplayName => "Potted Plant";
+    /// <summary>Creates the pot and foliage parts of the potted plant.</summary>
     protected override IReadOnlyList<BoxPart> CreateParts(SceneMaterials materials) => new[]
     {
         Box(new Vec3(-0.28, -1.22, 3.28), new Vec3(0.28, -0.78, 3.82), materials.Pot),
@@ -368,6 +399,7 @@ public sealed class RugObject : ReadyMadeObjectDefinitionBase
     public override string DisplayName => "Rug";
     protected override string YSizeParameter => "thickness";
     public override PrimitiveGizmoEditMetadata GizmoMetadata { get; } = new("Rug", true, "X/Z scale updates width/depth; Y scale updates thickness", "stored as object rotation");
+    /// <summary>Creates the rug slab part.</summary>
     protected override IReadOnlyList<BoxPart> CreateParts(SceneMaterials materials) => new[]
     {
         Box(new Vec3(-1.45, -1.36, 2.90), new Vec3(1.45, -1.31, 4.30), materials.Rug)
@@ -380,6 +412,7 @@ public sealed class WallPanelObject : ReadyMadeObjectDefinitionBase
     public override string DisplayName => "Wall Panel";
     protected override string YSizeParameter => "thickness";
     public override PrimitiveGizmoEditMetadata GizmoMetadata { get; } = new("Wall Panel", true, "X/Z scale updates width/depth; Y scale updates thickness", "stored as object rotation");
+    /// <summary>Creates the wall panel slab part.</summary>
     protected override IReadOnlyList<BoxPart> CreateParts(SceneMaterials materials) => new[]
     {
         Box(new Vec3(-1.10, -0.95, 4.04), new Vec3(1.10, 0.65, 4.10), materials.BlueWall)
@@ -390,6 +423,7 @@ public sealed class PedestalObject : ReadyMadeObjectDefinitionBase
 {
     public override string Kind => "pedestal";
     public override string DisplayName => "Pedestal";
+    /// <summary>Creates the column and cap parts of the pedestal.</summary>
     protected override IReadOnlyList<BoxPart> CreateParts(SceneMaterials materials) => new[]
     {
         Box(new Vec3(-0.42, -1.35, 3.20), new Vec3(0.42, -0.10, 4.02), materials.Ceiling),

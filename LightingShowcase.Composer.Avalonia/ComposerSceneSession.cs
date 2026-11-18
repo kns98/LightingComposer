@@ -55,6 +55,7 @@ internal sealed partial class ComposerSceneSession : IDisposable
     private IReadOnlyList<Triangle> selectedOverlayTriangles = Array.Empty<Triangle>();
     private const int MaximumCachedSelectionTriangles = 256;
 
+    /// <summary>Creates a new session with an empty scene and default lights.</summary>
     public ComposerSceneSession()
     {
         PluginBootstrap.EnsureLoaded();
@@ -76,8 +77,10 @@ internal sealed partial class ComposerSceneSession : IDisposable
     public string LastGeometryRefreshDetails { get; private set; } = string.Empty;
     public string? LastImportDetails { get; private set; }
 
+    /// <summary>Returns the object hierarchy rows for the current scene.</summary>
     public IReadOnlyList<SceneObjectInfo> GetObjectInfos() => document.GetObjectInfos();
 
+    /// <summary>Returns a labeled page of local triangles for the given group.</summary>
     public IReadOnlyList<ComposerTriangleInfo> GetTriangleInfos(int groupId, int offset, int count)
     {
         sceneGate.Wait();
@@ -138,6 +141,7 @@ internal sealed partial class ComposerSceneSession : IDisposable
         }
     }
 
+    /// <summary>Returns the number of logical faces in the given group.</summary>
     public int GetFaceCount(int groupId)
     {
         sceneGate.Wait();
@@ -154,6 +158,7 @@ internal sealed partial class ComposerSceneSession : IDisposable
         }
     }
 
+    /// <summary>Returns the name, visibility, transform, and ancestry of the given object.</summary>
     public ComposerObjectState? GetObjectState(int id)
     {
         sceneGate.Wait();
@@ -181,6 +186,7 @@ internal sealed partial class ComposerSceneSession : IDisposable
 
     public int? SelectedObjectId => selectedObjectId;
 
+    /// <summary>Returns the current gizmo transform state for the selected object.</summary>
     public ComposerObjectState? GetTransformTargetState(int selectedId)
     {
         sceneGate.Wait();
@@ -206,6 +212,7 @@ internal sealed partial class ComposerSceneSession : IDisposable
         }
     }
 
+    /// <summary>Returns the world-space bounds of the selected object.</summary>
     public Aabb? GetTransformTargetBounds(int selectedId)
     {
         sceneGate.Wait();
@@ -219,6 +226,7 @@ internal sealed partial class ComposerSceneSession : IDisposable
         }
     }
 
+    /// <summary>Returns geometry evidence including world and local hashes for the given object.</summary>
     public ComposerModelEvidence? GetModelEvidence(int objectId)
     {
         sceneGate.Wait();
@@ -246,6 +254,7 @@ internal sealed partial class ComposerSceneSession : IDisposable
         }
     }
 
+    /// <summary>Captures the current scene cache stamp for tests.</summary>
     internal SceneCacheStamp CaptureSceneCacheStampForTests()
     {
         sceneGate.Wait();
@@ -259,6 +268,7 @@ internal sealed partial class ComposerSceneSession : IDisposable
         }
     }
 
+    /// <summary>Selects the given object and returns true when the selection changed.</summary>
     public bool SetSelectedObject(int? id)
     {
         sceneGate.Wait();
@@ -329,6 +339,7 @@ internal sealed partial class ComposerSceneSession : IDisposable
         }
     }
 
+    /// <summary>Replaces the current scene with an empty scene and clears the edit history.</summary>
     public void NewScene(CancellationToken cancellationToken)
     {
         sceneGate.Wait(cancellationToken);
@@ -349,6 +360,7 @@ internal sealed partial class ComposerSceneSession : IDisposable
         }
     }
 
+    /// <summary>Loads a scene or model file into the session, wrapping imported roots in one parent node.</summary>
     public void Load(string inputPath, CancellationToken cancellationToken)
     {
         string path = ResolveScenePath(inputPath);
@@ -399,6 +411,7 @@ internal sealed partial class ComposerSceneSession : IDisposable
         }
     }
 
+    /// <summary>Imports a model file into the current scene and returns the new wrapper id.</summary>
     public int Insert(string inputPath, CancellationToken cancellationToken)
     {
         string path = ResolveInsertPath(inputPath);
@@ -445,6 +458,7 @@ internal sealed partial class ComposerSceneSession : IDisposable
         }
     }
 
+    /// <summary>Saves the scene to the given path, appending the scene extension when missing.</summary>
     public void Save(string outputPath, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(outputPath))
@@ -466,6 +480,7 @@ internal sealed partial class ComposerSceneSession : IDisposable
         }
     }
 
+    /// <summary>Exports the current scene to the given directory using the given format.</summary>
     public SceneExportPackageResult ExportPackage(
         string parentDirectory,
         SceneExportFormat format,
@@ -497,6 +512,7 @@ internal sealed partial class ComposerSceneSession : IDisposable
         }
     }
 
+    /// <summary>Bakes the given name, visibility, and transform into the object and records one undo step.</summary>
     public bool UpdateObject(
         int id,
         string name,
@@ -632,6 +648,7 @@ internal sealed partial class ComposerSceneSession : IDisposable
         }
     }
 
+    /// <summary>Resets the pending gizmo transform on the given object to identity.</summary>
     public bool CancelPendingTransform(int selectedId)
     {
         sceneGate.Wait();
@@ -723,6 +740,7 @@ internal sealed partial class ComposerSceneSession : IDisposable
         }
     }
 
+    /// <summary>Resets the transform of the given object to identity and refreshes the render caches.</summary>
     public bool ResetObjectTransform(int id)
     {
         sceneGate.Wait();
@@ -747,6 +765,7 @@ internal sealed partial class ComposerSceneSession : IDisposable
         }
     }
 
+    /// <summary>Returns true when the given objects can be grouped.</summary>
     public bool CanGroupObjects(IEnumerable<int> ids)
     {
         sceneGate.Wait();
@@ -760,6 +779,7 @@ internal sealed partial class ComposerSceneSession : IDisposable
         }
     }
 
+    /// <summary>Groups the given objects under a new parent and returns its id.</summary>
     public int? GroupObjects(IEnumerable<int> ids, string name = "Group")
     {
         int[] selectedIds = ids.Distinct().ToArray();
@@ -789,6 +809,7 @@ internal sealed partial class ComposerSceneSession : IDisposable
         }
     }
 
+    /// <summary>Returns true when any of the given objects can be ungrouped.</summary>
     public bool CanUngroupObjects(IEnumerable<int> ids)
     {
         int[] selectedIds = ids.Distinct().ToArray();
@@ -808,6 +829,7 @@ internal sealed partial class ComposerSceneSession : IDisposable
         }
     }
 
+    /// <summary>Ungroups the given objects and returns the promoted object ids.</summary>
     public IReadOnlyList<int> UngroupObjects(IEnumerable<int> ids)
     {
         int[] selectedIds = ids.Distinct().ToArray();
@@ -848,6 +870,7 @@ internal sealed partial class ComposerSceneSession : IDisposable
         }
     }
 
+    /// <summary>Returns true when the given object can be ungrouped.</summary>
     public bool CanUngroupObject(int id)
     {
         sceneGate.Wait();
@@ -861,6 +884,7 @@ internal sealed partial class ComposerSceneSession : IDisposable
         }
     }
 
+    /// <summary>Ungroups the given object and returns the promoted object ids.</summary>
     public IReadOnlyList<int> UngroupObject(int id)
     {
         sceneGate.Wait();
@@ -889,6 +913,7 @@ internal sealed partial class ComposerSceneSession : IDisposable
         }
     }
 
+    /// <summary>Undoes the last edit and returns the restored selection id.</summary>
     public int? Undo()
     {
         sceneGate.Wait();
@@ -926,6 +951,7 @@ internal sealed partial class ComposerSceneSession : IDisposable
         }
     }
 
+    /// <summary>Redoes the next edit and returns the restored selection id.</summary>
     public int? Redo()
     {
         sceneGate.Wait();
@@ -963,6 +989,7 @@ internal sealed partial class ComposerSceneSession : IDisposable
         }
     }
 
+    /// <summary>Duplicates the given object and returns the new object id.</summary>
     public int? DuplicateObject(int id)
     {
         sceneGate.Wait();
@@ -980,6 +1007,7 @@ internal sealed partial class ComposerSceneSession : IDisposable
         }
     }
 
+    /// <summary>Deletes the given object and returns true when it existed.</summary>
     public bool DeleteObject(int id)
     {
         sceneGate.Wait();
@@ -1007,6 +1035,7 @@ internal sealed partial class ComposerSceneSession : IDisposable
         }
     }
 
+    /// <summary>Moves the session camera to frame the given object.</summary>
     public bool FrameObject(int id)
     {
         sceneGate.Wait();
@@ -1024,6 +1053,7 @@ internal sealed partial class ComposerSceneSession : IDisposable
         }
     }
 
+    /// <summary>Casts a ray through the given viewport point and returns the hit ancestor id.</summary>
     public int? PickObject(CameraDefinition camera, double normalizedX, double normalizedY, int width, int height)
     {
         if (width <= 0 || height <= 0)
@@ -1056,6 +1086,7 @@ internal sealed partial class ComposerSceneSession : IDisposable
         }
     }
 
+    /// <summary>Renders the scene with the given renderer, camera, and size, then draws selection and light overlays.</summary>
     public ComposerFrame Render(
         ComposerRendererKind renderer,
         CameraDefinition camera,
@@ -1202,6 +1233,7 @@ internal sealed partial class ComposerSceneSession : IDisposable
     }
 
 
+/// <summary>Renders the scene through the Vulkan compute backend using the given options.</summary>
 private static RenderImage RenderVulkanCompute(
     Scene scene,
     CameraDefinition camera,
@@ -1246,6 +1278,7 @@ private static RenderImage RenderVulkanCompute(
         fieldOfViewDegrees: options.FieldOfViewDegrees);
 }
 
+    /// <summary>Returns a transform preview for the selected object, or null when its transform is identity.</summary>
     private VulkanRasterTransformPreview? CreateVulkanTransformPreview()
     {
         if (selectedObjectId is not int selectedId ||
@@ -1264,6 +1297,7 @@ private static RenderImage RenderVulkanCompute(
             target.Scale);
     }
 
+    /// <summary>Gets the selection bounds and triangles for rendering, applying any pending gizmo transform.</summary>
     private bool TryGetSelectionOverlayForRender(
         out Aabb bounds,
         out IReadOnlyList<Triangle> triangles)
@@ -1292,6 +1326,7 @@ private static RenderImage RenderVulkanCompute(
         return true;
     }
 
+    /// <summary>Transforms the given bounds by the target object transform.</summary>
     private static Aabb TransformBounds(Aabb source, SceneObjectGroup target)
     {
         Vec3[] corners =
@@ -1318,6 +1353,7 @@ private static RenderImage RenderVulkanCompute(
         return new Aabb(min, max);
     }
 
+    /// <summary>Transforms one overlay triangle by the target object transform.</summary>
     private static Triangle TransformPreviewTriangle(Triangle triangle, SceneObjectGroup target) => new(
         target.TransformPoint(triangle.A),
         target.TransformPoint(triangle.B),
@@ -1331,6 +1367,7 @@ private static RenderImage RenderVulkanCompute(
         triangle.Material,
         triangle.GroupId);
 
+    /// <summary>Releases the session caches, scene state, and synchronization gate.</summary>
     public void Dispose()
     {
         sceneGate.Wait();
@@ -1348,6 +1385,7 @@ private static RenderImage RenderVulkanCompute(
         }
     }
 
+    /// <summary>Creates an empty scene with default key and fill lights.</summary>
     private static Scene CreateEmptyScene()
     {
         Scene result = new();
@@ -1358,6 +1396,7 @@ private static RenderImage RenderVulkanCompute(
         return result;
     }
 
+    /// <summary>Clears the object, light, triangle, and mesh selection state.</summary>
     private void ClearSelectionState()
     {
         selectedObjectId = null;
@@ -1378,6 +1417,7 @@ private static RenderImage RenderVulkanCompute(
         meshTopologyByGroup.Clear();
     }
 
+    /// <summary>Rebuilds the cached selection bounds and reservoir-sampled overlay triangles.</summary>
     private void RebuildSelectionOverlayCache()
     {
         if (selectedObjectId is not int selectedId || scene.GroupById(selectedId) is not SceneObjectGroup group)
@@ -1427,6 +1467,7 @@ private static RenderImage RenderVulkanCompute(
         selectedOverlayTriangles = reservoir;
         return;
 
+        /// <summary>Expands the running selection bounds to include the given point.</summary>
         void ExpandBounds(Vec3 point)
         {
             if (!hasBounds)
@@ -1442,6 +1483,7 @@ private static RenderImage RenderVulkanCompute(
         }
     }
 
+    /// <summary>Transforms one local triangle to world space and applies the group color override.</summary>
     private static Triangle TransformTriangleToWorld(SceneObjectGroup group, Triangle triangle)
     {
         Vec3 a = triangle.A;
@@ -1470,6 +1512,7 @@ private static RenderImage RenderVulkanCompute(
             group.Id);
     }
 
+    /// <summary>Computes the axis-aligned bounds of one triangle.</summary>
     private static Aabb BoundsOf(Triangle triangle)
     {
         Vec3 min = new(
@@ -1483,12 +1526,14 @@ private static RenderImage RenderVulkanCompute(
         return new Aabb(min, max);
     }
 
+    /// <summary>Clears the preview color override on every scene object.</summary>
     private void ClearSelectionHighlight()
     {
         foreach (SceneObjectGroup group in scene.ObjectGroups.SelectMany(root => root.SelfAndDescendants()))
             group.PreviewColorOverride = null;
     }
 
+    /// <summary>Clears selection highlights as the shared undo and redo hook.</summary>
     private void ApplySelectionHighlightAndRebuild()
     {
         // Kept as a single history hook. Selection is rendered as a post-process
@@ -1496,6 +1541,7 @@ private static RenderImage RenderVulkanCompute(
         ClearSelectionHighlight();
     }
 
+    /// <summary>Refreshes the prepared renderer geometry after a transform bake.</summary>
     private void RefreshRendererCachesAfterGeometryBake(CancellationToken cancellationToken)
     {
         rasterCache = null;
@@ -1510,6 +1556,7 @@ private static RenderImage RenderVulkanCompute(
         LastGeometryRefreshDetails = details;
     }
 
+    /// <summary>Invalidates all renderer caches after topology or material changes.</summary>
     private void InvalidateRendererCaches()
     {
         rasterCache = null;
@@ -1518,6 +1565,7 @@ private static RenderImage RenderVulkanCompute(
         LastGeometryRefreshDetails = "Renderer scene caches were invalidated because topology or materials changed.";
     }
 
+    /// <summary>Releases the raster cache and shared renderer devices.</summary>
     private void ReleaseRendererCaches()
     {
         rasterCache = null;
@@ -1525,6 +1573,7 @@ private static RenderImage RenderVulkanCompute(
         VulkanRasterRenderer.DisposeSharedDevice();
     }
 
+    /// <summary>Validates the given scene input path and returns its full path.</summary>
     private static string ResolveScenePath(string inputPath)
     {
         if (string.IsNullOrWhiteSpace(inputPath))
@@ -1538,6 +1587,7 @@ private static RenderImage RenderVulkanCompute(
         return path;
     }
 
+    /// <summary>Validates the given model insert path and rejects scene files.</summary>
     private static string ResolveInsertPath(string inputPath)
     {
         string path = ResolveScenePath(inputPath);
@@ -1549,6 +1599,7 @@ private static RenderImage RenderVulkanCompute(
         return path;
     }
 
+    /// <summary>Computes a 64-bit hash over triangle positions and normals.</summary>
     private static ulong ComputeGeometryHash(IEnumerable<Triangle> triangles)
     {
         const ulong offset = 14695981039346656037UL;
@@ -1564,6 +1615,7 @@ private static RenderImage RenderVulkanCompute(
 
         return hash;
 
+        /// <summary>Mixes one vector into the running geometry hash.</summary>
         void AddVec(Vec3 value)
         {
             AddLong(BitConverter.DoubleToInt64Bits(value.X));
@@ -1571,6 +1623,7 @@ private static RenderImage RenderVulkanCompute(
             AddLong(BitConverter.DoubleToInt64Bits(value.Z));
         }
 
+        /// <summary>Mixes one long value into the running geometry hash.</summary>
         void AddLong(long value)
         {
             unchecked
@@ -1581,6 +1634,7 @@ private static RenderImage RenderVulkanCompute(
         }
     }
 
+    /// <summary>Returns true when the given transform is effectively identity.</summary>
     private static bool IsIdentityTransform(Vec3 position, Vec3 rotation, Vec3 scale) =>
         position.Length() <= 1e-12 &&
         rotation.Length() <= 1e-12 &&
@@ -1588,6 +1642,7 @@ private static RenderImage RenderVulkanCompute(
         Math.Abs(scale.Y - 1.0) <= 1e-12 &&
         Math.Abs(scale.Z - 1.0) <= 1e-12;
 
+    /// <summary>Throws when the given vector contains a non-finite component.</summary>
     private static void ValidateFinite(Vec3 value, string name)
     {
         if (!double.IsFinite(value.X) || !double.IsFinite(value.Y) || !double.IsFinite(value.Z))

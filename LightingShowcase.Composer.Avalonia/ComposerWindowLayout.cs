@@ -46,6 +46,7 @@ internal static class ComposerWindowLayout
         TextBlock StatusText,
         TextBlock DetailsText);
 
+    /// <summary>Builds the composer window shell with menu, scene, viewport, inspector, and status bar.</summary>
     public static Control Build(Controls ui)
     {
         ArgumentNullException.ThrowIfNull(ui);
@@ -99,6 +100,7 @@ internal static class ComposerWindowLayout
         return root;
     }
 
+    /// <summary>Builds the scene objects panel with the object tree and edit buttons.</summary>
     private static Control BuildScenePanel(Controls ui)
     {
         Grid panel = new()
@@ -132,6 +134,7 @@ internal static class ComposerWindowLayout
         return panel;
     }
 
+    /// <summary>Builds the inspector panel with name, transform, and help controls.</summary>
     private static Control BuildInspectorPanel(Controls ui)
     {
         StackPanel stack = new() { Spacing = 9, Margin = new Thickness(8, 0, 0, 0) };
@@ -181,6 +184,7 @@ internal static class ComposerWindowLayout
         };
     }
 
+    /// <summary>Creates a semibold section heading text block.</summary>
     private static TextBlock Heading(string text) => new()
     {
         Text = text,
@@ -188,6 +192,7 @@ internal static class ComposerWindowLayout
         FontSize = 15
     };
 
+    /// <summary>Creates a two-column row pairing a label with a control.</summary>
     private static Control LabeledControl(string label, Control control)
     {
         Grid grid = new()
@@ -202,6 +207,7 @@ internal static class ComposerWindowLayout
         return grid;
     }
 
+    /// <summary>Creates a grid row with X, Y, and Z labeled text boxes.</summary>
     private static Control VectorRow(TextBox x, TextBox y, TextBox z)
     {
         Grid grid = new()
@@ -214,6 +220,7 @@ internal static class ComposerWindowLayout
         Add("Z", z, 4);
         return grid;
 
+        /// <summary>Adds one labeled text box to the vector row grid at the given column.</summary>
         void Add(string label, TextBox box, int column)
         {
             TextBlock text = new() { Text = label, VerticalAlignment = VerticalAlignment.Center };

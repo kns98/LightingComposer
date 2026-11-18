@@ -18,6 +18,7 @@ internal sealed class CommandLineArguments
     private readonly Dictionary<string, string> _values;
     private readonly HashSet<string> _switches;
 
+    /// <summary>Creates command-line arguments from the given parsed values and switches.</summary>
     private CommandLineArguments(Dictionary<string, string> values, HashSet<string> switches)
     {
         _values = values;
@@ -27,6 +28,7 @@ internal sealed class CommandLineArguments
     public IReadOnlyList<string> Positionals { get; private init; } = Array.Empty<string>();
     public IEnumerable<string> OptionNames => _values.Keys.Concat(_switches).Distinct(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>Parses raw arguments into named values, switches, and positional paths.</summary>
     public static CommandLineArguments Parse(string[] args)
     {
         Dictionary<string, string> values = new(StringComparer.OrdinalIgnoreCase);
@@ -73,12 +75,16 @@ internal sealed class CommandLineArguments
         return new CommandLineArguments(values, switches) { Positionals = positionals };
     }
 
+    /// <summary>Returns the value stored for the given key, or null when the key is absent.</summary>
     public string? Get(string key) => _values.TryGetValue(key, out string? value) ? value : null;
 
+    /// <summary>Returns true when the given key was supplied as a value or a switch.</summary>
     public bool Has(string key) => _switches.Contains(key) || _values.ContainsKey(key);
 
+    /// <summary>Returns true when the given key was supplied as a valueless switch.</summary>
     public bool IsSwitch(string key) => _switches.Contains(key);
 
+    /// <summary>Throws when any parsed option falls outside the known option set.</summary>
     public void ValidateKnownOptions(IEnumerable<string> knownOptions)
     {
         HashSet<string> known = new(knownOptions, StringComparer.OrdinalIgnoreCase);
@@ -87,6 +93,7 @@ internal sealed class CommandLineArguments
             throw new ArgumentException($"Unknown option(s): {string.Join(", ", unknown.Select(name => $"--{name}"))}. Run with --help to list supported rendering options.");
     }
 
+    /// <summary>Returns the option parsed as an integer within the given range, or the fallback when the option is absent.</summary>
     public int GetInt(string key, int fallback, int? minimum = null, int? maximum = null)
     {
         string? raw = Get(key);
@@ -100,6 +107,7 @@ internal sealed class CommandLineArguments
         return value;
     }
 
+    /// <summary>Returns the option parsed as a finite number within the given range, or the fallback when the option is absent.</summary>
     public double GetDouble(string key, double fallback, double? minimum = null, double? maximum = null)
     {
         string? raw = Get(key);
@@ -113,6 +121,7 @@ internal sealed class CommandLineArguments
         return value;
     }
 
+    /// <summary>Returns the option parsed as a boolean, treating a bare switch as true and using the fallback when absent.</summary>
     public bool GetBool(string key, bool fallback)
     {
         if (IsSwitch(key)) return true;

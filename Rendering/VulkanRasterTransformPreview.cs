@@ -16,6 +16,7 @@ namespace LightingShowcase.Rendering;
 /// </summary>
 public sealed class VulkanRasterTransformPreview
 {
+    /// <summary>Captures a transient transform preview for the Vulkan raster editor.</summary>
     public VulkanRasterTransformPreview(
         int selectionId,
         IEnumerable<int> groupIds,

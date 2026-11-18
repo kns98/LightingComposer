@@ -23,6 +23,7 @@ internal sealed class ComposerFileController
     private readonly ComposerSceneSession session;
     private readonly CancellationToken lifetimeToken;
 
+    /// <summary>Creates a file controller bound to the given owner window and scene session.</summary>
     public ComposerFileController(Window owner, ComposerSceneSession session, CancellationToken lifetimeToken)
     {
         this.owner = owner;
@@ -30,6 +31,7 @@ internal sealed class ComposerFileController
         this.lifetimeToken = lifetimeToken;
     }
 
+    /// <summary>Shows the open-file dialog and returns the chosen local path.</summary>
     public async Task<string?> PickOpenPathAsync(string title, IReadOnlyList<FilePickerFileType> types)
     {
         if (!owner.StorageProvider.CanOpen)
@@ -44,12 +46,16 @@ internal sealed class ComposerFileController
         return files.Count == 0 ? null : files[0].TryGetLocalPath();
     }
 
+    /// <summary>Starts a new empty scene on a background thread.</summary>
     public Task NewSceneAsync() => Task.Run(() => session.NewScene(lifetimeToken), lifetimeToken);
 
+    /// <summary>Loads the scene at the given path on a background thread.</summary>
     public Task LoadAsync(string path) => Task.Run(() => session.Load(path, lifetimeToken), lifetimeToken);
 
+    /// <summary>Inserts the model at the given path into the scene and returns its group identifier.</summary>
     public Task<int> InsertAsync(string path) => Task.Run(() => session.Insert(path, lifetimeToken), lifetimeToken);
 
+    /// <summary>Shows the save-composition dialog and returns the chosen local path.</summary>
     public async Task<string?> PickSavePathAsync()
     {
         if (!owner.StorageProvider.CanSave)
@@ -67,6 +73,7 @@ internal sealed class ComposerFileController
         return file?.TryGetLocalPath();
     }
 
+    /// <summary>Saves the composition to the given path while reporting progress, then returns the elapsed time.</summary>
     public async Task<TimeSpan> SaveAsync(string path, Action<string>? progress = null)
     {
         int triangleCountAtSave = session.TriangleCount;
@@ -88,6 +95,7 @@ internal sealed class ComposerFileController
         return stopwatch.Elapsed;
     }
 
+    /// <summary>Shows the export dialogs and writes the scene package, or returns null when the user cancels.</summary>
     public async Task<SceneExportPackageResult?> ExportPackageAsync()
     {
         if (!session.HasRenderableScene)

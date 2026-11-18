@@ -151,6 +151,7 @@ public sealed class Scene
     /// <summary>Returns stats derived from the current state.</summary>
     public SceneStats GetStats() => new(ObjectGroups.SelectMany(g => g.SelfAndDescendants()).Count(), Triangles.Count, Lights.Count);
 
+    /// <summary>Returns the combined bounds of visible groups holding world triangles.</summary>
     public Aabb? GetSceneBounds()
     {
         List<SceneObjectGroup> visibleGroups = ObjectGroups.Where(g => g.Visible && g.BuildWorldTriangles().Any()).ToList();
@@ -280,6 +281,7 @@ public sealed class Scene
         return wrapper;
     }
 
+    /// <summary>Creates an undo snapshot of the scene description, groups, and lights.</summary>
     public SceneSnapshot CreateSnapshot()
     {
         return new SceneSnapshot(Description, ObjectGroups, Lights);
@@ -497,6 +499,7 @@ public sealed class Scene
         return BuildTriangleGroups(group.Name, triangles, colorOverride);
     }
 
+    /// <summary>Builds one child group per triangle during ungrouping.</summary>
     private List<SceneObjectGroup> BuildTriangleGroups(string baseName, IReadOnlyList<Triangle> triangles, Material? colorOverride)
     {
         List<SceneObjectGroup> groups = new(triangles.Count);
@@ -505,6 +508,7 @@ public sealed class Scene
         return groups;
     }
 
+    /// <summary>Builds child groups from sets of triangle indices during ungrouping.</summary>
     private List<SceneObjectGroup> BuildGroupsFromIndexSets(string baseName, IReadOnlyList<Triangle> triangles, IReadOnlyList<List<int>> indexSets, Material? colorOverride, string label)
     {
         List<SceneObjectGroup> groups = new(indexSets.Count);
@@ -513,6 +517,7 @@ public sealed class Scene
         return groups;
     }
 
+    /// <summary>Builds child groups from fixed-size triangle chunks during ungrouping.</summary>
     private List<SceneObjectGroup> BuildChunkGroups(string baseName, IReadOnlyList<Triangle> triangles, Material? colorOverride, int chunkSize)
     {
         List<SceneObjectGroup> groups = new((triangles.Count + chunkSize - 1) / chunkSize);
@@ -588,6 +593,7 @@ public sealed class Scene
         return BuildGroupsFromIndexSets(baseName, triangles, boundedChunks, colorOverride, "spatial chunk");
     }
 
+    /// <summary>Splits an oversized spatial chunk along its longest centroid axis.</summary>
     private static IEnumerable<List<int>> SplitOversizedSpatialChunk(List<int> indices, IReadOnlyList<Triangle> triangles, int targetTrianglesPerChunk)
     {
         if (indices.Count <= targetTrianglesPerChunk * 2)
@@ -612,6 +618,7 @@ public sealed class Scene
             yield return sorted.Skip(start).Take(Math.Min(targetTrianglesPerChunk, sorted.Count - start)).ToList();
     }
 
+    /// <summary>Computes the centroid bounds of all given triangles.</summary>
     private static void GetCentroidBounds(IReadOnlyList<Triangle> triangles, out Vec3 min, out Vec3 max)
     {
         double minX = double.PositiveInfinity, minY = double.PositiveInfinity, minZ = double.PositiveInfinity;
@@ -628,6 +635,7 @@ public sealed class Scene
         max = new Vec3(maxX, maxY, maxZ);
     }
 
+    /// <summary>Computes the centroid bounds of the indexed triangles.</summary>
     private static void GetCentroidBounds(IReadOnlyList<int> indices, IReadOnlyList<Triangle> triangles, out Vec3 min, out Vec3 max)
     {
         double minX = double.PositiveInfinity, minY = double.PositiveInfinity, minZ = double.PositiveInfinity;
@@ -644,6 +652,7 @@ public sealed class Scene
         max = new Vec3(maxX, maxY, maxZ);
     }
 
+    /// <summary>Chooses a spatial grid resolution for the desired chunk count.</summary>
     private static void ChooseSpatialGrid(Vec3 min, Vec3 max, int desiredChunkCount, out int gridX, out int gridY, out int gridZ)
     {
         double spanX = Math.Max(1e-9, max.X - min.X);
@@ -676,6 +685,7 @@ public sealed class Scene
         }
     }
 
+    /// <summary>Clamps one spatial grid axis into the supported range.</summary>
     private static int ClampGridAxis(int value)
     {
         if (value <= 1)
@@ -684,6 +694,7 @@ public sealed class Scene
         return Math.Max(SpatialChunkMinimumGridAxis, Math.Min(SpatialChunkMaximumGridAxis, value));
     }
 
+    /// <summary>Maps a coordinate into a spatial grid cell index.</summary>
     private static int ToCell(double value, double min, double span, int grid)
     {
         if (grid <= 1)
@@ -696,6 +707,7 @@ public sealed class Scene
 
     private readonly record struct SpatialCellKey(int X, int Y, int Z);
 
+    /// <summary>Creates a child group from the given triangles with an optional material override.</summary>
     private SceneObjectGroup CreateGroupFromTriangles(string name, IEnumerable<Triangle> triangles, Material? colorOverride)
     {
         SceneObjectGroup child = new(nextGroupId++, name, selectable: true);
@@ -710,6 +722,7 @@ public sealed class Scene
         return child;
     }
 
+    /// <summary>Groups triangle indices by shared-vertex connectivity.</summary>
     private static List<List<int>> BuildConnectedTriangleComponents(IReadOnlyList<Triangle> triangles)
     {
         DisjointSet disjointSet = new(triangles.Count);
@@ -737,6 +750,7 @@ public sealed class Scene
         return byRoot.Values.OrderByDescending(list => list.Count).ToList();
     }
 
+    /// <summary>Unions the current triangle with the first triangle seen at a vertex.</summary>
     private static void ConnectVertex(Dictionary<VertexKey, int> firstTriangleAtVertex, DisjointSet disjointSet, VertexKey key, int triangleIndex)
     {
         if (firstTriangleAtVertex.TryGetValue(key, out int previousTriangleIndex))
@@ -745,6 +759,7 @@ public sealed class Scene
             firstTriangleAtVertex[key] = triangleIndex;
     }
 
+    /// <summary>Pairs adjacent coplanar triangles into rectangular faces.</summary>
     private static List<List<int>> BuildRectangularFacePairs(IReadOnlyList<Triangle> triangles)
     {
         Dictionary<EdgeKey, List<int>> edgeToTriangles = new(triangles.Count * 3);
@@ -785,6 +800,7 @@ public sealed class Scene
         return groups;
     }
 
+    /// <summary>Records a triangle index against its quantized edge.</summary>
     private static void AddEdge(Dictionary<EdgeKey, List<int>> edgeToTriangles, Vec3 a, Vec3 b, int triangleIndex)
     {
         EdgeKey edge = new(Quantize(a), Quantize(b));
@@ -796,6 +812,7 @@ public sealed class Scene
         list.Add(triangleIndex);
     }
 
+    /// <summary>Returns true when two triangles form a coplanar four-vertex rectangle.</summary>
     private static bool LooksLikeRectanglePair(Triangle a, Triangle b)
     {
         // Opposite winding gives opposite normals for the same visual plane in
@@ -809,12 +826,14 @@ public sealed class Scene
         return unique.Count == 4;
     }
 
+    /// <summary>Adds a vertex key to the list unless it is already present.</summary>
     private static void AddUnique(List<VertexKey> values, VertexKey key)
     {
         if (!values.Contains(key))
             values.Add(key);
     }
 
+    /// <summary>Quantizes a position into an integer vertex key.</summary>
     private static VertexKey Quantize(Vec3 value) => new(
         (long)Math.Round(value.X * 1_000_000.0),
         (long)Math.Round(value.Y * 1_000_000.0),
@@ -827,6 +846,7 @@ public sealed class Scene
         public VertexKey A { get; }
         public VertexKey B { get; }
 
+        /// <summary>Initializes an order-independent edge key from two vertices.</summary>
         public EdgeKey(VertexKey a, VertexKey b)
         {
             if (Compare(a, b) <= 0)
@@ -841,6 +861,7 @@ public sealed class Scene
             }
         }
 
+        /// <summary>Compares two vertex keys by X, then Y, then Z.</summary>
         private static int Compare(VertexKey a, VertexKey b)
         {
             int x = a.X.CompareTo(b.X);
@@ -856,6 +877,7 @@ public sealed class Scene
         private readonly int[] parent;
         private readonly byte[] rank;
 
+        /// <summary>Initializes a disjoint-set with one set per element.</summary>
         public DisjointSet(int count)
         {
             parent = new int[count];
@@ -864,6 +886,7 @@ public sealed class Scene
                 parent[i] = i;
         }
 
+        /// <summary>Finds the set root for the given element with path compression.</summary>
         public int Find(int value)
         {
             while (parent[value] != value)
@@ -874,6 +897,7 @@ public sealed class Scene
             return value;
         }
 
+        /// <summary>Merges the sets holding the two given elements.</summary>
         public void Union(int a, int b)
         {
             int rootA = Find(a);
@@ -925,12 +949,14 @@ public sealed class Scene
             bvhRoot = BvhNode.Build(Triangles);
     }
 
+    /// <summary>Discards the cached CPU ray-query acceleration structure.</summary>
     private void InvalidateAccelerationStructure()
     {
         lock (accelerationGate)
             bvhRoot = null;
     }
 
+    /// <summary>Returns the cached acceleration structure, building it on first use.</summary>
     private BvhNode? GetOrBuildAccelerationStructure()
     {
         BvhNode? cached = Volatile.Read(ref bvhRoot);
@@ -1010,6 +1036,7 @@ public sealed class Scene
             Triangles.Add(new Triangle(a, b, c, uvA, uvB, uvC, material));
     }
 
+    /// <summary>Adds a triangle with explicit normals to the active group or scene.</summary>
     public void AddTriangle(
         Vec3 a, Vec3 b, Vec3 c,
         Vec2 uvA, Vec2 uvB, Vec2 uvC,

@@ -26,6 +26,7 @@ public static class VulkanSceneComputeRenderer
 {
     public static string StageLogPath => Path.Combine(Path.GetTempPath(), "LightingShowcase-vulkan-stage-log.txt");
 
+    /// <summary>Resets the Vulkan stage diagnostic log.</summary>
     private static void ResetStageLog(int width, int height, int bounceCount, int sampleIndex)
     {
         try
@@ -35,6 +36,7 @@ public static class VulkanSceneComputeRenderer
         catch { }
     }
 
+    /// <summary>Appends a stage entry to the Vulkan diagnostic log.</summary>
     private static void Stage(string name)
     {
         try
@@ -44,6 +46,7 @@ public static class VulkanSceneComputeRenderer
         catch { }
     }
 
+    /// <summary>Logs current managed memory usage to the stage log.</summary>
     private static void StageMemory(string label)
     {
         try
@@ -76,6 +79,7 @@ public static class VulkanSceneComputeRenderer
         public required Shader Shader { get; init; }
         public required Pipeline Pipeline { get; init; }
 
+        /// <summary>Disposes the shared compute pipeline resources.</summary>
         public void Dispose()
         {
             try { Pipeline.Dispose(); } catch { }
@@ -101,6 +105,7 @@ public static class VulkanSceneComputeRenderer
         public required int TextureCount { get; init; }
         public required long SceneBufferBytes { get; init; }
 
+        /// <summary>Disposes the prepared scene GPU buffers.</summary>
         public void Dispose()
         {
             try { TextureInfoBuffer.Dispose(); } catch { }
@@ -111,6 +116,7 @@ public static class VulkanSceneComputeRenderer
         }
     }
 
+    /// <summary>Disposes the shared Vulkan device and its cached resources.</summary>
     public static void DisposeSharedDevice()
     {
         lock (RenderSync)
@@ -204,6 +210,7 @@ public static class VulkanSceneComputeRenderer
         return device.BackendType.ToString();
     }
 
+    /// <summary>Returns the shared Vulkan graphics device, creating it when needed.</summary>
     private static GraphicsDevice GetOrCreateSharedDevice()
     {
         lock (DeviceSync)
@@ -242,6 +249,7 @@ public static class VulkanSceneComputeRenderer
         }
     }
 
+    /// <summary>Throws when cancellation was requested at the given stage.</summary>
     private static void ThrowIfCancellationRequested(CancellationToken cancellationToken, string stageName)
     {
         if (!cancellationToken.IsCancellationRequested)
@@ -269,6 +277,7 @@ public static class VulkanSceneComputeRenderer
         public readonly Vector4 TextureInfo; // x=base index, y=emissive index, z=alpha/double-sided flags, w=alpha cutoff
         public readonly Vector4 TextureInfo2; // x=MR index, y=normal index, z=occlusion index, w=occlusion strength
 
+        /// <summary>Packs a scene triangle and its material into GPU format.</summary>
         public GpuTriangle(Triangle triangle, IReadOnlyDictionary<TextureMap, int> textureIds)
         {
             Vec3 normalA = triangle.NormalA.Normalize();
@@ -319,6 +328,7 @@ public static class VulkanSceneComputeRenderer
                 (float)material.OcclusionStrength);
         }
 
+        /// <summary>Returns the GPU texture index for a texture map.</summary>
         private static int TextureIndex(IReadOnlyDictionary<TextureMap, int> textureIds, TextureMap? texture)
         {
             if (texture == null)
@@ -332,6 +342,7 @@ public static class VulkanSceneComputeRenderer
     {
         public readonly Vector4 Data; // x=pixel offset, y=width, z=height, w=reserved
 
+        /// <summary>Initializes GPU texture location metadata.</summary>
         public GpuTextureInfo(int pixelOffset, int width, int height)
         {
             Data = new Vector4(pixelOffset, width, height, 0.0f);
@@ -364,6 +375,7 @@ public static class VulkanSceneComputeRenderer
         // x=left child or first triangle, y=triangle count (0 for internal), z=right child, w=reserved
         public readonly Vector4 Data;
 
+        /// <summary>Initializes a GPU bounding volume hierarchy node.</summary>
         public GpuBvhNode(Vector3 boundsMin, Vector3 boundsMax, int leftOrFirst, int triangleCount, int rightChild)
         {
             BoundsMin = new Vector4(boundsMin, 0.0f);
@@ -381,6 +393,7 @@ public static class VulkanSceneComputeRenderer
         public readonly int TriangleCount;
         public readonly int RightChild;
 
+        /// <summary>Initializes a CPU bounding volume hierarchy node.</summary>
         public CpuBvhNode(Vector3 boundsMin, Vector3 boundsMax, int leftOrFirst, int triangleCount, int rightChild)
         {
             BoundsMin = boundsMin;
@@ -390,6 +403,7 @@ public static class VulkanSceneComputeRenderer
             RightChild = rightChild;
         }
 
+        /// <summary>Converts this CPU node into its GPU representation.</summary>
         public GpuBvhNode ToGpu() => new(BoundsMin, BoundsMax, LeftOrFirst, TriangleCount, RightChild);
     }
 
@@ -398,11 +412,13 @@ public static class VulkanSceneComputeRenderer
         private readonly IReadOnlyList<Triangle> triangles;
         public int Axis { get; set; }
 
+        /// <summary>Initializes the comparer with the scene triangles.</summary>
         public TriangleCentroidComparer(IReadOnlyList<Triangle> triangles)
         {
             this.triangles = triangles;
         }
 
+        /// <summary>Compares two triangles by centroid along the active axis.</summary>
         public int Compare(int leftIndex, int rightIndex)
         {
             Vec3 left = triangles[leftIndex].Centroid;
@@ -427,6 +443,7 @@ public static class VulkanSceneComputeRenderer
         public readonly Vector4 ColorIntensity; // rgb=color, w=intensity
         public readonly Vector4 ConeShadow;     // x=cos inner, y=cos outer, z=castsShadow, w=enabled
 
+        /// <summary>Packs a scene light into GPU format.</summary>
         public GpuLight(SceneLight light)
         {
             float kind = light.Kind switch
@@ -470,6 +487,7 @@ public static class VulkanSceneComputeRenderer
         public readonly Vector4 BackgroundBottomExposure;
         public readonly Vector4 LightingOptions;
 
+        /// <summary>Packs the camera and tile constants for the compute shader.</summary>
         public CameraConstants(
             Vec3 position,
             CameraBasis basis,
@@ -558,6 +576,7 @@ public static class VulkanSceneComputeRenderer
         }
     }
 
+    /// <summary>Renders the scene with Vulkan compute under the render lock.</summary>
     private static RenderImage RenderLocked(
         Scene scene,
         Vec3 cameraPosition,
@@ -726,6 +745,7 @@ public static class VulkanSceneComputeRenderer
         return image;
     }
 
+    /// <summary>Dispatches compute tiles in bounded batched submissions.</summary>
     private static void DispatchTilesBatched(
         GraphicsDevice gd,
         ResourceFactory factory,
@@ -808,6 +828,7 @@ public static class VulkanSceneComputeRenderer
         }
     }
 
+    /// <summary>Chooses how many tiles to submit per command list.</summary>
     private static int ChooseTilesPerSubmit(int tileRows, int bounceCount, int sampleCount, int triangleCount, int width, int lightCount)
     {
         // tileRows limits the size of one dispatch.  It does not limit the size
@@ -831,6 +852,7 @@ public static class VulkanSceneComputeRenderer
         return Math.Max(1, computed);
     }
 
+    /// <summary>Dispatches compute tiles while publishing progress previews.</summary>
     private static void DispatchTilesWithPreview(
         GraphicsDevice gd,
         ResourceFactory factory,
@@ -885,6 +907,7 @@ public static class VulkanSceneComputeRenderer
         }
     }
 
+    /// <summary>Returns true when the current tile should publish a progress preview.</summary>
     private static bool ShouldPublishTileProgress(int tileY, int currentTileRows, int tileRows, int height, bool enabled, int width, int triangleCount)
     {
         if (!enabled)
@@ -909,6 +932,7 @@ public static class VulkanSceneComputeRenderer
         return completedRows / publishEveryRows != tileY / publishEveryRows;
     }
 
+    /// <summary>Clears the GPU output buffer in small chunks.</summary>
     private static void ZeroOutputBuffer(GraphicsDevice gd, DeviceBuffer outputBuffer, uint outputBytes)
     {
         // Avoid allocating one giant byte[width * height * 4] just to clear the
@@ -932,6 +956,7 @@ public static class VulkanSceneComputeRenderer
         }
     }
 
+    /// <summary>Reads the GPU output buffer back into a render image.</summary>
     private static RenderImage ReadBackOutputImage(GraphicsDevice gd, ResourceFactory factory, DeviceBuffer outputBuffer, DeviceBuffer stagingBuffer, uint outputBytes, int width, int height, CancellationToken cancellationToken, string stageName)
     {
         Stage($"Copy output buffer to staging buffer ({stageName})");
@@ -958,6 +983,7 @@ public static class VulkanSceneComputeRenderer
         }
     }
 
+    /// <summary>Returns the cached GPU scene buffers, rebuilding them when stale.</summary>
     private static PreparedComputeScene GetOrCreatePreparedScene(GraphicsDevice gd, Scene scene, CancellationToken cancellationToken)
     {
         lock (DeviceSync)
@@ -1061,6 +1087,7 @@ public static class VulkanSceneComputeRenderer
         }
     }
 
+    /// <summary>Uploads triangle records to the GPU in traversal order.</summary>
     private static void UploadGpuTriangles(
         GraphicsDevice gd,
         DeviceBuffer destination,
@@ -1095,6 +1122,7 @@ public static class VulkanSceneComputeRenderer
         }
     }
 
+    /// <summary>Uploads bounding volume hierarchy nodes to the GPU.</summary>
     private static void UploadGpuBvhNodes(
         GraphicsDevice gd,
         DeviceBuffer destination,
@@ -1130,6 +1158,7 @@ public static class VulkanSceneComputeRenderer
         }
     }
 
+    /// <summary>Uploads texture pixels to the GPU buffer.</summary>
     private static void UploadTexturePixels(
         GraphicsDevice gd,
         DeviceBuffer destination,
@@ -1154,6 +1183,7 @@ public static class VulkanSceneComputeRenderer
         }
     }
 
+    /// <summary>Validates a scene buffer size against the Vulkan buffer limit.</summary>
     private static uint CheckedSceneBufferSize(long requestedBytes, int minimumBytes, string label)
     {
         long bytes = Math.Max(minimumBytes, requestedBytes);
@@ -1162,6 +1192,7 @@ public static class VulkanSceneComputeRenderer
         return checked((uint)bytes);
     }
 
+    /// <summary>Returns the shared compute shader and pipeline, creating them when needed.</summary>
     private static SharedComputeResources GetOrCreateSharedComputeResources(GraphicsDevice gd)
     {
         lock (DeviceSync)
@@ -1235,6 +1266,7 @@ public static class VulkanSceneComputeRenderer
         }
     }
 
+    /// <summary>Creates the compute shader with diagnostic logging on failure.</summary>
     private static Shader CreateComputeShaderWithDiagnostics(ResourceFactory factory, ShaderDescription computeDesc, string shaderPath, string shaderSource)
     {
         try
@@ -1271,6 +1303,7 @@ public static class VulkanSceneComputeRenderer
         }
     }
 
+    /// <summary>Chooses the row height for compute tile dispatches.</summary>
     private static int ChooseTileRows(int width, int height, int triangleCount, int bounceCount, int lightCount, int sampleCount)
     {
         // The GPU shader traverses a BVH, so it can use larger tiles than the
@@ -1302,6 +1335,7 @@ public static class VulkanSceneComputeRenderer
     }
 
 
+    /// <summary>Builds the bounding volume hierarchy for the scene.</summary>
     private static BvhBuildResult BuildGpuBvh(Scene scene)
     {
         int triangleCount = scene.Triangles.Count;
@@ -1332,6 +1366,7 @@ public static class VulkanSceneComputeRenderer
         };
     }
 
+    /// <summary>Recursively builds one bounding volume hierarchy node.</summary>
     private static int BuildGpuBvhRecursive(
         IReadOnlyList<Triangle> triangles,
         int[] triangleIndices,
@@ -1375,11 +1410,13 @@ public static class VulkanSceneComputeRenderer
         return nodeIndex;
     }
 
+    /// <summary>Counts the hierarchy nodes needed for a triangle count.</summary>
     private static int CountGpuBvhNodes(int triangleCount)
     {
         Dictionary<int, int> cache = new();
         return Count(triangleCount);
 
+        /// <summary>Counts the hierarchy nodes for one subtree.</summary>
         int Count(int count)
         {
             if (count <= 4) return 1;
@@ -1391,6 +1428,7 @@ public static class VulkanSceneComputeRenderer
         }
     }
 
+    /// <summary>Computes padded bounds for a leaf triangle range.</summary>
     private static void GetLeafBounds(
         IReadOnlyList<Triangle> triangles,
         int[] triangleIndices,
@@ -1413,6 +1451,7 @@ public static class VulkanSceneComputeRenderer
         }
     }
 
+    /// <summary>Computes centroid bounds for a triangle range.</summary>
     private static void GetCentroidBounds(
         IReadOnlyList<Triangle> triangles,
         int[] triangleIndices,
@@ -1431,6 +1470,7 @@ public static class VulkanSceneComputeRenderer
         }
     }
 
+    /// <summary>Computes the conservative bounds padding for the scene.</summary>
     private static float ComputeGpuBoundsPad(Scene scene)
     {
         if (scene.Triangles.Count == 0)
@@ -1454,6 +1494,7 @@ public static class VulkanSceneComputeRenderer
         return Math.Clamp(sceneDiagonal * 1e-6f, 1e-4f, 0.01f);
     }
 
+    /// <summary>Collects scene textures into GPU upload metadata.</summary>
     private static TextureBuildResult BuildTextureBuffers(Scene scene)
     {
         List<TextureMap> textures = new();
@@ -1509,6 +1550,7 @@ public static class VulkanSceneComputeRenderer
             TextureCount = textureIds.Count
         };
 
+        /// <summary>Adds a texture to the collection when not already present.</summary>
         void AddUnique(TextureMap? texture)
         {
             if (texture != null && seen.Add(texture))
@@ -1516,6 +1558,7 @@ public static class VulkanSceneComputeRenderer
         }
     }
 
+    /// <summary>Builds the GPU light buffer from enabled scene lights.</summary>
     private static GpuLight[] BuildLightBuffer(Scene scene, out int sourceLightCount)
     {
         sourceLightCount = scene.Lights.Count;
@@ -1530,6 +1573,7 @@ public static class VulkanSceneComputeRenderer
         return result.ToArray();
     }
 
+    /// <summary>Copies mapped GPU pixels into a render image.</summary>
     private static RenderImage ToRenderImage(MappedResourceView<uint> pixels, int width, int height)
     {
         uint[] copy = new uint[checked(width * height)];
@@ -1538,9 +1582,11 @@ public static class VulkanSceneComputeRenderer
         return new RenderImage(width, height, copy);
     }
 
+    /// <summary>Converts a math vector into a GPU vector.</summary>
     private static Vector3 ToVector3(Vec3 value) =>
         new((float)value.X, (float)value.Y, (float)value.Z);
 
+    /// <summary>Converts a math vector and scalar into a GPU vector.</summary>
     private static Vector4 ToVector4(Vec3 value, float w)
         => new((float)value.X, (float)value.Y, (float)value.Z, w);
 }

@@ -42,6 +42,7 @@ public sealed class SceneBuilder
     private readonly Material greenDiffuse = new(new Vec3(0.08, 0.48, 0.16), roughness: 0.72);
     private readonly Material wood = new(new Vec3(0.60, 0.36, 0.16), roughness: 0.50);
 
+    /// <summary>Initializes a scene builder for the given scene and materials.</summary>
     public SceneBuilder(Scene scene, SceneMaterials materials)
     {
         this.scene = scene;
@@ -61,6 +62,7 @@ public sealed class SceneBuilder
         BuildLights();
     }
 
+    /// <summary>Builds the showcase room shell, floor, and runway.</summary>
     private void BuildShowcaseRoom()
     {
         double x0 = -3.4, x1 = 3.4, y0 = -1.45, y1 = 2.35, z0 = 0.75, z1 = 7.10;
@@ -78,6 +80,7 @@ public sealed class SceneBuilder
         AddBoxPrimitive("Black rough rubber strip 2", new Vec3(-2.70, -1.37, 5.28), new Vec3(2.70, -1.31, 5.40), blackRubber);
     }
 
+    /// <summary>Builds the emissive wall signs and area panels.</summary>
     private void BuildNeonAndEmissionWall()
     {
         scene.BeginGroup("Emissive wall signs and area panels");
@@ -89,6 +92,7 @@ public sealed class SceneBuilder
         scene.EndGroup();
     }
 
+    /// <summary>Builds the metallic roughness comparison row.</summary>
     private void BuildMetalRoughnessPedestals()
     {
         scene.BeginGroup("Metallic roughness comparison row");
@@ -100,12 +104,14 @@ public sealed class SceneBuilder
         scene.EndGroup();
     }
 
+    /// <summary>Adds a pedestal with a material sphere on top.</summary>
     private void AddPedestal(double x, double z, string name, Material material)
     {
         AddBoxPrimitive(name + " pedestal", new Vec3(x - 0.36, -1.45, z - 0.36), new Vec3(x + 0.36, -0.94, z + 0.36), whiteCeramic);
         AddSpherePrimitive(name + " sphere", new Vec3(x, -0.55, z), 0.36, 28, 16, material);
     }
 
+    /// <summary>Builds the glass transmission display with a water tank.</summary>
     private void BuildGlassTransmissionArea()
     {
         scene.BeginGroup("Glass transmission display");
@@ -120,6 +126,7 @@ public sealed class SceneBuilder
         scene.EndGroup();
     }
 
+    /// <summary>Builds the translucent lamp feature.</summary>
     private void BuildTranslucentLampFeature()
     {
         scene.BeginGroup("Translucent lamp feature");
@@ -131,6 +138,7 @@ public sealed class SceneBuilder
         scene.EndGroup();
     }
 
+    /// <summary>Builds bounce color and shadow test objects.</summary>
     private void BuildBounceAndShadowTestObjects()
     {
         scene.BeginGroup("Bounce color and shadow tests");
@@ -142,6 +150,7 @@ public sealed class SceneBuilder
         scene.EndGroup();
     }
 
+    /// <summary>Builds material label blocks and framing props.</summary>
     private void BuildCameraFramingProps()
     {
         scene.BeginGroup("Material labels as colored blocks");
@@ -154,6 +163,7 @@ public sealed class SceneBuilder
         scene.EndGroup();
     }
 
+    /// <summary>Adds the default showcase lights to the scene.</summary>
     private void BuildLights()
     {
         scene.Lights.Add(new SceneLight("large warm softbox", new Vec3(-2.10, 1.72, 5.40), new Vec3(1.0, 0.78, 0.48), 5.8, isDefault: true));
@@ -162,6 +172,7 @@ public sealed class SceneBuilder
         scene.Lights.Add(new SceneLight("small white key", new Vec3(0.0, 2.05, 3.50), new Vec3(1.0, 0.96, 0.88), 3.6, isDefault: true));
     }
 
+    /// <summary>Adds a named box primitive group to the scene.</summary>
     private SceneObjectGroup AddBoxPrimitive(string name, Vec3 min, Vec3 max, Material material)
     {
         scene.BeginGroup(name);
@@ -171,6 +182,7 @@ public sealed class SceneBuilder
         return group;
     }
 
+    /// <summary>Adds a named sphere primitive group to the scene.</summary>
     private SceneObjectGroup AddSpherePrimitive(string name, Vec3 center, double radius, int segments, int rings, Material material)
     {
         scene.BeginGroup(name);
@@ -211,6 +223,7 @@ public sealed class SceneBuilder
         return group;
     }
 
+    /// <summary>Computes a point on a sphere from texture and polar coordinates.</summary>
     private static Vec3 SpherePoint(Vec3 center, double radius, double u, double phi)
     {
         double theta = u * Math.PI * 2.0;
@@ -218,6 +231,7 @@ public sealed class SceneBuilder
         return center + new Vec3(Math.Cos(theta) * cp * radius, Math.Sin(phi) * radius, Math.Sin(theta) * cp * radius);
     }
 
+    /// <summary>Adds a named cylinder primitive group to the scene.</summary>
     private SceneObjectGroup AddCylinderPrimitive(string name, Vec3 baseCenter, double radius, double height, int sides, Material material)
     {
         scene.BeginGroup(name);
@@ -250,6 +264,7 @@ public sealed class SceneBuilder
         return group;
     }
 
+    /// <summary>Stores box origin and size parameters on a primitive group.</summary>
     private static void StoreBoxPrimitiveParameters(SceneObjectGroup group, Vec3 a, Vec3 b)
     {
         Vec3 min = new(Math.Min(a.X, b.X), Math.Min(a.Y, b.Y), Math.Min(a.Z, b.Z));

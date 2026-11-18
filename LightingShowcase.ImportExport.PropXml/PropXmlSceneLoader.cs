@@ -18,6 +18,7 @@ namespace LightingShowcase.SceneGraph;
 /// <summary>Loads the native .prop.xml scene format.</summary>
 public static class PropXmlSceneLoader
 {
+    /// <summary>Loads a prop XML file into the scene.</summary>
     public static void LoadIntoScene(Scene scene, string filePath)
     {
         if (scene == null) throw new ArgumentNullException(nameof(scene));
@@ -65,6 +66,7 @@ public static class PropXmlSceneLoader
     }
 
 
+    /// <summary>Reads a light kind attribute, defaulting to a point light.</summary>
     private static SceneLightKind ReadLightKind(XAttribute? attribute)
     {
         string value = ((string?)attribute ?? "point").Trim();
@@ -137,6 +139,7 @@ public static class PropXmlSceneLoader
     }
 
 
+    /// <summary>Reads primitive parameters into the object group.</summary>
     private static void ReadPrimitiveParameters(XElement? element, SceneObjectGroup group)
     {
         if (element == null) return;
@@ -174,6 +177,7 @@ public static class PropXmlSceneLoader
         return new Material(color, emission, lightId, texture);
     }
 
+    /// <summary>Reads a checker or file-backed texture from a material element.</summary>
     private static TextureMap? ReadTexture(XElement element, string sceneFilePath)
     {
         string? kind = (string?)element.Attribute("textureKind");
@@ -222,6 +226,7 @@ public static class PropXmlSceneLoader
     }
 
 
+    /// <summary>Reads an integer attribute with a fallback value.</summary>
     private static int ReadInt(XAttribute? attribute, int fallback)
     {
         if (attribute == null) return fallback;

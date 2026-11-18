@@ -66,6 +66,7 @@ internal sealed class ComposerMenuController
     private readonly MenuItem[] gizmoModeMenuItems;
     private readonly MenuItem[] moveAxisMenuItems;
 
+    /// <summary>Creates the menu controller and builds the composer menu bar.</summary>
     public ComposerMenuController(
         ComboBox rendererBox,
         ComboBox selectionModeBox,
@@ -175,6 +176,7 @@ internal sealed class ComposerMenuController
 
     public Menu Menu { get; }
 
+    /// <summary>Builds the composer menu bar with file, edit, add, object, mode, and render menus.</summary>
     private Menu BuildMenu()
     {
         MenuItem fileMenu = new()
@@ -207,6 +209,7 @@ internal sealed class ComposerMenuController
         };
     }
 
+    /// <summary>Synchronizes the radio menu check marks with the toolbar combo box selections.</summary>
     public void SyncChecks()
     {
         SetChecked(rendererMenuItems, rendererBox.SelectedIndex);
@@ -215,6 +218,7 @@ internal sealed class ComposerMenuController
         SetChecked(moveAxisMenuItems, moveAxisBox.SelectedIndex);
     }
 
+    /// <summary>Synchronizes menu item enabled state with the toolbar controls.</summary>
     public void SyncEnabledState()
     {
         newMenuItem.IsEnabled = newButton.IsEnabled;
@@ -249,11 +253,13 @@ internal sealed class ComposerMenuController
         renderSettingsMenuItem.IsEnabled = renderSettingsButton.IsEnabled;
     }
 
+    /// <summary>Enables or disables the render settings menu item.</summary>
     public void SetRenderSettingsEnabled(bool enabled)
     {
         renderSettingsMenuItem.IsEnabled = enabled;
     }
 
+    /// <summary>Updates the undo and redo menu labels and enabled state.</summary>
     public void UpdateHistory(string undoLabel, bool canUndo, string redoLabel, bool canRedo)
     {
         undoMenuItem.Header = undoLabel;
@@ -262,6 +268,7 @@ internal sealed class ComposerMenuController
         redoMenuItem.IsEnabled = canRedo;
     }
 
+    /// <summary>Creates one menu command per label that invokes the given action with its index.</summary>
     private static MenuItem[] CreateCommands(IReadOnlyList<string> labels, Func<int, Task> action)
     {
         MenuItem[] items = new MenuItem[labels.Count];
@@ -273,6 +280,7 @@ internal sealed class ComposerMenuController
         return items;
     }
 
+    /// <summary>Creates a radio menu item group that invokes the given action with the selected index.</summary>
     private static MenuItem[] CreateRadioItems(IReadOnlyList<string> labels, string groupName, Action<int> action)
     {
         MenuItem[] items = new MenuItem[labels.Count];
@@ -291,6 +299,7 @@ internal sealed class ComposerMenuController
         return items;
     }
 
+    /// <summary>Creates a menu item that runs the given asynchronous action when clicked.</summary>
     private static MenuItem MenuCommand(string header, Func<Task> action)
     {
         MenuItem item = new() { Header = header };
@@ -298,6 +307,7 @@ internal sealed class ComposerMenuController
         return item;
     }
 
+    /// <summary>Checks the menu item at the given index and unchecks the rest.</summary>
     private static void SetChecked(MenuItem[] items, int selectedIndex)
     {
         for (int i = 0; i < items.Length; i++)

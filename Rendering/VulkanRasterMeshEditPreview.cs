@@ -22,6 +22,7 @@ public readonly record struct VulkanRasterMeshTriangleEdit(int TriangleIndex, by
 /// </summary>
 public sealed class VulkanRasterMeshEditPreview
 {
+    /// <summary>Captures the selection, triangle edits, and drag delta for the transient preview.</summary>
     public VulkanRasterMeshEditPreview(
         int selectionId,
         int groupId,

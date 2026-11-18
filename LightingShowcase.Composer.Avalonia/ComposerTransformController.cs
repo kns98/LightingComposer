@@ -22,6 +22,7 @@ internal sealed class ComposerTransformController
 {
     private sealed class GizmoDragState
     {
+        /// <summary>Captures the starting selection, transform, and gizmo hit for a drag.</summary>
         public GizmoDragState(
             int selectedId,
             ComposerGizmoMode mode,
@@ -102,6 +103,7 @@ internal sealed class ComposerTransformController
 
     private GizmoDragState? drag;
 
+    /// <summary>Initializes the transform controller with its session, views, and callbacks.</summary>
     public ComposerTransformController(
         ComposerSceneSession session,
         ComposerRenderController renderer,
@@ -163,6 +165,7 @@ internal sealed class ComposerTransformController
     public bool HasActiveDrag => drag != null;
     public bool ObjectGizmoOnly => drag is { MeshComponent: false };
 
+    /// <summary>Enumerates the position, rotation, and scale inspector text boxes.</summary>
     public IEnumerable<TextBox> TransformTextBoxes()
     {
         yield return positionX;
@@ -176,6 +179,7 @@ internal sealed class ComposerTransformController
         yield return scaleZ;
     }
 
+    /// <summary>Applies the inspector transform values and bakes them into geometry.</summary>
     public async Task ApplyInspectorAsync()
     {
         if (selection.ActiveObjectId is not int id)
@@ -244,6 +248,7 @@ internal sealed class ComposerTransformController
         }
     }
 
+    /// <summary>Resets the selected node transform to identity.</summary>
     public async Task ResetSelectedTransformAsync()
     {
         if (selection.ActiveObjectId is not int id)
@@ -274,6 +279,7 @@ internal sealed class ComposerTransformController
         }
     }
 
+    /// <summary>Begins a gizmo drag when the pointer hits the active gizmo.</summary>
     public bool TryBeginGizmoDrag(Point viewportPoint)
     {
         if (selection.ActiveObjectId is not int selectedId ||
@@ -320,6 +326,7 @@ internal sealed class ComposerTransformController
         return true;
     }
 
+    /// <summary>Updates the live transform preview from the current pointer position.</summary>
     public void UpdateGizmoDrag(Point viewportPoint, KeyModifiers modifiers)
     {
         GizmoDragState? current = drag;
@@ -441,6 +448,7 @@ internal sealed class ComposerTransformController
         }
     }
 
+    /// <summary>Commits the active gizmo drag and bakes its transform.</summary>
     public async Task<bool> CommitActiveDragAsync(Point releasePoint, KeyModifiers modifiers)
     {
         if (drag == null)
@@ -489,6 +497,7 @@ internal sealed class ComposerTransformController
         return true;
     }
 
+    /// <summary>Cancels the active gizmo drag and discards its preview.</summary>
     public void CancelActiveDrag()
     {
         GizmoDragState? current = drag;
@@ -505,6 +514,7 @@ internal sealed class ComposerTransformController
         drag = null;
     }
 
+    /// <summary>Converts a viewport point into render image coordinates.</summary>
     public bool TryViewportToImagePoint(Point viewportPoint, out Point imagePoint)
     {
         double viewportWidth = viewport.Bounds.Width;
@@ -532,12 +542,14 @@ internal sealed class ComposerTransformController
         return true;
     }
 
+    /// <summary>Clears the transform inspector text boxes.</summary>
     public void ClearTransformTextBoxes()
     {
         foreach (TextBox box in TransformTextBoxes())
             box.Text = string.Empty;
     }
 
+    /// <summary>Returns the unit vector for a gizmo axis.</summary>
     private static Vec3 AxisVector(ComposerGizmoAxis axis) => axis switch
     {
         ComposerGizmoAxis.X => new Vec3(1, 0, 0),
@@ -546,6 +558,7 @@ internal sealed class ComposerTransformController
         _ => Vec3.Zero
     };
 
+    /// <summary>Adds a delta to one component of a vector.</summary>
     private static Vec3 AddAxisComponent(Vec3 start, ComposerGizmoAxis axis, double delta) => axis switch
     {
         ComposerGizmoAxis.X => new Vec3(start.X + delta, start.Y, start.Z),
@@ -554,6 +567,7 @@ internal sealed class ComposerTransformController
         _ => start
     };
 
+    /// <summary>Scales one axis of a vector by the given factor.</summary>
     private static Vec3 ScaleAxis(Vec3 start, ComposerGizmoAxis axis, double factor) => axis switch
     {
         ComposerGizmoAxis.X => new Vec3(start.X * factor, start.Y, start.Z),
@@ -562,9 +576,11 @@ internal sealed class ComposerTransformController
         _ => start * factor
     };
 
+    /// <summary>Computes the pointer angle around the gizmo center.</summary>
     private static double PointerAngle(double x, double y, double centerX, double centerY) =>
         Math.Atan2(centerY - y, x - centerX);
 
+    /// <summary>Wraps an angle into the range negative pi to pi.</summary>
     private static double WrapAngle(double angle)
     {
         while (angle > Math.PI) angle -= Math.PI * 2.0;
@@ -572,6 +588,7 @@ internal sealed class ComposerTransformController
         return angle;
     }
 
+    /// <summary>Returns true when two vectors match within tolerance.</summary>
     private static bool NearlyEqual(Vec3 left, Vec3 right)
     {
         const double tolerance = 1e-8;

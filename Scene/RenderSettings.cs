@@ -24,6 +24,7 @@ public sealed class RenderSettings
     public int PathBounceCount { get; set; } = 0;
     public RenderBackend Backend { get; set; } = RenderBackend.Cpu;
 
+    /// <summary>Returns a copy of these render settings.</summary>
     public RenderSettings Clone() => new()
     {
         Mode = Mode,

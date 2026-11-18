@@ -82,6 +82,7 @@ public static class VulkanRasterRenderer
         public required Pipeline OpaquePipeline { get; init; }
         public required Pipeline TransparentPipeline { get; init; }
 
+        /// <summary>Disposes the shared raster pipelines, shaders, and resource layout.</summary>
         public void Dispose()
         {
             try { OpaquePipeline.Dispose(); } catch { }
@@ -132,6 +133,7 @@ public static class VulkanRasterRenderer
         public required double BoundingRadius { get; set; }
         public required Vec3 BoundingCenter { get; set; }
 
+        /// <summary>Disposes the cached scene buffers, atlas, and resource sets.</summary>
         public void Dispose()
         {
             try { PreviewResourceSet.Dispose(); } catch { }
@@ -160,6 +162,7 @@ public static class VulkanRasterRenderer
         public required Fence Fence { get; init; }
         public long LastUseSerial { get; set; }
 
+        /// <summary>Disposes the cached render targets, command list, and fence.</summary>
         public void Dispose()
         {
             try { Fence.Dispose(); } catch { }
@@ -179,6 +182,7 @@ public static class VulkanRasterRenderer
         public readonly Vector2 Uv;
         public readonly float MaterialIndex;
 
+        /// <summary>Initializes a raster vertex with position, normalized normal, UV, and material index.</summary>
         public RasterVertex(Vec3 position, Vec3 normal, Vec2 uv, int materialIndex)
         {
             Position = ToVector3(position);
@@ -198,6 +202,7 @@ public static class VulkanRasterRenderer
         public readonly Vector4 Projection; // x=aspect, y=tanHalfFov, z=near, w=far
         public readonly Vector4 Counts;     // x=lightCount, y=textureCount, z=debugMode, w=materialCount
 
+        /// <summary>Initializes camera projection constants from position, basis, resolution, and counts.</summary>
         public RasterCameraConstants(Vec3 position, CameraBasis basis, int width, int height, int lightCount, int textureCount, int debugMode, int materialCount, double farPlane)
         {
             CameraPosition = ToVector4(position, 1.0f);
@@ -223,6 +228,7 @@ public static class VulkanRasterRenderer
         public readonly Vector4 Rotation;
         public readonly Vector4 Scale;
 
+        /// <summary>Initializes transform preview constants, using identity when no preview applies.</summary>
         public RasterTransformConstants(VulkanRasterTransformPreview? preview)
         {
             if (preview == null || preview.IsIdentity)
@@ -269,6 +275,7 @@ public static class VulkanRasterRenderer
         public readonly Vector4 ColorIntensity; // rgb=color, w=intensity
         public readonly Vector4 ConeEnabled;    // x=cos inner, y=cos outer, z=castsShadow placeholder, w=enabled
 
+        /// <summary>Packs a scene light into GPU position, direction, color, and cone constants.</summary>
         public RasterLight(SceneLight light)
         {
             float kind = light.Kind switch
@@ -297,6 +304,7 @@ public static class VulkanRasterRenderer
         public readonly Vector4 TextureTransform; // xy=offset, zw=scale; rotation in TextureAddress.z
         public readonly bool HasTexture;
 
+        /// <summary>Initializes a texture atlas placement with transform, page, and wrap codes.</summary>
         public RasterTexturePlacement(float offsetX, float offsetY, float scaleX, float scaleY, int pageIndex, TextureMap texture)
         {
             AtlasTransform = new Vector4(offsetX, offsetY, scaleX, scaleY);
@@ -308,6 +316,7 @@ public static class VulkanRasterRenderer
 
         public static RasterTexturePlacement None => new();
 
+        /// <summary>Maps a texture address mode to its GPU code.</summary>
         private static float AddressModeCode(TextureAddressMode mode) => mode switch
         {
             TextureAddressMode.ClampToEdge => 1.0f,
@@ -352,6 +361,7 @@ public static class VulkanRasterRenderer
         public readonly Vector4 TransmissionTextureAddress;
         public readonly Vector4 TransmissionTextureTransform;
 
+        /// <summary>Packs a material and its texture placements into GPU constants.</summary>
         public RasterMaterial(
             Material material,
             RasterTexturePlacement basePlacement,
@@ -754,6 +764,7 @@ public static class VulkanRasterRenderer
         return image;
     }
 
+    /// <summary>Applies the active mesh edit delta to affected GPU vertices, or restores them when idle.</summary>
     private static void UpdateMeshEditPreview(
         GraphicsDevice gd,
         PreparedRasterScene prepared,
@@ -804,6 +815,7 @@ public static class VulkanRasterRenderer
         }
     }
 
+    /// <summary>Locates the GPU vertex ranges and original vertices affected by a mesh edit preview.</summary>
     private static MeshEditPatchState BuildMeshEditPatchState(
         PreparedRasterScene prepared,
         VulkanRasterMeshEditPreview preview)
@@ -859,6 +871,7 @@ public static class VulkanRasterRenderer
         };
     }
 
+    /// <summary>Restores previously patched GPU vertices to their original values.</summary>
     private static void RestoreMeshEditPreview(GraphicsDevice gd, PreparedRasterScene prepared)
     {
         MeshEditPatchState? active = prepared.ActiveMeshEdit;
@@ -870,6 +883,7 @@ public static class VulkanRasterRenderer
         prepared.ActiveMeshEdit = null;
     }
 
+    /// <summary>Uploads three replacement vertices into the opaque or transparent buffer.</summary>
     private static void UploadTrianglePatch(
         GraphicsDevice gd,
         PreparedRasterScene prepared,
@@ -883,6 +897,7 @@ public static class VulkanRasterRenderer
         gd.UpdateBuffer(destination, byteOffset, vertices);
     }
 
+    /// <summary>Draws a vertex buffer, switching between identity and preview resource sets per range.</summary>
     private static void DrawVertexRanges(
         CommandList commandList,
         uint totalVertexCount,
@@ -921,6 +936,7 @@ public static class VulkanRasterRenderer
         }
     }
 
+    /// <summary>Returns cached vertex ranges for a transform preview selection, building them on first use.</summary>
     private static PreviewRangeSet GetOrCreatePreviewRanges(
         PreparedRasterScene prepared,
         VulkanRasterTransformPreview preview)
@@ -943,6 +959,7 @@ public static class VulkanRasterRenderer
         return result;
     }
 
+    /// <summary>Builds per-group opaque and transparent vertex ranges for the scene.</summary>
     private static IReadOnlyDictionary<int, PreviewRangeSet> BuildGroupVertexRanges(Scene scene)
     {
         Dictionary<int, (List<VertexRange> Opaque, List<VertexRange> Transparent)> builders = new();
@@ -977,6 +994,7 @@ public static class VulkanRasterRenderer
             pair => new PreviewRangeSet(pair.Value.Opaque, pair.Value.Transparent));
     }
 
+    /// <summary>Sorts vertex ranges and merges overlapping neighbors.</summary>
     private static IReadOnlyList<VertexRange> MergeRanges(List<VertexRange> ranges)
     {
         if (ranges.Count <= 1)
@@ -989,6 +1007,7 @@ public static class VulkanRasterRenderer
         return merged;
     }
 
+    /// <summary>Appends a vertex range, merging it into the previous range when overlapping.</summary>
     private static void AppendRange(List<VertexRange> ranges, uint start, uint count)
     {
         if (count == 0)
@@ -1007,6 +1026,7 @@ public static class VulkanRasterRenderer
         ranges.Add(new VertexRange(start, count));
     }
 
+    /// <summary>Returns the cached GPU scene, rebuilding buffers, atlas, and descriptors when stale.</summary>
     private static PreparedRasterScene GetOrCreatePreparedScene(GraphicsDevice gd, SharedRasterResources resources, Scene scene, CancellationToken cancellationToken)
     {
         bool gpuTextureSamplingRequested = UseGpuTextureSampling;
@@ -1130,6 +1150,7 @@ public static class VulkanRasterRenderer
         }
     }
 
+    /// <summary>Uploads scene triangles into the opaque and transparent vertex buffers in chunks.</summary>
     private static void UploadRasterGeometry(
         GraphicsDevice gd,
         DeviceBuffer opaqueVertexBuffer,
@@ -1195,6 +1216,7 @@ public static class VulkanRasterRenderer
         if (transparentTrianglesInChunk > 0)
             UploadChunk(transparentVertexBuffer, transparentVertices, transparentTrianglesInChunk, ref uploadedTransparentTriangles);
 
+        /// <summary>Uploads one chunk of raster vertices at the running buffer offset.</summary>
         void UploadChunk(DeviceBuffer destination, RasterVertex[] vertices, int triangleCount, ref int uploadedTriangles)
         {
             RasterVertex[] vertexUpload = vertices;
@@ -1210,6 +1232,7 @@ public static class VulkanRasterRenderer
         }
     }
 
+    /// <summary>Uploads each texture and its filtering border pixels into the GPU atlas.</summary>
     private static void UploadTextureAtlas(GraphicsDevice gd, Texture atlas, TextureBuildResult textures, CancellationToken cancellationToken)
     {
         if (textures.Uploads.Count == 0)
@@ -1258,6 +1281,7 @@ public static class VulkanRasterRenderer
         }
     }
 
+    /// <summary>Validates a requested GPU buffer size against the minimum and 4 GB limit.</summary>
     private static uint CheckedBufferSize(long requestedBytes, int minimumBytes, string label)
     {
         long bytes = Math.Max(minimumBytes, requestedBytes);
@@ -1266,6 +1290,7 @@ public static class VulkanRasterRenderer
         return checked((uint)bytes);
     }
 
+    /// <summary>Returns cached render targets for a resolution, evicting the least recently used size.</summary>
     private static RasterTargets GetOrCreateTargets(GraphicsDevice gd, int width, int height)
     {
         (int Width, int Height) key = (width, height);
@@ -1305,6 +1330,7 @@ public static class VulkanRasterRenderer
         return created;
     }
 
+    /// <summary>Computes the scene bounding center and radius from all triangle vertices.</summary>
     private static void ComputeSceneBounds(Scene scene, out Vec3 center, out double radius)
     {
         if (scene.Triangles.Count == 0) { center = Vec3.Zero; radius = 10; return; }
@@ -1318,6 +1344,7 @@ public static class VulkanRasterRenderer
         center = (min + max) / 2.0;
         radius = Math.Max(1.0, (max - center).Length());
 
+        /// <summary>Expands the running bounds to include a point.</summary>
         void Include(Vec3 p)
         {
             min = new Vec3(Math.Min(min.X, p.X), Math.Min(min.Y, p.Y), Math.Min(min.Z, p.Z));
@@ -1325,9 +1352,11 @@ public static class VulkanRasterRenderer
         }
     }
 
+    /// <summary>Derives the camera far plane from cached bounds and camera distance.</summary>
     private static double ComputeCachedCameraFarPlane(PreparedRasterScene scene, Vec3 cameraPosition) =>
         Math.Clamp((scene.BoundingCenter - cameraPosition).Length() + scene.BoundingRadius * 1.1 + 1.0, 10.0, CameraFar);
 
+    /// <summary>Returns the shared Vulkan graphics device, creating it after a child-process preflight.</summary>
     private static GraphicsDevice GetOrCreateSharedDevice()
     {
         lock (DeviceSync)
@@ -1368,6 +1397,7 @@ public static class VulkanRasterRenderer
         }
     }
 
+    /// <summary>Returns the shared raster layout, shaders, and opaque and transparent pipelines.</summary>
     private static SharedRasterResources GetOrCreateSharedRasterResources(GraphicsDevice gd, OutputDescription outputDescription)
     {
         lock (DeviceSync)
@@ -1472,6 +1502,7 @@ public static class VulkanRasterRenderer
         }
     }
 
+    /// <summary>Creates the raster vertex and fragment shaders from the embedded sources.</summary>
     private static Shader[] CreateRasterShaders(ResourceFactory factory)
     {
         ShaderDescription vertex = new(
@@ -1502,6 +1533,7 @@ public static class VulkanRasterRenderer
         }
     }
 
+    /// <summary>Counts opaque and transparent triangles and assigns material ids with texture placements.</summary>
     private static RasterGeometryBuildResult BuildGeometryMetadata(
         Scene scene,
         IReadOnlyDictionary<TextureMap, RasterTexturePlacement> texturePlacements,
@@ -1563,12 +1595,14 @@ public static class VulkanRasterRenderer
         };
     }
 
+    /// <summary>Computes a triangle centroid depth along the camera forward axis.</summary>
     private static double TriangleViewDepth(Triangle triangle, Vec3 cameraPosition, CameraBasis basis)
     {
         Vec3 centroid = (triangle.A + triangle.B + triangle.C) / 3.0;
         return (centroid - cameraPosition).Dot(basis.Forward);
     }
 
+    /// <summary>Returns true when a triangle has finite data and sits fully in front of the camera.</summary>
     private static bool IsRenderableTriangle(Triangle triangle, Vec3 cameraPosition, CameraBasis basis)
     {
         if (!IsFinite(triangle.A) || !IsFinite(triangle.B) || !IsFinite(triangle.C))
@@ -1583,9 +1617,11 @@ public static class VulkanRasterRenderer
         return IsTriangleInFrontOfCamera(triangle, cameraPosition, basis);
     }
 
+    /// <summary>Returns true when all three vector components are finite.</summary>
     private static bool IsFinite(Vec3 value) =>
         double.IsFinite(value.X) && double.IsFinite(value.Y) && double.IsFinite(value.Z);
 
+    /// <summary>Returns true when all three triangle corners are beyond the near plane.</summary>
     private static bool IsTriangleInFrontOfCamera(Triangle triangle, Vec3 cameraPosition, CameraBasis basis)
     {
         return CameraDepth(triangle.A, cameraPosition, basis) > CameraNear &&
@@ -1593,12 +1629,14 @@ public static class VulkanRasterRenderer
                CameraDepth(triangle.C, cameraPosition, basis) > CameraNear;
     }
 
+    /// <summary>Computes a point depth along the camera forward axis.</summary>
     private static double CameraDepth(Vec3 point, Vec3 cameraPosition, CameraBasis basis)
     {
         double depth = (point - cameraPosition).Dot(basis.Forward);
         return double.IsFinite(depth) ? depth : double.NegativeInfinity;
     }
 
+    /// <summary>Packs a material base color and effective alpha into a vector.</summary>
     private static Vector4 MaterialColorAlpha(Material material)
     {
         double effectiveAlpha = EffectiveMaterialAlpha(material);
@@ -1609,6 +1647,7 @@ public static class VulkanRasterRenderer
             (float)Math.Clamp(effectiveAlpha, 0.0, 1.0));
     }
 
+    /// <summary>Samples a material color and alpha at the given UV.</summary>
     private static Vector4 BakedMaterialColorAlpha(Material material, Vec2 uv)
     {
         Vec3 color = material.Sample(uv.U, uv.V);
@@ -1620,6 +1659,7 @@ public static class VulkanRasterRenderer
             (float)Math.Clamp(alpha, 0.0, 1.0));
     }
 
+    /// <summary>Packs a material emission color and strength into a vector.</summary>
     private static Vector4 MaterialEmission(Material material)
     {
         return new Vector4(
@@ -1629,11 +1669,13 @@ public static class VulkanRasterRenderer
             (float)Math.Max(0.0, material.Emission));
     }
 
+    /// <summary>Returns the material emission, ignoring the UV parameter.</summary>
     private static Vector4 BakedMaterialEmission(Material material, Vec2 uv)
     {
         return MaterialEmission(material);
     }
 
+    /// <summary>Returns true when a material uses alpha blend mode.</summary>
     private static bool IsTransparentMaterial(Material material)
     {
         // KHR_materials_transmission does not make a surface geometrically
@@ -1645,6 +1687,7 @@ public static class VulkanRasterRenderer
         return material.AlphaMode == MaterialAlphaMode.Blend;
     }
 
+    /// <summary>Returns the clamped base alpha of a material.</summary>
     private static double EffectiveMaterialAlpha(Material material)
     {
         // Match ShadowRasterRenderer, not the ray tracer: the fast CPU raster mode
@@ -1655,6 +1698,7 @@ public static class VulkanRasterRenderer
         return Math.Clamp(material.Alpha, 0.0, 1.0);
     }
 
+    /// <summary>Collects enabled scene lights into GPU light records.</summary>
     private static RasterLight[] BuildLightBuffer(Scene scene)
     {
         List<RasterLight> lights = new();
@@ -1669,6 +1713,7 @@ public static class VulkanRasterRenderer
         return lights.ToArray();
     }
 
+    /// <summary>Computes the camera far plane from the deepest visible scene vertex.</summary>
     private static double ComputeCameraFarPlane(Scene scene, Vec3 cameraPosition, CameraBasis basis)
     {
         // The CPU shadow rasterizer stores camera-space depth directly in a
@@ -1688,6 +1733,7 @@ public static class VulkanRasterRenderer
         double margin = Math.Max(1.0, maxDepth * 0.08);
         return Math.Clamp(maxDepth + margin, 10.0, CameraFar);
 
+        /// <summary>Tracks the maximum finite camera depth of visited points.</summary>
         void IncludeDepth(Vec3 point)
         {
             double depth = CameraDepth(point, cameraPosition, basis);
@@ -1696,6 +1742,7 @@ public static class VulkanRasterRenderer
         }
     }
 
+    /// <summary>Packs scene textures into a GPU texture array and computes their placements.</summary>
     private static TextureBuildResult BuildTextureAtlas(GraphicsDevice gd, Scene scene, bool gpuTextureSamplingRequested)
     {
         if (!gpuTextureSamplingRequested)
@@ -1713,6 +1760,7 @@ public static class VulkanRasterRenderer
             AddTexture(triangle.Material.TransmissionTexture);
         }
 
+        /// <summary>Adds a texture to the atlas list unless it is null or already seen.</summary>
         void AddTexture(TextureMap? texture)
         {
             if (texture != null && seen.Add(texture))
@@ -1837,6 +1885,7 @@ public static class VulkanRasterRenderer
             UsesGpuTextureSampling = true
         };
 
+        /// <summary>Builds candidate atlas dimensions from minimum, square estimate, and power-of-two sizes.</summary>
         List<int> BuildDimensionCandidates(int minimum, int maximum, long area)
         {
             SortedSet<int> candidates = new();
@@ -1861,6 +1910,7 @@ public static class VulkanRasterRenderer
             AddCandidate(maximum);
             return candidates.ToList();
 
+            /// <summary>Adds a clamped dimension candidate to the set.</summary>
             void AddCandidate(int value)
             {
                 if (value < minimum)
@@ -1871,6 +1921,7 @@ public static class VulkanRasterRenderer
             }
         }
 
+        /// <summary>Packs textures into atlas pages with a row-based layout, returning false when they overflow.</summary>
         bool TryPackPages(int pageWidth, int pageHeight, out List<RasterTextureUpload> uploads, out int pageCount)
         {
             uploads = new List<RasterTextureUpload>(sorted.Count);
@@ -1920,6 +1971,7 @@ public static class VulkanRasterRenderer
             return pageCount <= maxPageCount;
         }
 
+        /// <summary>Returns the smallest power of two greater than or equal to the value.</summary>
         static int NextPowerOfTwo(int value)
         {
             if (value <= 1)
@@ -1934,6 +1986,7 @@ public static class VulkanRasterRenderer
         }
     }
 
+    /// <summary>Creates an empty texture result that falls back to base-color sampling.</summary>
     private static TextureBuildResult CreateBakedTextureResult(string? reason) => new()
     {
         TexturePlacements = new Dictionary<TextureMap, RasterTexturePlacement>(),
@@ -1946,6 +1999,7 @@ public static class VulkanRasterRenderer
         FallbackReason = reason
     };
 
+    /// <summary>Returns the atlas placement for a texture, or none when absent.</summary>
     private static RasterTexturePlacement TexturePlacement(IReadOnlyDictionary<TextureMap, RasterTexturePlacement> texturePlacements, TextureMap? texture)
     {
         if (texture == null)
@@ -1953,6 +2007,7 @@ public static class VulkanRasterRenderer
         return texturePlacements.TryGetValue(texture, out RasterTexturePlacement placement) ? placement : RasterTexturePlacement.None;
     }
 
+    /// <summary>Reads staging pixels into a render image, forcing alpha to opaque.</summary>
     private static unsafe RenderImage ReadBackImage(GraphicsDevice gd, Texture stagingTexture, int width, int height)
     {
         uint[] pixels = new uint[checked(width * height)];
@@ -1981,6 +2036,7 @@ public static class VulkanRasterRenderer
 
     private static bool StageLoggingEnabled => IsVulkanDebugEnabled() || string.Equals(Environment.GetEnvironmentVariable("LIGHTINGSHOWCASE_VULKAN_STAGE_LOG"), "1", StringComparison.OrdinalIgnoreCase);
 
+    /// <summary>Resets the raster stage log with the current resolution when logging is enabled.</summary>
     private static void ResetStageLog(int width, int height)
     {
         if (!StageLoggingEnabled) return;
@@ -1994,6 +2050,7 @@ public static class VulkanRasterRenderer
         catch { }
     }
 
+    /// <summary>Appends a timestamped entry to the raster stage log when logging is enabled.</summary>
     private static void Stage(string name)
     {
         if (!StageLoggingEnabled) return;
@@ -2001,6 +2058,7 @@ public static class VulkanRasterRenderer
         catch { }
     }
 
+    /// <summary>Logs the stage name and throws when cancellation was requested.</summary>
     private static void ThrowIfCancellationRequested(CancellationToken cancellationToken, string stageName)
     {
         if (!cancellationToken.IsCancellationRequested)
@@ -2010,6 +2068,7 @@ public static class VulkanRasterRenderer
     }
 
 
+    /// <summary>Returns true when the Vulkan debug environment variable is set.</summary>
     private static bool IsVulkanDebugEnabled()
     {
         string? value = Environment.GetEnvironmentVariable("LIGHTINGSHOWCASE_VULKAN_DEBUG");
@@ -2018,6 +2077,7 @@ public static class VulkanRasterRenderer
                string.Equals(value, "yes", StringComparison.OrdinalIgnoreCase);
     }
 
+    /// <summary>Maps a raster debug mode code to its short name.</summary>
     private static string DebugModeName(int mode) => mode switch
     {
         1 => "uv",
@@ -2034,7 +2094,9 @@ public static class VulkanRasterRenderer
         _ => "off"
     };
 
+    /// <summary>Converts a Vec3 to a single-precision Vector3.</summary>
     private static Vector3 ToVector3(Vec3 value) => new((float)value.X, (float)value.Y, (float)value.Z);
+    /// <summary>Converts a Vec3 and w component to a single-precision Vector4.</summary>
     private static Vector4 ToVector4(Vec3 value, float w) => new((float)value.X, (float)value.Y, (float)value.Z, w);
 
     private const string VertexShaderSource = @"

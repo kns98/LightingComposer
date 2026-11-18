@@ -47,6 +47,7 @@ internal sealed class ComposerRenderController : IDisposable
     private CancellationTokenSource? activeRenderCancellation;
     private CancellationTokenSource? resizeDebounceCancellation;
 
+    /// <summary>Initializes the render controller with its scene session, viewport controls, and selector callbacks.</summary>
     public ComposerRenderController(
         ComposerSceneSession session,
         Image image,
@@ -73,8 +74,10 @@ internal sealed class ComposerRenderController : IDisposable
     public int LastRenderWidth { get; private set; } = 1;
     public int LastRenderHeight { get; private set; } = 1;
 
+    /// <summary>Returns the render options stored for the given renderer.</summary>
     public ComposerRenderOptions GetOptions(ComposerRendererKind kind) => renderOptions[kind];
 
+    /// <summary>Stores validated render options for the given renderer.</summary>
     public void SetOptions(ComposerRendererKind kind, ComposerRenderOptions options)
     {
         ArgumentNullException.ThrowIfNull(options);
@@ -82,6 +85,7 @@ internal sealed class ComposerRenderController : IDisposable
         renderOptions[kind] = options;
     }
 
+    /// <summary>Returns true when the given renderer is fast enough for continuous rendering.</summary>
     public bool CanRenderContinuously(ComposerRendererKind renderer)
     {
         if (renderer == ComposerRendererKind.Raster)
@@ -93,6 +97,7 @@ internal sealed class ComposerRenderController : IDisposable
         return milliseconds <= (renderer == ComposerRendererKind.VulkanRaster ? 160.0 : 220.0);
     }
 
+    /// <summary>Requests a new frame, coalescing overlapping requests while a render is in progress.</summary>
     public async Task RequestRenderAsync(bool interactive)
     {
         if (!session.HasRenderableScene || lifetimeToken.IsCancellationRequested)
@@ -140,6 +145,7 @@ internal sealed class ComposerRenderController : IDisposable
         }
     }
 
+    /// <summary>Renders one frame with the selected renderer and updates the viewport image and status text.</summary>
     private async Task RenderOneFrameAsync(bool interactive, long requestVersion, CancellationToken token)
     {
         ComposerRendererKind renderer = selectedRenderer();
@@ -199,6 +205,7 @@ internal sealed class ComposerRenderController : IDisposable
         }
     }
 
+    /// <summary>Schedules a debounced render after the viewport is resized.</summary>
     public void ScheduleResizeRender()
     {
         if (!session.HasRenderableScene || lifetimeToken.IsCancellationRequested)
@@ -210,6 +217,7 @@ internal sealed class ComposerRenderController : IDisposable
         _ = RenderAfterResizeDelayAsync(cancellation);
     }
 
+    /// <summary>Waits for the resize debounce delay and then requests a full-quality render.</summary>
     private async Task RenderAfterResizeDelayAsync(CancellationTokenSource cancellation)
     {
         try
@@ -228,6 +236,7 @@ internal sealed class ComposerRenderController : IDisposable
         }
     }
 
+    /// <summary>Cancels the active render and waits until it has stopped.</summary>
     public async Task StopCurrentRenderAsync()
     {
         renderVersion++;
@@ -239,12 +248,14 @@ internal sealed class ComposerRenderController : IDisposable
             await Task.Delay(8, lifetimeToken);
     }
 
+    /// <summary>Cancels the active render without waiting for it to stop.</summary>
     public void CancelCurrentRender()
     {
         renderVersion++;
         activeRenderCancellation?.Cancel();
     }
 
+    /// <summary>Clears the viewport image and resets the last render size.</summary>
     public void ClearImage()
     {
         WriteableBitmap? old = bitmap;
@@ -255,6 +266,7 @@ internal sealed class ComposerRenderController : IDisposable
         LastRenderHeight = 1;
     }
 
+    /// <summary>Chooses the frame size for the given renderer, downscaling interactive previews.</summary>
     private static (int Width, int Height) ChooseRenderSize(
         ComposerRendererKind renderer,
         bool interactive,
@@ -279,6 +291,7 @@ internal sealed class ComposerRenderController : IDisposable
         return (width, height);
     }
 
+    /// <summary>Copies the rendered frame into the viewport bitmap and refreshes the display.</summary>
     private unsafe void ShowImage(RenderImage rendered)
     {
         bool sizeChanged = bitmap == null ||
@@ -311,8 +324,10 @@ internal sealed class ComposerRenderController : IDisposable
         image.InvalidateVisual();
     }
 
+    /// <summary>Rounds a dimension up to a multiple of eight.</summary>
     private static int AlignToEight(int value) => Math.Max(8, (value + 7) & ~7);
 
+    /// <summary>Formats a byte count as mebibytes or gibibytes.</summary>
     private static string FormatBytes(long bytes)
     {
         const double gib = 1024.0 * 1024.0 * 1024.0;
@@ -320,6 +335,7 @@ internal sealed class ComposerRenderController : IDisposable
         return bytes >= gib ? $"{bytes / gib:0.00} GiB" : $"{bytes / mib:0} MiB";
     }
 
+    /// <summary>Cancels pending renders and releases the viewport bitmap.</summary>
     public void Dispose()
     {
         activeRenderCancellation?.Cancel();

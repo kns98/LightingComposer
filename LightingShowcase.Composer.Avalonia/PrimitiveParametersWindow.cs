@@ -36,6 +36,7 @@ internal sealed class PrimitiveParametersWindow : Window
 
     public int ObjectId => objectId;
 
+    /// <summary>Initializes the modeless primitive parameter editor with live preview.</summary>
     public PrimitiveParametersWindow(
         ComposerSceneSession session,
         ComposerPrimitiveParameterModel model,
@@ -115,6 +116,7 @@ internal sealed class PrimitiveParametersWindow : Window
             statusText.Text = message;
     }
 
+    /// <summary>Builds the parameter fields, status text, and Apply, Revert, Convert, and Close buttons.</summary>
     private Control BuildContent()
     {
         StackPanel fields = new() { Spacing = 10 };
@@ -207,6 +209,7 @@ internal sealed class PrimitiveParametersWindow : Window
         };
     }
 
+    /// <summary>Builds one labeled editor row matching the parameter kind.</summary>
     private Control BuildParameterRow(PrimitiveParameterDescriptor descriptor)
     {
         string label = descriptor.Kind == PrimitiveParameterKind.Length
@@ -272,6 +275,7 @@ internal sealed class PrimitiveParametersWindow : Window
         return row;
     }
 
+    /// <summary>Marks the preview dirty and restarts the preview timer.</summary>
     private void SchedulePreview()
     {
         previewDirty = true;
@@ -279,6 +283,7 @@ internal sealed class PrimitiveParametersWindow : Window
         previewTimer.Start();
     }
 
+    /// <summary>Applies current field values to the live preview and reports validation errors.</summary>
     private bool PreviewNow()
     {
         if (!previewDirty)
@@ -318,6 +323,7 @@ internal sealed class PrimitiveParametersWindow : Window
         }
     }
 
+    /// <summary>Parses a parameter number and normalizes it to the descriptor range.</summary>
     private static bool TryReadNumber(string? text, PrimitiveParameterDescriptor descriptor, out double value)
     {
         string input = text?.Trim() ?? string.Empty;
@@ -329,11 +335,13 @@ internal sealed class PrimitiveParametersWindow : Window
         return true;
     }
 
+    /// <summary>Formats a parameter value for display.</summary>
     private static string FormatNumber(double value, PrimitiveParameterKind kind) =>
         kind == PrimitiveParameterKind.Integer
             ? Math.Round(value).ToString("0", CultureInfo.InvariantCulture)
             : value.ToString("0.######", CultureInfo.InvariantCulture);
 
+    /// <summary>Creates a uniformly padded parameter-window button.</summary>
     private static Button NewButton(string text) => new()
     {
         Content = text,

@@ -17,6 +17,7 @@ public sealed class SceneSnapshot
     public IReadOnlyList<SceneObjectGroup> ObjectGroups { get; }
     public IReadOnlyList<SceneLight> Lights { get; }
 
+    /// <summary>Captures a deep copy of the given object groups and lights with the given description.</summary>
     public SceneSnapshot(string description, IEnumerable<SceneObjectGroup> objectGroups, IEnumerable<SceneLight> lights)
     {
         Description = description;
@@ -28,15 +29,19 @@ public sealed class SceneSnapshot
 /// <summary>Deep-copy helpers used by SceneSnapshot.</summary>
 internal static class SceneCloner
 {
+    /// <summary>Clones the given group while preserving its identifier.</summary>
     public static SceneObjectGroup CloneGroupPreservingId(SceneObjectGroup source)
         => CloneGroup(source, source.Id, source.Name, preserveChildIds: true);
 
+    /// <summary>Clones the given group with the given identifier and name.</summary>
     public static SceneObjectGroup CloneGroupWithNewId(SceneObjectGroup source, int id, string name)
         => CloneGroup(source, id, name, preserveChildIds: true);
 
+    /// <summary>Clones the given group and its children with fresh identifiers from the given generator.</summary>
     public static SceneObjectGroup CloneGroupWithFreshIds(SceneObjectGroup source, Func<int> nextId, string name)
         => CloneGroupWithFreshIdsCore(source, nextId, name);
 
+    /// <summary>Clones the given group, copying its transform, parameters, triangles, and children.</summary>
     private static SceneObjectGroup CloneGroup(SceneObjectGroup source, int id, string name, bool preserveChildIds)
     {
         SceneObjectGroup clone = new(id, name, source.IsSelectable)
@@ -64,6 +69,7 @@ internal static class SceneCloner
         return clone;
     }
 
+    /// <summary>Clones the given group and its children with fresh identifiers from the given generator.</summary>
     private static SceneObjectGroup CloneGroupWithFreshIdsCore(SceneObjectGroup source, Func<int> nextId, string name)
     {
         SceneObjectGroup clone = new(nextId(), name, source.IsSelectable)
@@ -88,6 +94,7 @@ internal static class SceneCloner
         return clone;
     }
 
+    /// <summary>Clones the given light.</summary>
     public static SceneLight CloneLight(SceneLight source)
         => new(source.Id, source.Position, source.Color, source.Intensity, source.Enabled, source.Kind, source.Direction, source.Range, source.InnerConeAngle, source.OuterConeAngle, source.CastsShadow, source.IsImported, source.IsDefault);
 }

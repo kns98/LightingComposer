@@ -15,6 +15,7 @@ namespace LightingShowcase.Composer;
 
 internal static class CpuComposerRenderer
 {
+    /// <summary>Renders the scene on the CPU with the parallel ray tracer.</summary>
     public static RenderImage Render(
         Scene scene,
         CameraDefinition camera,
@@ -74,6 +75,7 @@ internal static class CpuComposerRenderer
         return new RenderImage(width, height, pixels);
     }
 
+    /// <summary>Packs a display color into a 32-bit RGBA value.</summary>
     private static uint PackDisplayColor(Vec3 display)
     {
         byte red = ToByte(display.X);
@@ -82,12 +84,14 @@ internal static class CpuComposerRenderer
         return red | ((uint)green << 8) | ((uint)blue << 16) | 0xff000000u;
     }
 
+    /// <summary>Converts a color channel into a byte.</summary>
     private static byte ToByte(double value)
     {
         if (!double.IsFinite(value)) return 0;
         return (byte)Math.Clamp((int)Math.Round(Math.Clamp(value, 0.0, 1.0) * 255.0), 0, 255);
     }
 
+    /// <summary>Computes a deterministic sub-pixel jitter value in the unit interval.</summary>
     private static double Jitter01(int x, int y, int sampleIndex, int axis)
     {
         unchecked

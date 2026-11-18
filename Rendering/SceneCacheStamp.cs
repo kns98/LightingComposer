@@ -16,12 +16,14 @@ namespace LightingShowcase.Rendering;
 /// </summary>
 public readonly record struct SceneCacheStamp(Scene Scene, long Revision)
 {
+    /// <summary>Captures the revision stamp for the given scene.</summary>
     public static SceneCacheStamp Capture(Scene scene)
     {
         ArgumentNullException.ThrowIfNull(scene);
         return new SceneCacheStamp(scene, scene.Revision);
     }
 
+    /// <summary>Returns true when the stamp holds the same scene at its current revision.</summary>
     public bool Matches(Scene scene) =>
         ReferenceEquals(Scene, scene) && Revision == scene.Revision;
 }

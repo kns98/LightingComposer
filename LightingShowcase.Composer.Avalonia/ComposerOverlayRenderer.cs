@@ -74,6 +74,7 @@ internal static class ComposerOverlayRenderer
         ProjectedPoint YEnd,
         ProjectedPoint ZEnd);
 
+    /// <summary>Draws selection bounds, mesh highlights, and the active transform gizmo.</summary>
     public static void DrawSelection(
         RenderImage image,
         CameraDefinition camera,
@@ -176,6 +177,7 @@ internal static class ComposerOverlayRenderer
         return lightIndex >= 0;
     }
 
+    /// <summary>Draws an editor marker for one light with its kind-specific hints.</summary>
     private static void DrawLightMarker(
         RenderImage image,
         CameraDefinition camera,
@@ -218,6 +220,7 @@ internal static class ComposerOverlayRenderer
         }
     }
 
+    /// <summary>Draws a direction arrow from a light marker along the light direction.</summary>
     private static void DrawDirectionArrow(
         RenderImage image,
         CameraDefinition camera,
@@ -246,6 +249,7 @@ internal static class ComposerOverlayRenderer
         DrawLine(image, tip.X, tip.Y, tip.X - dx * 8 - px * 5, tip.Y - dy * 8 - py * 5, color, 2);
     }
 
+    /// <summary>Draws a cone outline hint for a spot light marker.</summary>
     private static void DrawSpotConeHint(
         RenderImage image,
         CameraDefinition camera,
@@ -271,6 +275,7 @@ internal static class ComposerOverlayRenderer
         DrawLine(image, a.X, a.Y, b.X, b.Y, color, 1);
     }
 
+    /// <summary>Draws one marker ray outward from a light marker center.</summary>
     private static void DrawRay(RenderImage image, ProjectedPoint center, double dx, double dy, uint color)
     {
         double length = Math.Sqrt(dx * dx + dy * dy);
@@ -281,6 +286,7 @@ internal static class ComposerOverlayRenderer
         DrawLine(image, sx, sy, center.X + dx, center.Y + dy, color, 2);
     }
 
+    /// <summary>Draws a circle outline as connected line segments.</summary>
     private static void DrawCircleOutline(RenderImage image, double cx, double cy, double radius, uint color, int thickness)
     {
         const int segments = 28;
@@ -297,6 +303,7 @@ internal static class ComposerOverlayRenderer
         }
     }
 
+    /// <summary>Packs a light color into an opaque packed RGBA value.</summary>
     private static uint PackedLightColor(Vec3 color)
     {
         byte r = (byte)Math.Clamp((int)Math.Round(color.X * 255.0), 0, 255);
@@ -305,6 +312,7 @@ internal static class ComposerOverlayRenderer
         return (uint)(r | (g << 8) | (b << 16) | (255 << 24));
     }
 
+    /// <summary>Draws hover highlights for the given mesh selection visual.</summary>
     public static void DrawMeshHover(
         RenderImage image,
         CameraDefinition camera,
@@ -325,6 +333,7 @@ internal static class ComposerOverlayRenderer
             drawWhiteCenter: false);
     }
 
+    /// <summary>Draws selection highlights for the given mesh selection visual.</summary>
     private static void DrawMeshSelection(
         RenderImage image,
         CameraDefinition camera,
@@ -339,6 +348,7 @@ internal static class ComposerOverlayRenderer
             edgeThickness: 5,
             drawWhiteCenter: true);
 
+    /// <summary>Draws mesh selection edges and points with the given colors and handle sizes.</summary>
     private static void DrawMeshVisual(
         RenderImage image,
         CameraDefinition camera,
@@ -368,6 +378,7 @@ internal static class ComposerOverlayRenderer
         }
     }
 
+    /// <summary>Tests whether the pointer hits the gizmo for the given mode.</summary>
     public static bool TryHitGizmo(
         ComposerGizmoMode mode,
         CameraDefinition camera,
@@ -379,6 +390,7 @@ internal static class ComposerOverlayRenderer
         out ComposerGizmoHit hit) =>
         TryHitGizmo(mode, camera, bounds, width, height, imageX, imageY, ComposerGizmoAxis.None, out hit);
 
+    /// <summary>Tests whether the pointer hits the gizmo for the given mode and axis constraint.</summary>
     public static bool TryHitGizmo(
         ComposerGizmoMode mode,
         CameraDefinition camera,
@@ -398,6 +410,7 @@ internal static class ComposerOverlayRenderer
         };
     }
 
+    /// <summary>Returns true when the pointer hits a translation axis handle.</summary>
     public static bool TryHitTranslationAxis(
         CameraDefinition camera,
         Aabb bounds,
@@ -408,6 +421,7 @@ internal static class ComposerOverlayRenderer
         out ComposerGizmoHit hit) =>
         TryHitTranslationAxis(camera, bounds, width, height, imageX, imageY, ComposerGizmoAxis.None, out hit);
 
+    /// <summary>Returns true when the pointer hits a translation axis handle within the axis constraint.</summary>
     public static bool TryHitTranslationAxis(
         CameraDefinition camera,
         Aabb bounds,
@@ -439,6 +453,7 @@ internal static class ComposerOverlayRenderer
         hit = best;
         return true;
 
+        /// <summary>Tests one translation axis against the pointer and keeps the closest hit.</summary>
         void TestAxis(ComposerGizmoAxis axis, ProjectedPoint start, ProjectedPoint end)
         {
             double dx = end.X - start.X;
@@ -465,6 +480,7 @@ internal static class ComposerOverlayRenderer
         }
     }
 
+    /// <summary>Returns true when the pointer hits a scale handle or the uniform center.</summary>
     private static bool TryHitScaleHandle(
         CameraDefinition camera,
         Aabb bounds,
@@ -505,6 +521,7 @@ internal static class ComposerOverlayRenderer
         hit = best;
         return true;
 
+        /// <summary>Tests one scale handle against the pointer and keeps the closest hit.</summary>
         void TestAxis(ComposerGizmoAxis axis, ProjectedPoint end)
         {
             double dx = end.X - geometry.Center.X;
@@ -536,6 +553,7 @@ internal static class ComposerOverlayRenderer
         }
     }
 
+    /// <summary>Returns true when the pointer hits a rotation ring.</summary>
     private static bool TryHitRotationRing(
         CameraDefinition camera,
         Aabb bounds,
@@ -580,6 +598,7 @@ internal static class ComposerOverlayRenderer
             startVector);
         return true;
 
+        /// <summary>Tests one rotation ring against the pointer and keeps the closest hit.</summary>
         void TestRing(ComposerGizmoAxis axis)
         {
             ProjectedPoint? previous = null;
@@ -666,6 +685,7 @@ internal static class ComposerOverlayRenderer
         return true;
     }
 
+    /// <summary>Draws the projected bounding-box edges of the selection.</summary>
     private static void DrawBounds(RenderImage image, CameraDefinition camera, Aabb bounds)
     {
         Vec3[] corners =
@@ -697,6 +717,7 @@ internal static class ComposerOverlayRenderer
         }
     }
 
+    /// <summary>Draws the translation axis handles and origin handle.</summary>
     private static void DrawTranslationGizmo(
         RenderImage image,
         AxisGeometry geometry,
@@ -711,6 +732,7 @@ internal static class ComposerOverlayRenderer
         DrawHandle(image, geometry.Center.X, geometry.Center.Y, OriginColor, radius: 4);
     }
 
+    /// <summary>Draws the scale axis handles with square handles.</summary>
     private static void DrawScaleGizmo(RenderImage image, AxisGeometry geometry)
     {
         DrawAxis(image, geometry.Center, geometry.XEnd, XAxisColor, squareHandle: true);
@@ -719,6 +741,7 @@ internal static class ComposerOverlayRenderer
         DrawSquareHandle(image, geometry.Center.X, geometry.Center.Y, OriginColor, halfSize: 6);
     }
 
+    /// <summary>Draws the rotation rings and center handle.</summary>
     private static void DrawRotationGizmo(RenderImage image, CameraDefinition camera, AxisGeometry geometry)
     {
         DrawRing(ComposerGizmoAxis.X, XAxisColor);
@@ -726,6 +749,7 @@ internal static class ComposerOverlayRenderer
         DrawRing(ComposerGizmoAxis.Z, ZAxisColor);
         DrawHandle(image, geometry.Center.X, geometry.Center.Y, OriginColor, radius: 3);
 
+        /// <summary>Draws one rotation ring for the given axis and color.</summary>
         void DrawRing(ComposerGizmoAxis axis, uint color)
         {
             ProjectedPoint? previous = null;
@@ -746,6 +770,7 @@ internal static class ComposerOverlayRenderer
         }
     }
 
+    /// <summary>Computes a point on a rotation ring for the given axis and angle.</summary>
     private static Vec3 RingPoint(Vec3 center, double radius, ComposerGizmoAxis axis, double angle)
     {
         double a = Math.Cos(angle) * radius;
@@ -758,6 +783,7 @@ internal static class ComposerOverlayRenderer
         };
     }
 
+    /// <summary>Computes a unit direction on a rotation ring for the given axis and angle.</summary>
     private static Vec3 RingDirection(ComposerGizmoAxis axis, double angle)
     {
         double a = Math.Cos(angle);
@@ -770,6 +796,7 @@ internal static class ComposerOverlayRenderer
         };
     }
 
+    /// <summary>Returns the world-space vector for the given gizmo axis.</summary>
     private static Vec3 AxisVector(ComposerGizmoAxis axis) => axis switch
     {
         ComposerGizmoAxis.X => new Vec3(1, 0, 0),
@@ -778,6 +805,7 @@ internal static class ComposerOverlayRenderer
         _ => Vec3.Zero
     };
 
+    /// <summary>Draws a wireframe overlay for the selected triangles.</summary>
     private static void DrawSelectedGeometryWireframe(
         RenderImage image,
         CameraDefinition camera,
@@ -802,6 +830,7 @@ internal static class ComposerOverlayRenderer
         }
     }
 
+    /// <summary>Builds projected gizmo axis geometry for the given bounds.</summary>
     private static bool TryCreateAxisGeometry(
         CameraDefinition camera,
         Aabb bounds,
@@ -835,6 +864,7 @@ internal static class ComposerOverlayRenderer
         return true;
     }
 
+    /// <summary>Computes the clamped parameter of the closest point on a segment.</summary>
     private static double ClosestPointParameter(
         double px, double py,
         double x0, double y0,
@@ -848,6 +878,7 @@ internal static class ComposerOverlayRenderer
         return Math.Clamp(((px - x0) * dx + (py - y0) * dy) / denominator, 0.0, 1.0);
     }
 
+    /// <summary>Computes the distance from a point to a line segment.</summary>
     private static double DistanceToSegment(
         double px, double py,
         double x0, double y0,
@@ -857,6 +888,7 @@ internal static class ComposerOverlayRenderer
         return Distance(px, py, x0 + t * (x1 - x0), y0 + t * (y1 - y0));
     }
 
+    /// <summary>Computes the distance between two image-space points.</summary>
     private static double Distance(double x0, double y0, double x1, double y1)
     {
         double dx = x0 - x1;
@@ -864,6 +896,7 @@ internal static class ComposerOverlayRenderer
         return Math.Sqrt(dx * dx + dy * dy);
     }
 
+    /// <summary>Draws one gizmo axis line with its end handle.</summary>
     private static void DrawAxis(
         RenderImage image,
         ProjectedPoint start,
@@ -878,6 +911,7 @@ internal static class ComposerOverlayRenderer
             DrawHandle(image, end.X, end.Y, color, radius: 6);
     }
 
+    /// <summary>Projects a world-space point into image space.</summary>
     private static bool TryProject(
         Vec3 point,
         CameraDefinition camera,
@@ -912,6 +946,7 @@ internal static class ComposerOverlayRenderer
         return true;
     }
 
+    /// <summary>Draws a clipped thick line on the render image.</summary>
     private static void DrawLine(
         RenderImage image,
         double x0,
@@ -954,6 +989,7 @@ internal static class ComposerOverlayRenderer
         }
     }
 
+    /// <summary>Draws a round gizmo handle with a white center.</summary>
     private static void DrawHandle(RenderImage image, double x, double y, uint color, int radius)
     {
         int centerX = (int)Math.Round(x);
@@ -962,6 +998,7 @@ internal static class ComposerOverlayRenderer
         DrawDisc(image, centerX, centerY, Math.Max(1, radius - 3), 0xffffffffu);
     }
 
+    /// <summary>Draws a square gizmo handle with a white center.</summary>
     private static void DrawSquareHandle(RenderImage image, double x, double y, uint color, int halfSize)
     {
         int centerX = (int)Math.Round(x);
@@ -976,6 +1013,7 @@ internal static class ComposerOverlayRenderer
         }
     }
 
+    /// <summary>Draws a filled disc on the render image.</summary>
     private static void DrawDisc(RenderImage image, int centerX, int centerY, int radius, uint color)
     {
         int squaredRadius = radius * radius;
@@ -990,6 +1028,7 @@ internal static class ComposerOverlayRenderer
         }
     }
 
+    /// <summary>Blends one overlay pixel onto the render image.</summary>
     private static void BlendPixel(RenderImage image, int x, int y, uint source)
     {
         if ((uint)x >= (uint)image.Width || (uint)y >= (uint)image.Height)
@@ -1006,6 +1045,7 @@ internal static class ComposerOverlayRenderer
         image.PackedRgba32[index] = (uint)(red | (green << 8) | (blue << 16)) | 0xff000000u;
     }
 
+    /// <summary>Clips a line to the image bounds.</summary>
     private static bool ClipLine(
         int width,
         int height,
@@ -1036,6 +1076,7 @@ internal static class ComposerOverlayRenderer
         return true;
     }
 
+    /// <summary>Clips one line edge against the running parameter range.</summary>
     private static bool Clip(double denominator, double numerator, ref double t0, ref double t1)
     {
         if (Math.Abs(denominator) < 1e-12)
@@ -1055,6 +1096,7 @@ internal static class ComposerOverlayRenderer
         return true;
     }
 
+    /// <summary>Returns true when every vector component is finite.</summary>
     private static bool IsFinite(Vec3 value) =>
         double.IsFinite(value.X) && double.IsFinite(value.Y) && double.IsFinite(value.Z);
 }

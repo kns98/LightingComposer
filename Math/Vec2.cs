@@ -23,6 +23,8 @@ public readonly struct Vec2
     }
 
     public static Vec2 Zero => new(0, 0);
+    /// <summary>Adds two vectors component-wise.</summary>
     public static Vec2 operator +(Vec2 a, Vec2 b) => new(a.U + b.U, a.V + b.V);
+    /// <summary>Multiplies a vector by a scalar.</summary>
     public static Vec2 operator *(Vec2 a, double s) => new(a.U * s, a.V * s);
 }

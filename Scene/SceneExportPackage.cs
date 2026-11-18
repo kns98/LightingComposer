@@ -16,6 +16,7 @@ public sealed record SceneExportFormat(
     bool IsNativeScene = false,
     bool OptimizeGeometry = false)
 {
+    /// <summary>Returns the display name of the export format.</summary>
     public override string ToString() => DisplayName;
 }
 
@@ -42,6 +43,7 @@ public static class SceneExportFormats
         new("glb-hierarchy", "GLB — preserve editor chunks (.glb)", ".glb", "glb")
     ];
 
+    /// <summary>Finds an export format by id or throws.</summary>
     public static SceneExportFormat Find(string id) =>
         All.FirstOrDefault(format => string.Equals(format.Id, id, StringComparison.OrdinalIgnoreCase))
         ?? throw new ArgumentException($"Unknown export format '{id}'.", nameof(id));
@@ -59,6 +61,7 @@ public sealed record SceneExportPackageResult(
 /// </summary>
 public sealed class SceneExportPackageService
 {
+    /// <summary>Writes a portable export package with textures to a new directory.</summary>
     public SceneExportPackageResult Export(
         Scene scene,
         string parentDirectory,
@@ -134,6 +137,7 @@ public sealed class SceneExportPackageService
         return new SceneExportPackageResult(directory, primaryPath, allFiles, textureFiles);
     }
 
+    /// <summary>Returns the portable file extension for an exported texture.</summary>
     private static string TextureExtension(TextureMap texture)
     {
         // TextureMap currently exposes decoded RGBA pixels, so PNG is the
@@ -141,6 +145,7 @@ public sealed class SceneExportPackageService
         return ".png";
     }
 
+    /// <summary>Creates a uniquely named directory under the given parent.</summary>
     private static string CreateUniqueDirectory(string parent, string preferredName)
     {
         string candidate = Path.Combine(parent, preferredName);
@@ -150,6 +155,7 @@ public sealed class SceneExportPackageService
         return candidate;
     }
 
+    /// <summary>Sanitizes a file name, falling back when nothing usable remains.</summary>
     private static string SanitizeFileName(string? value, string fallback)
     {
         string source = string.IsNullOrWhiteSpace(value) ? fallback : value.Trim();
@@ -167,6 +173,7 @@ public sealed class SceneExportPackageService
     {
         private int nextNumber = 1;
 
+        /// <summary>Allocates the next numbered resource file name.</summary>
         public string Next(string extension)
         {
             string normalized = extension.StartsWith(".", StringComparison.Ordinal) ? extension : "." + extension;

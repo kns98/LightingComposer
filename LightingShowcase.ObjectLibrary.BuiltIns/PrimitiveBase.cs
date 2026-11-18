@@ -16,17 +16,22 @@ public abstract class PrimitiveBase : IScenePrimitive, IEditablePrimitiveDefinit
     public abstract string Kind { get; }
     public abstract string DisplayName { get; }
     public abstract PrimitiveGizmoEditMetadata GizmoMetadata { get; }
+    /// <summary>Creates the default parameter set for the primitive.</summary>
     public abstract Dictionary<string, double> CreateDefaultParameters();
 
+    /// <summary>Derives box-like parameters from the given bounds.</summary>
     public virtual Dictionary<string, double> CreateParametersFromBounds(Aabb bounds)
     {
         Vec3 size = bounds.Max - bounds.Min;
         return BoxParameters(bounds, Math.Max(1e-6, size.X), Math.Max(1e-6, size.Y), Math.Max(1e-6, size.Z));
     }
 
+    /// <summary>Builds primitive triangles into the scene materials via the callback.</summary>
     public abstract void Build(SceneMaterials materials, IReadOnlyDictionary<string, double> parameters, Material material, AddTriangleCallback addTriangle);
+    /// <summary>Applies one axis scale factor to the parameters.</summary>
     public abstract bool ApplyScaleDelta(IDictionary<string, double> parameters, char axis, double factor);
 
+    /// <summary>Shifts the primitive origin by the given delta.</summary>
     public virtual bool ApplyMoveDelta(IDictionary<string, double> parameters, Vec3 delta)
     {
         bool changed = false;
@@ -36,6 +41,7 @@ public abstract class PrimitiveBase : IScenePrimitive, IEditablePrimitiveDefinit
         return changed;
     }
 
+    /// <summary>Applies a pending position and scale to the parameters.</summary>
     public virtual bool ApplyPendingTransform(IDictionary<string, double> parameters, Vec3 position, Vec3 scale)
     {
         bool changed = ApplyMoveDelta(parameters, position);
@@ -45,21 +51,27 @@ public abstract class PrimitiveBase : IScenePrimitive, IEditablePrimitiveDefinit
         return changed;
     }
 
+    /// <summary>Creates a length parameter descriptor in meters.</summary>
     protected static PrimitiveParameterDescriptor LengthParameter(string key, string label, double min = 1e-6, double max = 10000.0, double step = 0.001) =>
         new(key, label, PrimitiveParameterKind.Length, min, max, step, "m");
 
+    /// <summary>Creates an integer parameter descriptor.</summary>
     protected static PrimitiveParameterDescriptor IntegerParameter(string key, string label, int min, int max, int step = 1) =>
         new(key, label, PrimitiveParameterKind.Integer, min, max, step);
 
+    /// <summary>Creates a floating-point parameter descriptor.</summary>
     protected static PrimitiveParameterDescriptor NumberParameter(string key, string label, double min, double max, double step) =>
         new(key, label, PrimitiveParameterKind.Number, min, max, step);
 
+    /// <summary>Creates a toggle parameter descriptor.</summary>
     protected static PrimitiveParameterDescriptor ToggleParameter(string key, string label) =>
         new(key, label, PrimitiveParameterKind.Toggle, 0, 1, 1);
 
+    /// <summary>Creates a choice parameter descriptor with the given options.</summary>
     protected static PrimitiveParameterDescriptor ChoiceParameter(string key, string label, params string[] choices) =>
         new(key, label, PrimitiveParameterKind.Choice, 0, Math.Max(0, choices.Length - 1), 1, "", choices);
 
+    /// <summary>Builds a case-insensitive parameter dictionary from key-value pairs.</summary>
     protected static Dictionary<string, double> Parameters(params (string Key, double Value)[] values)
     {
         Dictionary<string, double> result = new(StringComparer.OrdinalIgnoreCase);
@@ -68,12 +80,14 @@ public abstract class PrimitiveBase : IScenePrimitive, IEditablePrimitiveDefinit
         return result;
     }
 
+    /// <summary>Builds origin-centered box parameters from bounds and size.</summary>
     protected static Dictionary<string, double> BoxParameters(Aabb bounds, double width, double height, double depth)
     {
         Vec3 center = (bounds.Min + bounds.Max) * 0.5;
         return Parameters(("originX", center.X), ("originY", center.Y), ("originZ", center.Z), ("width", width), ("height", height), ("depth", depth));
     }
 
+    /// <summary>Builds flat-shape parameters from the bounds footprint.</summary>
     protected static Dictionary<string, double> FlatParameters(Aabb bounds)
     {
         Vec3 size = bounds.Max - bounds.Min;
@@ -81,6 +95,7 @@ public abstract class PrimitiveBase : IScenePrimitive, IEditablePrimitiveDefinit
         return Parameters(("originX", center.X), ("originY", center.Y), ("originZ", center.Z), ("width", Math.Max(1e-6, size.X)), ("depth", Math.Max(1e-6, size.Z)), ("thickness", Math.Max(1e-6, size.Y)));
     }
 
+    /// <summary>Builds radial and height parameters from the given bounds.</summary>
     protected static Dictionary<string, double> RadialHeightParameters(Aabb bounds, string radialKey = "radius", string heightKey = "height")
     {
         Vec3 size = bounds.Max - bounds.Min;
@@ -89,20 +104,26 @@ public abstract class PrimitiveBase : IScenePrimitive, IEditablePrimitiveDefinit
         return Parameters(("originX", center.X), ("originY", center.Y), ("originZ", center.Z), (radialKey, radius), (heightKey, Math.Max(1e-6, size.Y)));
     }
 
+    /// <summary>Reads the primitive origin from the parameters.</summary>
     protected static Vec3 Origin(IReadOnlyDictionary<string, double> p, double x = 0.0, double y = 0.0, double z = 3.55) =>
         new(Read(p, "originX", x), Read(p, "originY", y), Read(p, "originZ", z));
 
+    /// <summary>Reads a parameter value or returns the fallback.</summary>
     protected static double Read(IReadOnlyDictionary<string, double> parameters, string key, double fallback) =>
         parameters.TryGetValue(key, out double value) && double.IsFinite(value) ? value : fallback;
 
+    /// <summary>Reads a mutable parameter value or returns the fallback.</summary>
     protected static double Read(IDictionary<string, double> parameters, string key, double fallback) =>
         parameters.TryGetValue(key, out double value) && double.IsFinite(value) ? value : fallback;
 
+    /// <summary>Reads a parameter as a clamped integer.</summary>
     protected static int ReadInt(IReadOnlyDictionary<string, double> parameters, string key, int fallback, int min, int max) =>
         Math.Clamp((int)Math.Round(Read(parameters, key, fallback)), min, max);
 
+    /// <summary>Reads a positive size parameter with a minimum clamp.</summary>
     protected static double Size(IReadOnlyDictionary<string, double> p, string key, double fallback) => Math.Max(1e-6, Read(p, key, fallback));
 
+    /// <summary>Adds a delta to one parameter and reports whether it changed.</summary>
     protected static bool Add(IDictionary<string, double> parameters, string key, double delta)
     {
         if (!double.IsFinite(delta) || Math.Abs(delta) <= 1e-12) return false;
@@ -110,6 +131,7 @@ public abstract class PrimitiveBase : IScenePrimitive, IEditablePrimitiveDefinit
         return true;
     }
 
+    /// <summary>Multiplies one parameter by a sanitized factor and reports whether it changed.</summary>
     protected static bool Multiply(IDictionary<string, double> parameters, string key, double factor)
     {
         factor = SanitizeScale(factor);
@@ -118,6 +140,7 @@ public abstract class PrimitiveBase : IScenePrimitive, IEditablePrimitiveDefinit
         return true;
     }
 
+    /// <summary>Multiplies several parameters by one factor and reports whether any changed.</summary>
     protected static bool MultiplyAny(IDictionary<string, double> p, double factor, params string[] keys)
     {
         bool changed = false;
@@ -126,8 +149,10 @@ public abstract class PrimitiveBase : IScenePrimitive, IEditablePrimitiveDefinit
         return changed;
     }
 
+    /// <summary>Returns the scale factor or 1.0 when it is invalid.</summary>
     protected static double SanitizeScale(double value) => double.IsFinite(value) && value > 1e-6 ? value : 1.0;
 
+    /// <summary>Emits an axis-aligned box centered on the origin.</summary>
     protected static void Box(AddTriangleCallback addTriangle, Vec3 origin, double width, double height, double depth, Material material)
     {
         Vec3 min = origin - new Vec3(width * 0.5, height * 0.5, depth * 0.5);
@@ -150,15 +175,18 @@ public abstract class PrimitiveBase : IScenePrimitive, IEditablePrimitiveDefinit
         AddQuad(addTriangle, v001, v101, v100, v000, material);
     }
 
+    /// <summary>Emits one triangle with zero texture coordinates.</summary>
     protected static void EmitTriangle(AddTriangleCallback addTriangle, Vec3 a, Vec3 b, Vec3 c, Material material) =>
         addTriangle(a, b, c, Vec2.Zero, Vec2.Zero, Vec2.Zero, material);
 
+    /// <summary>Emits one quad as two textured triangles.</summary>
     protected static void AddQuad(AddTriangleCallback addTriangle, Vec3 a, Vec3 b, Vec3 c, Vec3 d, Material material)
     {
         addTriangle(a, b, c, new Vec2(0, 0), new Vec2(1, 0), new Vec2(1, 1), material);
         addTriangle(a, c, d, new Vec2(0, 0), new Vec2(1, 1), new Vec2(0, 1), material);
     }
 
+    /// <summary>Emits a UV sphere with the given segment counts.</summary>
     protected static void AddSphere(AddTriangleCallback addTriangle, Vec3 center, double radius, int longitudeSegments, int latitudeSegments, Material material)
     {
         radius = Math.Max(1e-6, radius);
@@ -183,11 +211,13 @@ public abstract class PrimitiveBase : IScenePrimitive, IEditablePrimitiveDefinit
         }
     }
 
+    /// <summary>Computes one sphere surface point from polar angles.</summary>
     protected static Vec3 SpherePoint(Vec3 center, double radius, double theta, double phi) => new(
         center.X + radius * Math.Sin(theta) * Math.Cos(phi),
         center.Y + radius * Math.Cos(theta),
         center.Z + radius * Math.Sin(theta) * Math.Sin(phi));
 
+    /// <summary>Emits a capped hemisphere opening upward or downward.</summary>
     protected static void AddHemisphere(AddTriangleCallback addTriangle, Vec3 origin, double radius, double height, int longitudeSegments, int latitudeSegments, bool upper, Material material)
     {
         radius = Math.Max(1e-6, radius);
@@ -212,6 +242,7 @@ public abstract class PrimitiveBase : IScenePrimitive, IEditablePrimitiveDefinit
         AddDisk(addTriangle, baseCenter, radius, longitudeSegments, normalUp: !upper, material);
     }
 
+    /// <summary>Computes one hemisphere surface point.</summary>
     private static Vec3 HemispherePoint(Vec3 baseCenter, double radius, double height, double theta, double phi, bool upper)
     {
         double radial = radius * Math.Sin(theta);
@@ -219,6 +250,7 @@ public abstract class PrimitiveBase : IScenePrimitive, IEditablePrimitiveDefinit
         return new Vec3(baseCenter.X + radial * Math.Cos(phi), baseCenter.Y + y, baseCenter.Z + radial * Math.Sin(phi));
     }
 
+    /// <summary>Emits a capped cylinder centered on the origin.</summary>
     protected static void AddCylinder(AddTriangleCallback addTriangle, Vec3 origin, double radius, double height, int sides, Material material)
     {
         Vec3 baseCenter = origin - new Vec3(0, height * 0.5, 0);
@@ -227,6 +259,7 @@ public abstract class PrimitiveBase : IScenePrimitive, IEditablePrimitiveDefinit
         AddDisk(addTriangle, baseCenter + new Vec3(0, height, 0), radius, sides, normalUp: true, material);
     }
 
+    /// <summary>Emits the side wall of a cylinder without caps.</summary>
     protected static void AddCylinderSides(AddTriangleCallback addTriangle, Vec3 baseCenter, double radius, double height, int sides, Material material)
     {
         for (int i = 0; i < sides; i++)
@@ -239,6 +272,7 @@ public abstract class PrimitiveBase : IScenePrimitive, IEditablePrimitiveDefinit
         }
     }
 
+    /// <summary>Emits a capped cone with the apex above its base.</summary>
     protected static void AddCone(AddTriangleCallback addTriangle, Vec3 origin, double radius, double height, int sides, Material material)
     {
         Vec3 baseCenter = origin - new Vec3(0, height * 0.5, 0);
@@ -254,6 +288,7 @@ public abstract class PrimitiveBase : IScenePrimitive, IEditablePrimitiveDefinit
         AddDisk(addTriangle, baseCenter, radius, sides, normalUp: false, material);
     }
 
+    /// <summary>Emits a torus with the given major and tube segment counts.</summary>
     protected static void AddTorus(AddTriangleCallback addTriangle, Vec3 center, double majorRadius, double tubeRadius, int majorSegments, int tubeSegments, Material material)
     {
         majorRadius = Math.Max(1e-6, majorRadius);
@@ -271,12 +306,14 @@ public abstract class PrimitiveBase : IScenePrimitive, IEditablePrimitiveDefinit
         }
     }
 
+    /// <summary>Computes one torus surface point from ring angles.</summary>
     private static Vec3 TorusPoint(Vec3 c, double major, double minor, double u, double v)
     {
         double ring = major + minor * Math.Cos(v);
         return new Vec3(c.X + ring * Math.Cos(u), c.Y + minor * Math.Sin(v), c.Z + ring * Math.Sin(u));
     }
 
+    /// <summary>Emits a hollow tube with outer, inner, and ring faces.</summary>
     protected static void AddTube(AddTriangleCallback addTriangle, Vec3 origin, double outerRadius, double innerRadius, double height, int sides, Material material)
     {
         outerRadius = Math.Max(1e-6, outerRadius);
@@ -299,6 +336,7 @@ public abstract class PrimitiveBase : IScenePrimitive, IEditablePrimitiveDefinit
         }
     }
 
+    /// <summary>Emits a filled circle disk unless the fill mode disables faces.</summary>
     protected static void AddCircle(AddTriangleCallback addTriangle, Vec3 center, double radius, int vertices, int fillMode, Material material)
     {
         radius = Math.Max(1e-6, radius);
@@ -311,6 +349,7 @@ public abstract class PrimitiveBase : IScenePrimitive, IEditablePrimitiveDefinit
         AddDisk(addTriangle, center, radius, vertices, normalUp: true, material);
     }
 
+    /// <summary>Emits a subdivided grid in the XZ plane.</summary>
     protected static void AddGrid(AddTriangleCallback addTriangle, Vec3 center, double width, double depth, int xSubdivisions, int ySubdivisions, Material material)
     {
         width = Math.Max(1e-6, width);
@@ -337,6 +376,7 @@ public abstract class PrimitiveBase : IScenePrimitive, IEditablePrimitiveDefinit
         }
     }
 
+    /// <summary>Emits a tapered frustum with optional end caps.</summary>
     protected static void AddFrustum(AddTriangleCallback addTriangle, Vec3 origin, double bottomRadius, double topRadius, double height, int sides, bool capFill, Material material)
     {
         bottomRadius = Math.Max(0.0, bottomRadius);
@@ -366,6 +406,7 @@ public abstract class PrimitiveBase : IScenePrimitive, IEditablePrimitiveDefinit
             AddDisk(addTriangle, topCenter, topRadius, sides, normalUp: true, material);
     }
 
+    /// <summary>Emits an icosphere subdivided to the requested level.</summary>
     protected static void AddIcosphere(AddTriangleCallback addTriangle, Vec3 center, double radius, int subdivisions, Material material)
     {
         radius = Math.Max(1e-6, radius);
@@ -406,6 +447,7 @@ public abstract class PrimitiveBase : IScenePrimitive, IEditablePrimitiveDefinit
             }
             faces = next;
 
+            /// <summary>Returns the shared normalized midpoint vertex for one edge.</summary>
             int Midpoint(int a, int b)
             {
                 (int, int) key = a < b ? (a, b) : (b, a);
@@ -423,6 +465,7 @@ public abstract class PrimitiveBase : IScenePrimitive, IEditablePrimitiveDefinit
             EmitTriangle(addTriangle, center + vertices[a] * radius, center + vertices[b] * radius, center + vertices[c] * radius, material);
     }
 
+    /// <summary>Emits a flat disk fan facing up or down.</summary>
     protected static void AddDisk(AddTriangleCallback addTriangle, Vec3 center, double radius, int sides, bool normalUp, Material material)
     {
         sides = Math.Clamp(sides, 3, 256);

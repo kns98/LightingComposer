@@ -37,6 +37,7 @@ public sealed class RenderRequest
     public bool UseShadows { get; set; } = true;
     public RenderBackend Backend { get; set; } = RenderBackend.VulkanGpu;
 
+    /// <summary>Builds a render request from parsed command-line arguments.</summary>
     internal static RenderRequest FromCommandLine(CommandLineArguments values)
     {
         values.ValidateKnownOptions(KnownOptions);
@@ -71,6 +72,7 @@ public sealed class RenderRequest
         return request;
     }
 
+    /// <summary>Converts this request into render settings with default background colors.</summary>
     public RenderSettings ToRenderSettings() => new()
     {
         Width = Width,
@@ -85,6 +87,7 @@ public sealed class RenderRequest
     };
 
 
+    /// <summary>Parses a renderer name into its render backend.</summary>
     public static RenderBackend ParseBackend(string? value)
     {
         string normalized = string.IsNullOrWhiteSpace(value)
@@ -102,6 +105,7 @@ public sealed class RenderRequest
         };
     }
 
+    /// <summary>Returns the command-line name for a render backend.</summary>
     public static string BackendName(RenderBackend backend) => backend switch
     {
         RenderBackend.ShadowRasterPreview => "raster",
@@ -111,6 +115,7 @@ public sealed class RenderRequest
         _ => throw new ArgumentOutOfRangeException(nameof(backend), backend, "Unsupported command-line renderer.")
     };
 
+    /// <summary>Validates the request dimensions, samples, bounces, and option ranges.</summary>
     public void Validate()
     {
         if (string.IsNullOrWhiteSpace(Input))
@@ -132,10 +137,13 @@ public sealed class RenderRequest
         _ = ParseColor(BackgroundBottom, nameof(BackgroundBottom));
     }
 
+    /// <summary>Parses an optional three-component vector from text.</summary>
     public static Vec3? ParseVector(string? value, string name) => ParseTriple(value, name, requireNonNegative: false);
 
+    /// <summary>Parses an optional non-negative color triple from text.</summary>
     public static Vec3? ParseColor(string? value, string name) => ParseTriple(value, name, requireNonNegative: true);
 
+    /// <summary>Parses three invariant-culture numbers into a vector.</summary>
     private static Vec3? ParseTriple(string? value, string name, bool requireNonNegative)
     {
         if (string.IsNullOrWhiteSpace(value)) return null;

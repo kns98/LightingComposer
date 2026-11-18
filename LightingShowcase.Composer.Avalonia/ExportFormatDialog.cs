@@ -17,6 +17,7 @@ internal sealed class ExportFormatDialog : Window
 {
     private readonly ComboBox formatBox;
 
+    /// <summary>Initializes the export format picker dialog with its default glTF selection.</summary>
     public ExportFormatDialog()
     {
         Title = "Export package";
