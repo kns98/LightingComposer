@@ -48,18 +48,6 @@ jobs:
             extension: tar.gz
             archive: tar
 
-          - os: macos-latest
-            rid: osx-x64
-            artifact: LightingComposer-macos-x64
-            extension: tar.gz
-            archive: tar
-
-          - os: macos-latest
-            rid: osx-arm64
-            artifact: LightingComposer-macos-arm64
-            extension: tar.gz
-            archive: tar
-
     steps:
       - name: Check out repository
         uses: actions/checkout@v5
@@ -96,8 +84,72 @@ jobs:
             -DestinationPath "${{ github.workspace }}/${{ matrix.artifact }}.zip" `
             -CompressionLevel Optimal
 
-      - name: Create Linux or macOS archive
+      - name: Create Linux archive
         if: matrix.archive == 'tar'
+        shell: bash
+        run: |
+          tar \
+            -C "${{ github.workspace }}/publish" \
+            -czf "${{ github.workspace }}/${{ matrix.artifact }}.tar.gz" \
+            "${{ matrix.artifact }}"
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ github.workspace }}/${{ matrix.artifact }}.${{ matrix.extension }}
+          if-no-files-found: error
+          retention-days: 1
+
+  # macOS builds run here, isolated from the main build. This job is
+  # intentionally NOT listed in the release job's `needs`, so a macOS
+  # runner or publish failure can never block the release.
+  build-macos:
+    name: ${{ matrix.artifact }} (macOS, non-blocking)
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            rid: osx-x64
+            artifact: LightingComposer-macos-x64
+            extension: tar.gz
+
+          - os: macos-latest
+            rid: osx-arm64
+            artifact: LightingComposer-macos-arm64
+            extension: tar.gz
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+
+      - name: Set up .NET SDK
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Restore ${{ matrix.rid }}
+        run: >-
+          dotnet restore "${{ env.PROJECT }}"
+          --runtime "${{ matrix.rid }}"
+
+      - name: Publish ${{ matrix.rid }} without bundled .NET
+        run: >-
+          dotnet publish "${{ env.PROJECT }}"
+          --configuration Release
+          --runtime "${{ matrix.rid }}"
+          --self-contained false
+          --no-restore
+          --output "${{ github.workspace }}/publish/${{ matrix.artifact }}"
+          -p:DebugType=None
+          -p:DebugSymbols=false
+          -p:PublishSingleFile=false
+          -p:UseAppHost=true
+
+      - name: Create macOS archive
         shell: bash
         run: |
           tar \
@@ -120,9 +172,17 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Download all platform builds
+      - name: Download Windows builds
         uses: actions/download-artifact@v4
         with:
+          pattern: LightingComposer-windows-*
+          path: release-files
+          merge-multiple: true
+
+      - name: Download Linux builds
+        uses: actions/download-artifact@v4
+        with:
+          pattern: LightingComposer-linux-*
           path: release-files
           merge-multiple: true
 
