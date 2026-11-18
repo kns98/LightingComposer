@@ -29,7 +29,7 @@ public sealed class SceneLight
     public bool IsImported { get; set; }
     public bool IsDefault { get; set; }
 
-    /// <summary>Constructs and initializes this component.</summary>
+    /// <summary>Initializes a new editable scene light with validated ranges.</summary>
     public SceneLight(
         string id,
         Vec3 position,

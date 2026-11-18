@@ -1,3 +1,10 @@
+// -----------------------------------------------------------------------------
+// File: LightingShowcase.Composer.Avalonia/MaterialEditorWindow.cs
+// Purpose: Floating PBR material editor.
+//
+// Preset library, numeric PBR controls, RGB and hex color setters, texture slots, and UV transform controls.
+// -----------------------------------------------------------------------------
+
 using System.Globalization;
 using Avalonia;
 using Avalonia.Controls;

@@ -1,3 +1,10 @@
+// -----------------------------------------------------------------------------
+// File: LightingShowcase.Composer.Avalonia/ComposerCamera.cs
+// Purpose: Orbit camera model for the composer viewport.
+//
+// Keeps target, radius, yaw, pitch, and field of view, and snapshots them into a CameraDefinition with derived near and far planes.
+// -----------------------------------------------------------------------------
+
 using LightingShowcase.CameraSystem;
 using LightingShowcase.Math3D;
 using LightingShowcase.SceneGraph;

@@ -1,3 +1,10 @@
+// -----------------------------------------------------------------------------
+// File: LightingShowcase.Composer.Avalonia/ComposerSceneCommandController.cs
+// Purpose: Asynchronous scene editing commands.
+//
+// Runs session mutations such as add, duplicate, delete, group, undo, and redo on background tasks for the UI layer.
+// -----------------------------------------------------------------------------
+
 namespace LightingShowcase.Composer;
 
 /// <summary>

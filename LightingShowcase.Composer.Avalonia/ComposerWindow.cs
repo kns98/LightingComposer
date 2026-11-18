@@ -1,3 +1,10 @@
+// -----------------------------------------------------------------------------
+// File: LightingShowcase.Composer.Avalonia/ComposerWindow.cs
+// Purpose: Main composer window and controller wiring.
+//
+// Hosts the viewport, object tree, and inspector; wires every controller, handles input, and drives viewport rendering.
+// -----------------------------------------------------------------------------
+
 using System.Diagnostics;
 using Avalonia;
 using Avalonia.Controls;

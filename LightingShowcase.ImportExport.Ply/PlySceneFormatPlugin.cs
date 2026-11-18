@@ -1,3 +1,10 @@
+// -----------------------------------------------------------------------------
+// File: LightingShowcase.ImportExport.Ply/PlySceneFormatPlugin.cs
+// Purpose: PLY format plugin registration.
+//
+// Registers the PLY importer and exporter with the scene format registry.
+// -----------------------------------------------------------------------------
+
 using System.IO;
 using LightingShowcase.SceneGraph;
 

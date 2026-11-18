@@ -23,7 +23,7 @@ public sealed class LightingState
         Label = "Scene lights";
     }
 
-    /// <summary>Implements the clone operation for this file's subsystem.</summary>
+    /// <summary>Returns a fresh default lighting state.</summary>
     public LightingState Clone() => new();
 
     // Playback only animates the camera timeline. Lighting is manual through SceneLight objects.

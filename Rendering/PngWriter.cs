@@ -1,3 +1,10 @@
+// -----------------------------------------------------------------------------
+// File: Rendering/PngWriter.cs
+// Purpose: Minimal streaming PNG writer.
+//
+// Writes 8-bit RGBA pixel buffers to PNG files through bounded consecutive IDAT chunks.
+// -----------------------------------------------------------------------------
+
 using System.Buffers.Binary;
 using System.IO.Compression;
 

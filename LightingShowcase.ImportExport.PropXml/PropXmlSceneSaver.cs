@@ -1,5 +1,5 @@
 // -----------------------------------------------------------------------------
-// File: Scene/PropXmlSceneSaver.cs
+// File: LightingShowcase.ImportExport.PropXml/PropXmlSceneSaver.cs
 // Purpose: Native XML scene export.
 //
 // Writes the project-specific .prop.xml format so scenes can be reopened with editor state preserved.
@@ -35,7 +35,7 @@ public static class PropXmlSceneSaver
         document.Save(filePath);
     }
 
-    /// <summary>Implements the to light element operation for this file's subsystem.</summary>
+    /// <summary>Converts a scene light to its XML element.</summary>
     private static XElement ToLightElement(SceneLight light) =>
         new("Light",
             new XAttribute("id", light.Id),
@@ -49,7 +49,7 @@ public static class PropXmlSceneSaver
             new XAttribute("innerConeAngle", Format(light.InnerConeAngle)),
             new XAttribute("outerConeAngle", Format(light.OuterConeAngle)));
 
-    /// <summary>Implements the to object element operation for this file's subsystem.</summary>
+    /// <summary>Converts an object group, including children, to its XML element.</summary>
     private static XElement ToObjectElement(SceneObjectGroup group, Func<TextureMap, string?>? texturePathResolver) =>
         new("Object",
             new XAttribute("id", group.Id),
@@ -71,7 +71,7 @@ public static class PropXmlSceneSaver
             new XElement("Triangles", group.LocalTriangles.Select(triangle => ToTriangleElement(triangle, texturePathResolver))),
             group.Children.Count == 0 ? null : new XElement("Children", group.Children.Select(child => ToObjectElement(child, texturePathResolver))));
 
-    /// <summary>Implements the to triangle element operation for this file's subsystem.</summary>
+    /// <summary>Converts a triangle and its material to its XML element.</summary>
     private static XElement ToTriangleElement(Triangle triangle, Func<TextureMap, string?>? texturePathResolver) =>
         new("Triangle",
             VecAttributes("a", triangle.A),
@@ -82,7 +82,7 @@ public static class PropXmlSceneSaver
             Vec2Attributes("uvC", triangle.UvC),
             new XElement("Material", MaterialAttributes(triangle.Material, texturePathResolver)));
 
-    /// <summary>Implements the vec attributes operation for this file's subsystem.</summary>
+    /// <summary>Builds X/Y/Z XML attributes for a 3D vector.</summary>
     internal static object[] VecAttributes(string prefix, Vec3 value) => new object[]
     {
         new XAttribute(prefix + "X", Format(value.X)),
@@ -98,7 +98,7 @@ public static class PropXmlSceneSaver
         new XAttribute(prefix + "V", Format(value.V))
     };
 
-    /// <summary>Implements the material attributes operation for this file's subsystem.</summary>
+    /// <summary>Builds XML attributes for a material, including texture references.</summary>
     internal static object[] MaterialAttributes(Material material, Func<TextureMap, string?>? texturePathResolver = null)
     {
         List<object> attributes = new()
@@ -127,6 +127,6 @@ public static class PropXmlSceneSaver
         return attributes.ToArray();
     }
 
-    /// <summary>Implements the format operation for this file's subsystem.</summary>
+    /// <summary>Formats a double with round-trip invariant-culture precision.</summary>
     internal static string Format(double value) => value.ToString("G17", CultureInfo.InvariantCulture);
 }

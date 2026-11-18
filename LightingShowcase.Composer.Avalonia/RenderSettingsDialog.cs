@@ -1,3 +1,10 @@
+// -----------------------------------------------------------------------------
+// File: LightingShowcase.Composer.Avalonia/RenderSettingsDialog.cs
+// Purpose: CPU render settings dialog.
+//
+// Edits resolution, samples, bounces, field of view, and exposure consumed by the CPU backend.
+// -----------------------------------------------------------------------------
+
 using System.Globalization;
 using Avalonia;
 using Avalonia.Controls;

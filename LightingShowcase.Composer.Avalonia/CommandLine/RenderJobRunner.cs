@@ -1,3 +1,10 @@
+// -----------------------------------------------------------------------------
+// File: LightingShowcase.Composer.Avalonia/CommandLine/RenderJobRunner.cs
+// Purpose: Headless render job execution.
+//
+// Resolves the scene input, runs the render request, and returns a JSON-serializable result record.
+// -----------------------------------------------------------------------------
+
 using System.Diagnostics;
 using LightingShowcase.CameraSystem;
 using LightingShowcase.Math3D;

@@ -1,3 +1,10 @@
+// -----------------------------------------------------------------------------
+// File: LightingShowcase.Composer.Avalonia/ComposerDialogController.cs
+// Purpose: Modal dialog flow for the composer window.
+//
+// Opens file pickers and settings dialogs and returns the user choices to the main window controllers.
+// -----------------------------------------------------------------------------
+
 using Avalonia.Controls;
 
 namespace LightingShowcase.Composer;

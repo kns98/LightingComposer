@@ -1,3 +1,10 @@
+// -----------------------------------------------------------------------------
+// File: LightingShowcase.Composer.Avalonia/ComposerSceneSession.Materials.cs
+// Purpose: Material editing side of the scene session.
+//
+// Applies PBR property, preset, and texture-slot changes, and assigns image files to texture inputs.
+// -----------------------------------------------------------------------------
+
 using LightingShowcase.Math3D;
 using LightingShowcase.SceneGraph;
 

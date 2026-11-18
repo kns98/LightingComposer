@@ -1,3 +1,10 @@
+// -----------------------------------------------------------------------------
+// File: LightingShowcase.ImportExport.PropXml/PropXmlSceneFormatPlugin.cs
+// Purpose: Property XML format plugin registration.
+//
+// Registers the native .prop.xml importer and exporter with the scene format registry.
+// -----------------------------------------------------------------------------
+
 using System.IO;
 using LightingShowcase.SceneGraph;
 

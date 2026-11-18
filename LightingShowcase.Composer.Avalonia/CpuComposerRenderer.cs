@@ -1,3 +1,10 @@
+// -----------------------------------------------------------------------------
+// File: LightingShowcase.Composer.Avalonia/CpuComposerRenderer.cs
+// Purpose: CPU ray-traced preview rendering.
+//
+// Renders the session scene with the parallel CPU ray tracer while honoring samples, cancellation, and render options.
+// -----------------------------------------------------------------------------
+
 using LightingShowcase.CameraSystem;
 using LightingShowcase.Lighting;
 using LightingShowcase.Math3D;

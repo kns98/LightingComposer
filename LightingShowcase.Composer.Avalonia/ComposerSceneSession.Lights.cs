@@ -1,3 +1,10 @@
+// -----------------------------------------------------------------------------
+// File: LightingShowcase.Composer.Avalonia/ComposerSceneSession.Lights.cs
+// Purpose: Light editing side of the scene session.
+//
+// Adds, removes, and updates SceneLight objects and exposes them as editor models for the Lighting Editor window.
+// -----------------------------------------------------------------------------
+
 using LightingShowcase.CameraSystem;
 using LightingShowcase.Lighting;
 using LightingShowcase.Math3D;

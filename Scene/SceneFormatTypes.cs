@@ -18,7 +18,7 @@ public sealed class ObjLoadResult
     public int TriangleCount { get; }
     public string? Details { get; }
 
-    /// <summary>Constructs and initializes this component.</summary>
+    /// <summary>Initializes a new OBJ load result.</summary>
     public ObjLoadResult(string filePath, int vertexCount, int faceCount, int triangleCount, string? details = null)
     {
         FilePath = filePath;
@@ -38,7 +38,7 @@ public sealed class ObjLoadProgress
     public int FaceCount { get; }
     public int TriangleCount { get; }
 
-    /// <summary>Constructs and initializes this component.</summary>
+    /// <summary>Initializes a new OBJ load progress update.</summary>
     public ObjLoadProgress(string stage, int percent, int vertexCount, int faceCount, int triangleCount)
     {
         Stage = stage;

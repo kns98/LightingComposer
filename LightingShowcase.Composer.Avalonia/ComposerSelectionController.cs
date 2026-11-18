@@ -1,3 +1,10 @@
+// -----------------------------------------------------------------------------
+// File: LightingShowcase.Composer.Avalonia/ComposerSelectionController.cs
+// Purpose: Viewport and tree selection state.
+//
+// Keeps object and component selection synchronized between rendered viewport picks and the object tree view.
+// -----------------------------------------------------------------------------
+
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;

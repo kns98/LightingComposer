@@ -1,3 +1,10 @@
+// -----------------------------------------------------------------------------
+// File: LightingShowcase.Composer.Avalonia/TransformRegressionTest.cs
+// Purpose: Headless regression test for baked transforms.
+//
+// End-to-end test covering baked transforms and hierarchy operations without opening the UI.
+// -----------------------------------------------------------------------------
+
 using LightingShowcase.Math3D;
 using LightingShowcase.SceneGraph;
 

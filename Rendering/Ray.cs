@@ -17,7 +17,7 @@ public readonly struct Ray
     public readonly Vec3 Origin;
     public readonly Vec3 Direction;
 
-    /// <summary>Constructs and initializes this component.</summary>
+    /// <summary>Initializes a new ray and normalizes its direction.</summary>
     public Ray(Vec3 origin, Vec3 direction)
     {
         Origin = origin;

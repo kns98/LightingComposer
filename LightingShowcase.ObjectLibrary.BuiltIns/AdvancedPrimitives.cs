@@ -1,3 +1,10 @@
+// -----------------------------------------------------------------------------
+// File: LightingShowcase.ObjectLibrary.BuiltIns/AdvancedPrimitives.cs
+// Purpose: Advanced procedural primitives.
+//
+// Torus, tube, capsule, pyramid, triangular prism, and wedge primitives with editable parameters.
+// -----------------------------------------------------------------------------
+
 using LightingShowcase.Math3D;
 using LightingShowcase.SceneGraph;
 

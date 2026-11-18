@@ -1,3 +1,10 @@
+// -----------------------------------------------------------------------------
+// File: LightingShowcase.ImportExport.Stl/GlobalUsings.cs
+// Purpose: Project-wide global using directives.
+//
+// Implicit usings shared by every file in the STL plugin project.
+// -----------------------------------------------------------------------------
+
 global using System;
 global using System.Collections.Generic;
 global using System.Globalization;

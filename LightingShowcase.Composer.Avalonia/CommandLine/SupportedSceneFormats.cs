@@ -1,3 +1,10 @@
+// -----------------------------------------------------------------------------
+// File: LightingShowcase.Composer.Avalonia/CommandLine/SupportedSceneFormats.cs
+// Purpose: Supported scene and model formats.
+//
+// Single source of truth for every extension the editor can open, with helpers to test and describe paths.
+// -----------------------------------------------------------------------------
+
 namespace LightingShowcase.CommandLine;
 
 /// <summary>

@@ -1,3 +1,10 @@
+// -----------------------------------------------------------------------------
+// File: Rendering/SceneCacheStamp.cs
+// Purpose: Scene revision stamp for render caches.
+//
+// Pairs a Scene reference with its revision so CPU and GPU caches detect in-place transform rebuilds.
+// -----------------------------------------------------------------------------
+
 using LightingShowcase.SceneGraph;
 
 namespace LightingShowcase.Rendering;

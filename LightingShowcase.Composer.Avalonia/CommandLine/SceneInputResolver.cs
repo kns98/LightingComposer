@@ -1,3 +1,10 @@
+// -----------------------------------------------------------------------------
+// File: LightingShowcase.Composer.Avalonia/CommandLine/SceneInputResolver.cs
+// Purpose: CLI scene path validation.
+//
+// Rejects remote URLs and ZIP packages, verifies supported formats, and resolves the scene path and asset directory.
+// -----------------------------------------------------------------------------
+
 namespace LightingShowcase.CommandLine;
 
 internal sealed class ResolvedSceneInput

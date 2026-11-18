@@ -1,3 +1,10 @@
+// -----------------------------------------------------------------------------
+// File: LightingShowcase.Composer.Avalonia/CommandLine/PluginBootstrap.cs
+// Purpose: One-time plugin assembly loading.
+//
+// Touches every importer, exporter, and object-library plugin type so reflection registries find them before scanning.
+// -----------------------------------------------------------------------------
+
 using LightingShowcase.ImportExport.Fbx;
 using LightingShowcase.ImportExport.Gltf;
 using LightingShowcase.ImportExport.Obj;

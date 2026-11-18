@@ -1,3 +1,10 @@
+// -----------------------------------------------------------------------------
+// File: LightingShowcase.Composer.Avalonia/ComposerTransformWorkItem.cs
+// Purpose: Thread-safe transform payload from UI to worker.
+//
+// Immutable record captured on the UI thread with no Avalonia objects, so it is safe to execute on a background worker.
+// -----------------------------------------------------------------------------
+
 namespace LightingShowcase.Composer;
 
 /// <summary>

@@ -1,3 +1,10 @@
+// -----------------------------------------------------------------------------
+// File: LightingShowcase.ImportExport.ThreeDs/ThreeDsSceneFormatPlugin.cs
+// Purpose: 3DS format plugin registration.
+//
+// Registers the 3D Studio importer and exporter with the scene format registry.
+// -----------------------------------------------------------------------------
+
 using System.IO;
 using LightingShowcase.SceneGraph;
 

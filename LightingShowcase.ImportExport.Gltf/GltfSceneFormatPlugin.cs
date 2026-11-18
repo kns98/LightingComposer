@@ -1,3 +1,10 @@
+// -----------------------------------------------------------------------------
+// File: LightingShowcase.ImportExport.Gltf/GltfSceneFormatPlugin.cs
+// Purpose: glTF format plugin registration.
+//
+// Registers the glTF and GLB importer and exporter with the scene format registry.
+// -----------------------------------------------------------------------------
+
 using System.IO;
 using LightingShowcase.SceneGraph;
 

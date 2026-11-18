@@ -1,3 +1,10 @@
+// -----------------------------------------------------------------------------
+// File: LightingShowcase.ImportExport.Fbx/FbxSceneFormatPlugin.cs
+// Purpose: FBX format plugin registration.
+//
+// Registers the FBX importer and exporter with the scene format registry.
+// -----------------------------------------------------------------------------
+
 using System.IO;
 using LightingShowcase.SceneGraph;
 

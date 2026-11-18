@@ -1,6 +1,8 @@
 // -----------------------------------------------------------------------------
-// Headless, cross-platform texture storage for LightingShowcase.RenderWorker.
-// Uses a managed image decoder so it runs in Linux GPU containers.
+// File: Scene/TextureMap.cs
+// Purpose: Headless cross-platform texture storage.
+//
+// Managed image decoding and UV sampling that runs in Linux GPU containers; also indexes scene folders for asset resolution.
 // -----------------------------------------------------------------------------
 
 using LightingShowcase.Math3D;
@@ -86,7 +88,7 @@ public sealed partial class TextureMap
     public double ScaleV => scaleV;
     public double Rotation => rotation;
 
-    /// <summary>Constructs and initializes this component.</summary>
+    /// <summary>Initializes a new texture from decoded pixel and alpha buffers.</summary>
     private TextureMap(
         string name,
         int width,
@@ -272,7 +274,7 @@ public sealed partial class TextureMap
         return new TextureMap(name, width, height, pixels, isBuiltInChecker: true);
     }
 
-    /// <summary>Implements the sample operation for this file's subsystem.</summary>
+    /// <summary>Samples the texture color at a UV coordinate with bilinear filtering.</summary>
     public Vec3 Sample(double u, double v)
     {
         // Use normalized texture-coordinate wrapping:
@@ -352,7 +354,7 @@ public sealed partial class TextureMap
     private static byte ToByte(double value) =>
         (byte)Math.Clamp((int)Math.Round(Math.Clamp(value, 0.0, 1.0) * 255.0, MidpointRounding.AwayFromZero), 0, 255);
 
-    /// <summary>Implements the wrap01 operation for this file's subsystem.</summary>
+    /// <summary>Maps a coordinate through the addressing mode (repeat, clamp, or mirror).</summary>
     private static double Address(double value, TextureAddressMode mode)
     {
         if (double.IsNaN(value) || double.IsInfinity(value)) return 0.0;

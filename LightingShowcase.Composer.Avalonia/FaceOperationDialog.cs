@@ -1,3 +1,10 @@
+// -----------------------------------------------------------------------------
+// File: LightingShowcase.Composer.Avalonia/FaceOperationDialog.cs
+// Purpose: Numeric dialog for face extrude and inset.
+//
+// Small dialog collecting signed distance, depth, and profile choices for right-click polygon face operations.
+// -----------------------------------------------------------------------------
+
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Layout;

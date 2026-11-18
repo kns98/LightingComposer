@@ -1,3 +1,10 @@
+// -----------------------------------------------------------------------------
+// File: LightingShowcase.Composer.Avalonia/Program.cs
+// Purpose: Application entry point for GUI and headless CLI.
+//
+// Dispatches render, export, formats, and help commands to the CLI pipeline; otherwise starts the Avalonia desktop UI.
+// -----------------------------------------------------------------------------
+
 using Avalonia;
 using LightingShowcase.CommandLine;
 using LightingShowcase.SceneGraph;

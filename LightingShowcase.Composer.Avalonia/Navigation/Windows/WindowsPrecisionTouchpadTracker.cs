@@ -1,3 +1,10 @@
+// -----------------------------------------------------------------------------
+// File: LightingShowcase.Composer.Avalonia/Navigation/Windows/WindowsPrecisionTouchpadTracker.cs
+// Purpose: Touchpad gesture state tracking.
+//
+// Tracks active contacts and gesture kind across messages so the viewport gets smooth continuous navigation.
+// -----------------------------------------------------------------------------
+
 namespace LightingShowcase.Composer.Navigation.Windows;
 
 internal enum WindowsTrackpadGestureKind

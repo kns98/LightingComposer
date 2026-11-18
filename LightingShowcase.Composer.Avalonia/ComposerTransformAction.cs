@@ -1,3 +1,10 @@
+// -----------------------------------------------------------------------------
+// File: LightingShowcase.Composer.Avalonia/ComposerTransformAction.cs
+// Purpose: Inspector transform parsing and apply action.
+//
+// Parses position, rotation, and scale text into a ComposerTransformRequest and commits it to the scene model.
+// -----------------------------------------------------------------------------
+
 using System.Globalization;
 using LightingShowcase.Math3D;
 

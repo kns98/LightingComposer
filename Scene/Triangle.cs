@@ -33,13 +33,13 @@ public sealed class Triangle
     private readonly Vec3 edge1;
     private readonly Vec3 edge2;
 
-    /// <summary>Constructs and initializes this component.</summary>
+    /// <summary>Initializes a new triangle with default UV coordinates.</summary>
     public Triangle(Vec3 a, Vec3 b, Vec3 c, Material material, int groupId = -1)
         : this(a, b, c, new Vec2(0, 0), new Vec2(1, 0), new Vec2(0, 1), material, groupId)
     {
     }
 
-    /// <summary>Constructs and initializes this component.</summary>
+    /// <summary>Initializes a new triangle with explicit UV coordinates.</summary>
     public Triangle(Vec3 a, Vec3 b, Vec3 c, Vec2 uvA, Vec2 uvB, Vec2 uvC, Material material, int groupId = -1)
         : this(a, b, c, uvA, uvB, uvC, Vec3.Zero, Vec3.Zero, Vec3.Zero, material, groupId)
     {

@@ -1,3 +1,10 @@
+// -----------------------------------------------------------------------------
+// File: LightingShowcase.ImportExport.PropXml/GlobalUsings.cs
+// Purpose: Project-wide global using directives.
+//
+// Implicit usings shared by every file in the PropXml plugin project.
+// -----------------------------------------------------------------------------
+
 global using System;
 global using System.Collections.Generic;
 global using System.Globalization;

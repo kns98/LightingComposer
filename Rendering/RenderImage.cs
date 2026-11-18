@@ -1,3 +1,10 @@
+// -----------------------------------------------------------------------------
+// File: Rendering/RenderImage.cs
+// Purpose: Cross-platform RGBA render result.
+//
+// Pixel buffer where each uint stores R, G, B, and A in low-to-high byte order.
+// -----------------------------------------------------------------------------
+
 namespace LightingShowcase.Rendering;
 
 /// <summary>Cross-platform RGBA render result. Each uint stores R, G, B, A in low-to-high byte order.</summary>

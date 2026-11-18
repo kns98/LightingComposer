@@ -1,3 +1,10 @@
+// -----------------------------------------------------------------------------
+// File: LightingShowcase.Composer.Avalonia/Navigation/Windows/WindowsPrecisionTouchpadApi.cs
+// Purpose: P/Invoke bindings for the Windows precision touchpad API.
+//
+// Native method signatures and constants used to receive high-resolution touchpad input.
+// -----------------------------------------------------------------------------
+
 using System.ComponentModel;
 using System.Runtime.InteropServices;
 

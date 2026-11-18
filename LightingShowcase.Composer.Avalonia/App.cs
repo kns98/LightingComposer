@@ -1,3 +1,10 @@
+// -----------------------------------------------------------------------------
+// File: LightingShowcase.Composer.Avalonia/App.cs
+// Purpose: Avalonia application bootstrap for the Lighting Composer desktop UI.
+//
+// Selects the dark Fluent theme and opens the main ComposerWindow when the desktop lifetime starts. This is the UI entry point reached after Program.Main.
+// -----------------------------------------------------------------------------
+
 using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Styling;

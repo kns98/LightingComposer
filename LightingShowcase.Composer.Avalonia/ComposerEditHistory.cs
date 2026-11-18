@@ -1,3 +1,10 @@
+// -----------------------------------------------------------------------------
+// File: LightingShowcase.Composer.Avalonia/ComposerEditHistory.cs
+// Purpose: Undo and redo stack for composer edits.
+//
+// Defines geometry, transform, and snapshot command types plus the history that applies, reverts, and re-applies them.
+// -----------------------------------------------------------------------------
+
 using LightingShowcase.Math3D;
 using LightingShowcase.SceneGraph;
 

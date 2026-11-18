@@ -1,3 +1,10 @@
+// -----------------------------------------------------------------------------
+// File: LightingShowcase.Composer.Avalonia/ComposerObjectTree.cs
+// Purpose: Scene hierarchy projection for the object tree view.
+//
+// Builds the recursive node list consumed by the Composer UI, including lazy paged rows for logical polygon faces.
+// -----------------------------------------------------------------------------
+
 using LightingShowcase.SceneGraph;
 
 namespace LightingShowcase.Composer;

@@ -1,3 +1,10 @@
+// -----------------------------------------------------------------------------
+// File: LightingShowcase.Composer.Avalonia/ViewportNavigationController.cs
+// Purpose: Viewport orbit, pan, and zoom input.
+//
+// Interprets mouse and gesture drags as camera navigation on every rendering backend.
+// -----------------------------------------------------------------------------
+
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;

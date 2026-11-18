@@ -1,3 +1,10 @@
+// -----------------------------------------------------------------------------
+// File: LightingShowcase.ImportExport.Obj/ObjSceneFormatPlugin.cs
+// Purpose: OBJ format plugin registration.
+//
+// Registers the Wavefront OBJ importer and exporter with the scene format registry.
+// -----------------------------------------------------------------------------
+
 using LightingShowcase.SceneGraph;
 
 namespace LightingShowcase.ImportExport.Obj;

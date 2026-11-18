@@ -1,3 +1,10 @@
+// -----------------------------------------------------------------------------
+// File: LightingShowcase.Composer.Avalonia/CommandLine/CpuCommandLineRenderer.cs
+// Purpose: Cross-platform CPU renderer for the CLI.
+//
+// CPU ray and path tracer used by the headless render command on any operating system.
+// -----------------------------------------------------------------------------
+
 using LightingShowcase.CameraSystem;
 using LightingShowcase.Lighting;
 using LightingShowcase.Math3D;

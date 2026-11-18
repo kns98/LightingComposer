@@ -1,3 +1,10 @@
+// -----------------------------------------------------------------------------
+// File: LightingShowcase.Composer.Avalonia/ComposerMeshEdit.cs
+// Purpose: Mesh component editing model and topology helpers.
+//
+// Implements vertex, edge, and face selection with picking plus extrude and inset topology operations that support undo.
+// -----------------------------------------------------------------------------
+
 using LightingShowcase.Math3D;
 using LightingShowcase.SceneGraph;
 

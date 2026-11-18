@@ -18,7 +18,7 @@ public readonly struct CameraKey
     public readonly Vec3 Position;
     public readonly Vec3 Target;
 
-    /// <summary>Constructs and initializes this component.</summary>
+    /// <summary>Initializes a new camera keyframe with time, position, and target.</summary>
     public CameraKey(double time, Vec3 position, Vec3 target)
     {
         Time = time;

@@ -1,3 +1,10 @@
+// -----------------------------------------------------------------------------
+// File: LightingShowcase.Composer.Avalonia/LightEditorWindow.cs
+// Purpose: Modeless light list and property editor.
+//
+// Floating window editing point, spot, and directional lights with numeric controls and marker visibility options.
+// -----------------------------------------------------------------------------
+
 using System.Globalization;
 using Avalonia;
 using Avalonia.Controls;

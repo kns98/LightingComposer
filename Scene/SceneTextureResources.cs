@@ -1,3 +1,10 @@
+// -----------------------------------------------------------------------------
+// File: Scene/SceneTextureResources.cs
+// Purpose: Scene texture discovery.
+//
+// Discovers every texture referenced by scene materials for export and cache management.
+// -----------------------------------------------------------------------------
+
 namespace LightingShowcase.SceneGraph;
 
 /// <summary>Discovers every texture referenced by scene materials.</summary>

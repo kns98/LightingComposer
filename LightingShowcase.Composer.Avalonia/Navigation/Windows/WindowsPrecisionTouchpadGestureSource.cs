@@ -1,3 +1,10 @@
+// -----------------------------------------------------------------------------
+// File: LightingShowcase.Composer.Avalonia/Navigation/Windows/WindowsPrecisionTouchpadGestureSource.cs
+// Purpose: Touchpad gesture event source.
+//
+// Reads native pointer messages and raises normalized pinch, pan, and zoom gestures for navigation.
+// -----------------------------------------------------------------------------
+
 namespace LightingShowcase.Composer.Navigation.Windows;
 
 internal readonly record struct NativeTrackpadOrbit(double X, double Y);

@@ -1,3 +1,10 @@
+// -----------------------------------------------------------------------------
+// File: LightingShowcase.ObjectLibrary.BuiltIns/PrimitiveBase.cs
+// Purpose: Shared base for procedural primitives.
+//
+// Common parameter handling, mesh building blocks, and shadow geometry used by every built-in primitive.
+// -----------------------------------------------------------------------------
+
 using LightingShowcase.Math3D;
 using LightingShowcase.SceneGraph;
 

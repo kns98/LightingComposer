@@ -1,3 +1,10 @@
+// -----------------------------------------------------------------------------
+// File: LightingShowcase.Composer.Avalonia/ComposerTransformController.cs
+// Purpose: Gizmo drag handling for object transforms.
+//
+// Turns pointer drags on move, rotate, and scale gizmos into live previews and final baked transform edits.
+// -----------------------------------------------------------------------------
+
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;

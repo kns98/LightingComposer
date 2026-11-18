@@ -1,3 +1,10 @@
+// -----------------------------------------------------------------------------
+// File: LightingShowcase.Composer.Avalonia/ComposerSceneSession.Parameters.cs
+// Purpose: Procedural primitive parameters side of the scene session.
+//
+// Tracks parameter edits and live previews for parameterized primitives before they are baked into geometry.
+// -----------------------------------------------------------------------------
+
 using LightingShowcase.Math3D;
 using LightingShowcase.SceneGraph;
 

@@ -18,7 +18,7 @@ public readonly struct CameraBasis
     public readonly Vec3 Right;
     public readonly Vec3 Up;
 
-    /// <summary>Constructs and initializes this component.</summary>
+    /// <summary>Initializes a new camera basis from forward, right, and up vectors.</summary>
     public CameraBasis(Vec3 forward, Vec3 right, Vec3 up)
     {
         Forward = forward;

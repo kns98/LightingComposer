@@ -1,3 +1,10 @@
+// -----------------------------------------------------------------------------
+// File: LightingShowcase.Composer.Avalonia/ComposerRenderOptions.cs
+// Purpose: Renderer and view-mode settings.
+//
+// Immutable resolution, sampling, bounce, exposure, and background settings with defaults tuned per backend.
+// -----------------------------------------------------------------------------
+
 using LightingShowcase.Math3D;
 
 namespace LightingShowcase.Composer;

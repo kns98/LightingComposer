@@ -193,7 +193,7 @@ public static class ReadyMadeObjectFactory
         }
     }
 
-    /// <summary>Implements the sphere point operation for this file's subsystem.</summary>
+    /// <summary>Computes a point on a sphere from spherical coordinates.</summary>
     private static Vec3 SpherePoint(Vec3 center, double radius, double theta, double phi)
     {
         double sinTheta = Math.Sin(theta);

@@ -1,3 +1,10 @@
+// -----------------------------------------------------------------------------
+// File: LightingShowcase.ImportExport.Obj/ObjSceneSaver.cs
+// Purpose: Wavefront OBJ scene export.
+//
+// Exports visible scene geometry as OBJ with a companion MTL file.
+// -----------------------------------------------------------------------------
+
 using LightingShowcase.Math3D;
 using LightingShowcase.SceneGraph;
 

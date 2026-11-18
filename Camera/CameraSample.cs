@@ -17,7 +17,7 @@ public readonly struct CameraSample
     public readonly Vec3 Position;
     public readonly Vec3 Target;
 
-    /// <summary>Constructs and initializes this component.</summary>
+    /// <summary>Initializes a new interpolated camera sample with position and target.</summary>
     public CameraSample(Vec3 position, Vec3 target)
     {
         Position = position;

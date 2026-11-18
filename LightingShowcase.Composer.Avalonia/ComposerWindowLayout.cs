@@ -1,3 +1,10 @@
+// -----------------------------------------------------------------------------
+// File: LightingShowcase.Composer.Avalonia/ComposerWindowLayout.cs
+// Purpose: Three-panel visual shell layout.
+//
+// Builds the menu, viewport, tree, and inspector controls. Owns layout only; behavior lives in the wired controllers.
+// -----------------------------------------------------------------------------
+
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Layout;

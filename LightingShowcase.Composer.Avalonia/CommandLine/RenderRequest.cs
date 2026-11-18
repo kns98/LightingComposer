@@ -1,3 +1,10 @@
+// -----------------------------------------------------------------------------
+// File: LightingShowcase.Composer.Avalonia/CommandLine/RenderRequest.cs
+// Purpose: Headless render job description.
+//
+// Render parameters built from CLI arguments plus the result record reported back to the console.
+// -----------------------------------------------------------------------------
+
 using LightingShowcase.Math3D;
 using LightingShowcase.SceneGraph;
 

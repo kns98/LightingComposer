@@ -1,3 +1,10 @@
+// -----------------------------------------------------------------------------
+// File: LightingShowcase.Composer.Avalonia/ComposerCommandCoordinator.cs
+// Purpose: Coordination point for undoable composer commands.
+//
+// Routes UI-triggered edits through the scene session and edit history so transform, material, light, and hierarchy changes stay undoable.
+// -----------------------------------------------------------------------------
+
 using Avalonia.Controls;
 using LightingShowcase.SceneGraph;
 

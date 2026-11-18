@@ -22,7 +22,7 @@ public sealed class BvhNode
 
     public Aabb Bounds { get; }
 
-    /// <summary>Constructs and initializes this component.</summary>
+    /// <summary>Recursively builds a BVH node over a triangle range.</summary>
     private BvhNode(List<Triangle> source, int start, int count)
     {
         Bounds = ComputeBounds(source, start, count);
@@ -71,7 +71,7 @@ public sealed class BvhNode
         return rightHit ?? leftHit;
     }
 
-    /// <summary>Implements the any intersection operation for this file's subsystem.</summary>
+    /// <summary>Returns true when any triangle is hit within the distance range.</summary>
     public bool AnyIntersection(Ray ray, double tMin, double tMax)
     {
         if (!Bounds.Intersect(ray, tMin, tMax))
@@ -126,7 +126,7 @@ public sealed class BvhNode
         return 1.0 - (1.0 - leftOpacity) * (1.0 - rightOpacity);
     }
 
-    /// <summary>Implements the intersect leaf operation for this file's subsystem.</summary>
+    /// <summary>Finds the closest triangle hit inside a leaf node.</summary>
     private Hit? IntersectLeaf(Ray ray, double tMin, double tMax)
     {
         Hit? closest = null;
@@ -145,7 +145,7 @@ public sealed class BvhNode
         return closest;
     }
 
-    /// <summary>Implements the compute bounds operation for this file's subsystem.</summary>
+    /// <summary>Computes the bounds enclosing a triangle range.</summary>
     private static Aabb ComputeBounds(List<Triangle> source, int start, int count)
     {
         Aabb bounds = source[start].Bounds;
@@ -154,7 +154,7 @@ public sealed class BvhNode
         return bounds;
     }
 
-    /// <summary>Implements the longest axis operation for this file's subsystem.</summary>
+    /// <summary>Returns the index (0=X, 1=Y, 2=Z) of the longest box axis.</summary>
     private static int LongestAxis(Aabb bounds)
     {
         double x = bounds.Max.X - bounds.Min.X;
@@ -166,7 +166,7 @@ public sealed class BvhNode
         return 2;
     }
 
-    /// <summary>Implements the compare centroid operation for this file's subsystem.</summary>
+    /// <summary>Compares two triangle centroids along the given axis for sorting.</summary>
     private static int CompareCentroid(Triangle a, Triangle b, int axis)
     {
         double ca = axis switch

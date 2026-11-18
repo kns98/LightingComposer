@@ -15,13 +15,13 @@ public readonly struct Vec3
     public readonly double X, Y, Z;
     public static Vec3 Zero => new(0, 0, 0);
 
-    /// <summary>Constructs and initializes this component.</summary>
+    /// <summary>Initializes a new three-dimensional vector.</summary>
     public Vec3(double x, double y, double z)
     {
         X = x; Y = y; Z = z;
     }
 
-    /// <summary>Implements the dot operation for this file's subsystem.</summary>
+    /// <summary>Returns the dot product of this vector and another vector.</summary>
     public double Dot(Vec3 v) => X * v.X + Y * v.Y + Z * v.Z;
 
     public Vec3 Cross(Vec3 v) => new(
@@ -30,7 +30,7 @@ public readonly struct Vec3
         X * v.Y - Y * v.X
     );
 
-    /// <summary>Implements the length operation for this file's subsystem.</summary>
+    /// <summary>Returns the Euclidean length of this vector.</summary>
     public double Length() => System.Math.Sqrt(Dot(this));
 
     public Vec3 Normalize()
@@ -39,7 +39,7 @@ public readonly struct Vec3
         return len < 1e-8 ? Zero : this / len;
     }
 
-    /// <summary>Implements the multiply operation for this file's subsystem.</summary>
+    /// <summary>Returns the component-wise product of this vector and another vector.</summary>
     public Vec3 Multiply(Vec3 v) => new(X * v.X, Y * v.Y, Z * v.Z);
 
     public static Vec3 Lerp(Vec3 a, Vec3 b, double t) => new(

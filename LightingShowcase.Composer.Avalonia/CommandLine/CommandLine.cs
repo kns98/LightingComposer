@@ -1,3 +1,10 @@
+// -----------------------------------------------------------------------------
+// File: LightingShowcase.Composer.Avalonia/CommandLine/CommandLine.cs
+// Purpose: Minimal option command-line parser.
+//
+// Parses --key=value options, flag switches, and positional arguments for the headless CLI verbs.
+// -----------------------------------------------------------------------------
+
 namespace LightingShowcase.CommandLine;
 
 internal sealed class CommandLine

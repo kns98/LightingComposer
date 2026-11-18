@@ -1,3 +1,10 @@
+// -----------------------------------------------------------------------------
+// File: LightingShowcase.Composer.Avalonia/ComposerFileController.cs
+// Purpose: Scene file open and save orchestration.
+//
+// Loads scenes and models into the session and writes .lscene compositions back to disk while tracking the current path.
+// -----------------------------------------------------------------------------
+
 using System.Diagnostics;
 using Avalonia.Controls;
 using Avalonia.Platform.Storage;

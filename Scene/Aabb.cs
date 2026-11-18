@@ -18,7 +18,7 @@ public readonly struct Aabb
     public readonly Vec3 Min;
     public readonly Vec3 Max;
 
-    /// <summary>Constructs and initializes this component.</summary>
+    /// <summary>Initializes a new bounding box from minimum and maximum corners.</summary>
     public Aabb(Vec3 min, Vec3 max)
     {
         Min = min;
@@ -34,7 +34,7 @@ public readonly struct Aabb
         return true;
     }
 
-    /// <summary>Implements the hit axis operation for this file's subsystem.</summary>
+    /// <summary>Intersects the ray with one slab axis and narrows the hit interval.</summary>
     private static bool HitAxis(double origin, double direction, double min, double max, ref double tMin, ref double tMax)
     {
         const double eps = 1e-12;
@@ -55,7 +55,7 @@ public readonly struct Aabb
         return tMax > tMin;
     }
 
-    /// <summary>Implements the around operation for this file's subsystem.</summary>
+    /// <summary>Builds a slightly padded box around a triangle.</summary>
     public static Aabb Around(Triangle triangle)
     {
         const double pad = 1e-5;
@@ -71,7 +71,7 @@ public readonly struct Aabb
         return new Aabb(new Vec3(minX, minY, minZ), new Vec3(maxX, maxY, maxZ));
     }
 
-    /// <summary>Implements the surrounding operation for this file's subsystem.</summary>
+    /// <summary>Builds the smallest box enclosing two boxes.</summary>
     public static Aabb Surrounding(Aabb a, Aabb b)
     {
         Vec3 min = new(

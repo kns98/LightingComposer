@@ -1,3 +1,10 @@
+// -----------------------------------------------------------------------------
+// File: LightingShowcase.Composer.Avalonia/PrimitiveParametersWindow.cs
+// Purpose: Procedural primitive parameter editor.
+//
+// Edits the parameters of parameterized primitives with live preview before baking.
+// -----------------------------------------------------------------------------
+
 using System.Globalization;
 using Avalonia;
 using Avalonia.Controls;

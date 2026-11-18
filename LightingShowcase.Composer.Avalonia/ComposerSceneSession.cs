@@ -1,3 +1,10 @@
+// -----------------------------------------------------------------------------
+// File: LightingShowcase.Composer.Avalonia/ComposerSceneSession.cs
+// Purpose: In-memory editing session for one open scene.
+//
+// Owns the scene, selection, and render caches. This partial class is split across Lights, Materials, MeshEdit, and Parameters files.
+// -----------------------------------------------------------------------------
+
 using System.Diagnostics;
 using LightingShowcase.CameraSystem;
 using LightingShowcase.CommandLine;

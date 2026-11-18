@@ -1,3 +1,10 @@
+// -----------------------------------------------------------------------------
+// File: LightingShowcase.ImportExport.Obj/ObjSceneLoader.cs
+// Purpose: Wavefront OBJ scene import.
+//
+// Imports mesh geometry, MTL diffuse colors, UVs, and diffuse texture references into the scene graph.
+// -----------------------------------------------------------------------------
+
 using LightingShowcase.Math3D;
 using LightingShowcase.SceneGraph;
 

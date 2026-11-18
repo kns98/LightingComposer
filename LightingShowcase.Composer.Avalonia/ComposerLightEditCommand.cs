@@ -1,3 +1,10 @@
+// -----------------------------------------------------------------------------
+// File: LightingShowcase.Composer.Avalonia/ComposerLightEditCommand.cs
+// Purpose: Undoable light collection edits.
+//
+// Wraps light add, remove, and property changes so the Lighting Editor participates in undo and redo.
+// -----------------------------------------------------------------------------
+
 using LightingShowcase.Lighting;
 using LightingShowcase.SceneGraph;
 

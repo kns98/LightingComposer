@@ -1,3 +1,10 @@
+// -----------------------------------------------------------------------------
+// File: LightingShowcase.Composer.Avalonia/CommandLine/CommandLineArguments.cs
+// Purpose: Typed render and export CLI arguments.
+//
+// Validates known options and exposes positional paths plus named values to the render and export runners.
+// -----------------------------------------------------------------------------
+
 namespace LightingShowcase.CommandLine;
 
 internal sealed class CommandLineArguments

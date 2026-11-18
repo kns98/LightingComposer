@@ -15,7 +15,7 @@ public readonly struct Vec2
     public readonly double U;
     public readonly double V;
 
-    /// <summary>Constructs and initializes this component.</summary>
+    /// <summary>Initializes a new two-dimensional vector.</summary>
     public Vec2(double u, double v)
     {
         U = u;

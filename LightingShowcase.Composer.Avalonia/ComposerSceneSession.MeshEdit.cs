@@ -1,3 +1,10 @@
+// -----------------------------------------------------------------------------
+// File: LightingShowcase.Composer.Avalonia/ComposerSceneSession.MeshEdit.cs
+// Purpose: Mesh editing side of the scene session.
+//
+// Applies component moves and topology edits to cached mesh data and commits them as undoable history entries.
+// -----------------------------------------------------------------------------
+
 using LightingShowcase.CameraSystem;
 using LightingShowcase.Math3D;
 using LightingShowcase.Rendering;

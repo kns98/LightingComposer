@@ -1,3 +1,10 @@
+// -----------------------------------------------------------------------------
+// File: LightingShowcase.Composer.Avalonia/ComposerMenuController.cs
+// Purpose: Main menu construction and command wiring.
+//
+// Builds the menu bar and connects each item to scene, edit, view, and help actions on the composer window.
+// -----------------------------------------------------------------------------
+
 using Avalonia.Controls;
 using Avalonia.Layout;
 

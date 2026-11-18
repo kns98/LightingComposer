@@ -60,7 +60,7 @@ public sealed class Material
     public double ClearcoatRoughness { get; }
     public bool ClearcoatUsesTransmissionTexture { get; }
 
-    /// <summary>Constructs and initializes this component.</summary>
+    /// <summary>Initializes a new PBR material with optional texture maps.</summary>
     public Material(
         Vec3 color,
         double emission = 0.0,

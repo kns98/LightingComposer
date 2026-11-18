@@ -1,3 +1,10 @@
+// -----------------------------------------------------------------------------
+// File: LightingShowcase.Composer.Avalonia/ComposerOverlayRenderer.cs
+// Purpose: Editor overlay drawing for gizmos and light markers.
+//
+// Draws selectable light markers, move, rotation, and scale gizmos, and selection highlights over the rendered image.
+// -----------------------------------------------------------------------------
+
 using LightingShowcase.CameraSystem;
 using LightingShowcase.Math3D;
 using LightingShowcase.Lighting;

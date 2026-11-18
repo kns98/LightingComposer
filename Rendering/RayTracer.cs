@@ -20,7 +20,7 @@ public sealed class RayTracer
     private const double Pi = Math.PI;
     private readonly Scene scene;
 
-    /// <summary>Constructs and initializes this component.</summary>
+    /// <summary>Initializes a new ray tracer for the given scene.</summary>
     public RayTracer(Scene scene, LightingState lighting)
     {
         this.scene = scene;
@@ -268,7 +268,7 @@ public sealed class RayTracer
             normal * tangentNormal.Z).Normalize();
     }
 
-    /// <summary>Implements the direct light operation for this file's subsystem.</summary>
+    /// <summary>Computes direct lighting from one light using its point, spot, or directional model.</summary>
     private Vec3 DirectLight(Hit hit, SceneLight light, Vec3 surfaceColor, Vec3 normal, Vec3 viewDirection, double metallic, double roughness)
     {
         return light.Kind switch
@@ -488,11 +488,11 @@ public sealed class RayTracer
             : 1.055 * Math.Pow(value, 1.0 / 2.4) - 0.055;
     }
 
-    /// <summary>Implements the ray direction operation for this file's subsystem.</summary>
+    /// <summary>Builds a world-space ray direction for a pixel through the camera basis.</summary>
     public static Vec3 RayDirection(int x, int y, int width, int height, CameraBasis basis)
         => RayDirection(x + 0.5, y + 0.5, width, height, basis);
 
-    /// <summary>Implements the ray direction operation for this file's subsystem.</summary>
+    /// <summary>Builds a world-space ray direction for a pixel through the camera basis.</summary>
     public static Vec3 RayDirection(double x, double y, int width, int height, CameraBasis basis)
         => RayDirection(x, y, width, height, basis, 72.0);
 

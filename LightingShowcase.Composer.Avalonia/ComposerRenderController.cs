@@ -1,3 +1,10 @@
+// -----------------------------------------------------------------------------
+// File: LightingShowcase.Composer.Avalonia/ComposerRenderController.cs
+// Purpose: Render scheduling for the composer viewport.
+//
+// Selects the active backend, re-renders when the scene or camera changes, and reports frame time and scene statistics.
+// -----------------------------------------------------------------------------
+
 using System.Diagnostics;
 using Avalonia;
 using Avalonia.Controls;

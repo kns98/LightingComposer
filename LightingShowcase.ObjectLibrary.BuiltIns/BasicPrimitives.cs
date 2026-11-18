@@ -1,3 +1,10 @@
+// -----------------------------------------------------------------------------
+// File: LightingShowcase.ObjectLibrary.BuiltIns/BasicPrimitives.cs
+// Purpose: Basic procedural primitives.
+//
+// Plane, cube, circle, sphere, icosphere, cylinder, cone, grid, and hemisphere primitives with editable parameters.
+// -----------------------------------------------------------------------------
+
 using LightingShowcase.Math3D;
 using LightingShowcase.SceneGraph;
 

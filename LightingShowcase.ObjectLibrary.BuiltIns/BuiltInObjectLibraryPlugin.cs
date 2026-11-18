@@ -1,3 +1,10 @@
+// -----------------------------------------------------------------------------
+// File: LightingShowcase.ObjectLibrary.BuiltIns/BuiltInObjectLibraryPlugin.cs
+// Purpose: Built-in primitive library registration.
+//
+// Registers the procedural primitive set with the object library registry.
+// -----------------------------------------------------------------------------
+
 using LightingShowcase.SceneGraph;
 
 namespace LightingShowcase.ObjectLibrary.BuiltIns;

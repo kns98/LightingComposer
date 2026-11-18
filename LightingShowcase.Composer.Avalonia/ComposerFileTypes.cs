@@ -1,3 +1,10 @@
+// -----------------------------------------------------------------------------
+// File: LightingShowcase.Composer.Avalonia/ComposerFileTypes.cs
+// Purpose: File picker filters for supported formats.
+//
+// Central list of scene, model, and texture extensions plus the Avalonia picker types used by open, insert, and texture dialogs.
+// -----------------------------------------------------------------------------
+
 using Avalonia.Platform.Storage;
 
 namespace LightingShowcase.Composer;

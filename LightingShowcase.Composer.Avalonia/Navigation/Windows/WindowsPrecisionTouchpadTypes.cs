@@ -1,3 +1,10 @@
+// -----------------------------------------------------------------------------
+// File: LightingShowcase.Composer.Avalonia/Navigation/Windows/WindowsPrecisionTouchpadTypes.cs
+// Purpose: Native touchpad interop types.
+//
+// Pointer, point, rect, and touch structs mirroring the Windows API shapes used by the tracker.
+// -----------------------------------------------------------------------------
+
 using System.Runtime.InteropServices;
 
 namespace LightingShowcase.Composer.Navigation.Windows;

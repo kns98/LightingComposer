@@ -1,3 +1,10 @@
+// -----------------------------------------------------------------------------
+// File: Scene/SceneExportPackage.cs
+// Purpose: Portable export package workflow.
+//
+// Known export formats, per-format variants, and the service that writes self-contained export packages.
+// -----------------------------------------------------------------------------
+
 namespace LightingShowcase.SceneGraph;
 
 /// <summary>One format/variant offered by the portable export workflow.</summary>

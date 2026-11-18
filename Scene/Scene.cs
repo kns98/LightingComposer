@@ -96,7 +96,7 @@ public sealed class Scene
     /// <summary>Backward-compatible OBJ insert helper routed through the plugin registry.</summary>
     public ObjLoadResult InsertObjFromFile(string filePath, Action<ObjLoadProgress>? progress = null) => InsertModelFromFile(filePath, progress);
 
-    /// <summary>Implements the insert ready made object operation for this file's subsystem.</summary>
+    /// <summary>Inserts a ready-made catalog object into the scene.</summary>
     public SceneObjectGroup InsertReadyMadeObject(string objectName)
     {
         SceneObjectGroup group = ObjectLibraryRegistry.Insert(this, materials, objectName);
@@ -285,7 +285,7 @@ public sealed class Scene
         return new SceneSnapshot(Description, ObjectGroups, Lights);
     }
 
-    /// <summary>Implements the restore snapshot operation for this file's subsystem.</summary>
+    /// <summary>Restores the scene from an undo snapshot.</summary>
     public void RestoreSnapshot(SceneSnapshot snapshot)
     {
         Clear();
@@ -296,7 +296,7 @@ public sealed class Scene
         RebuildWorldGeometry();
     }
 
-    /// <summary>Implements the duplicate group operation for this file's subsystem.</summary>
+    /// <summary>Duplicates an object group with fresh ids and a slight offset.</summary>
     public SceneObjectGroup DuplicateGroup(int id)
     {
         SceneObjectGroup source = GroupById(id) ?? throw new ArgumentException("Group not found.", nameof(id));
@@ -316,7 +316,7 @@ public sealed class Scene
         return duplicate;
     }
 
-    /// <summary>Implements the delete group operation for this file's subsystem.</summary>
+    /// <summary>Deletes an object group and its children.</summary>
     public void DeleteGroup(int id)
     {
         SceneObjectGroup? group = GroupById(id);
@@ -959,7 +959,7 @@ public sealed class Scene
         return acceleration?.Intersect(ray, 1e-6, double.PositiveInfinity);
     }
 
-    /// <summary>Implements the any intersection operation for this file's subsystem.</summary>
+    /// <summary>Returns true when any triangle is hit within the maximum distance.</summary>
     public bool AnyIntersection(Ray ray, double maxDistance)
     {
         BvhNode? acceleration = GetOrBuildAccelerationStructure();
@@ -973,14 +973,14 @@ public sealed class Scene
         return acceleration?.ShadowOpacity(ray, 1e-6, maxDistance, maxSamples) ?? 0.0;
     }
 
-    /// <summary>Implements the quad operation for this file's subsystem.</summary>
+    /// <summary>Adds a quad made of two triangles to the scene.</summary>
     public void Quad(Vec3 a, Vec3 b, Vec3 c, Vec3 d, Material material)
     {
         AddTriangle(a, b, c, new Vec2(0, 0), new Vec2(1, 0), new Vec2(1, 1), material);
         AddTriangle(a, c, d, new Vec2(0, 0), new Vec2(1, 1), new Vec2(0, 1), material);
     }
 
-    /// <summary>Implements the box operation for this file's subsystem.</summary>
+    /// <summary>Adds an axis-aligned box made of twelve triangles to the scene.</summary>
     public void Box(Vec3 min, Vec3 max, Material material)
     {
         double x0 = min.X, y0 = min.Y, z0 = min.Z, x1 = max.X, y1 = max.Y, z1 = max.Z;

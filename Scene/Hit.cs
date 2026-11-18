@@ -24,7 +24,7 @@ public sealed class Hit
     public Vec3 Tangent { get; }
     public Vec3 Bitangent { get; }
 
-    /// <summary>Constructs and initializes this component.</summary>
+    /// <summary>Initializes a new nearest-hit record.</summary>
     public Hit(
         double t,
         Vec3 point,

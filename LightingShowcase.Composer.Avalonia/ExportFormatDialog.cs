@@ -1,3 +1,10 @@
+// -----------------------------------------------------------------------------
+// File: LightingShowcase.Composer.Avalonia/ExportFormatDialog.cs
+// Purpose: Export format picker dialog.
+//
+// Shows the explicit format selection presented before the user chooses an export directory.
+// -----------------------------------------------------------------------------
+
 using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Media;
