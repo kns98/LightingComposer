@@ -60,6 +60,7 @@ internal sealed class ComposerMenuController
     private readonly MenuItem resetTransformMenuItem;
     private readonly MenuItem lightingEditorMenuItem;
     private readonly MenuItem renderSettingsMenuItem;
+    private readonly MenuItem wireframeMenuItem;
     private readonly MenuItem[] primitiveMenuItems;
     private readonly MenuItem[] rendererMenuItems;
     private readonly MenuItem[] selectionModeMenuItems;
@@ -118,7 +119,9 @@ internal sealed class ComposerMenuController
         Action<int> selectGizmo,
         Action<int> selectAxis,
         Func<Task> lightingEditor,
-        Func<Task> renderSettings)
+        Func<Task> renderSettings,
+        Func<bool> isWireframeChecked,
+        Func<Task> toggleWireframe)
     {
         this.rendererBox = rendererBox;
         this.selectionModeBox = selectionModeBox;
@@ -160,6 +163,8 @@ internal sealed class ComposerMenuController
         applyTransformMenuItem = MenuCommand("_Apply transform", applyTransform);
         resetTransformMenuItem = MenuCommand("_Reset transform", resetTransform);
         frameSelectedMenuItem = MenuCommand("_Frame selected", frameSelected);
+        wireframeMenuItem = new MenuItem { Header = "_Wireframe", ToggleType = MenuItemToggleType.CheckBox, IsChecked = isWireframeChecked() };
+        wireframeMenuItem.Click += async (_, _) => await toggleWireframe();
         lightingEditorMenuItem = MenuCommand("_Lighting…", lightingEditor);
         renderSettingsMenuItem = MenuCommand("_Settings…", renderSettings);
 
@@ -200,7 +205,7 @@ internal sealed class ComposerMenuController
         MenuItem axisMenu = new() { Header = "Move _axis lock", ItemsSource = moveAxisMenuItems.Cast<object>().ToArray() };
         MenuItem modeMenu = new() { Header = "_Mode", ItemsSource = new object[] { selectionMenu, gizmoMenu, axisMenu } };
         MenuItem rendererMenu = new() { Header = "_Renderer", ItemsSource = rendererMenuItems.Cast<object>().ToArray() };
-        MenuItem renderMenu = new() { Header = "_Render", ItemsSource = new object[] { rendererMenu, new Separator(), lightingEditorMenuItem, renderSettingsMenuItem } };
+        MenuItem renderMenu = new() { Header = "_Render", ItemsSource = new object[] { rendererMenu, new Separator(), wireframeMenuItem, lightingEditorMenuItem, renderSettingsMenuItem } };
 
         return new Menu
         {
@@ -219,6 +224,9 @@ internal sealed class ComposerMenuController
     }
 
     /// <summary>Synchronizes menu item enabled state with the toolbar controls.</summary>
+    /// <summary>Syncs the wireframe menu check mark with the current renderer options.</summary>
+    public void SetWireframeChecked(bool isChecked) => wireframeMenuItem.IsChecked = isChecked;
+
     public void SyncEnabledState()
     {
         newMenuItem.IsEnabled = newButton.IsEnabled;
@@ -251,6 +259,7 @@ internal sealed class ComposerMenuController
 
         lightingEditorMenuItem.IsEnabled = renderSettingsButton.IsEnabled;
         renderSettingsMenuItem.IsEnabled = renderSettingsButton.IsEnabled;
+        wireframeMenuItem.IsEnabled = renderSettingsButton.IsEnabled;
     }
 
     /// <summary>Enables or disables the render settings menu item.</summary>

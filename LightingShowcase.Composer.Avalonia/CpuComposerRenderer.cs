@@ -55,12 +55,18 @@ internal static class CpuComposerRenderer
         RayTracer tracer = new(scene, new LightingState());
         // Build camera basis vectors
         CameraBasis basis = camera.ToBasis();
+        // Precompute world units per pixel for wireframe width
+        tracer.WireframePixelWorld = 2.0 * Math.Tan(options.FieldOfViewDegrees * Math.PI / 360.0) / Math.Max(1, height);
         // Allocate output pixel buffer
         uint[] pixels = new uint[checked(width * height)];
         // Read samples per pixel count
         int sampleCount = options.Samples;
+        // Detect wireframe single-sample view
+        bool wireframe = options.Wireframe;
+        // Collapse samples for wireframe view
+        int effectiveSamples = wireframe ? 1 : sampleCount;
         // Compute per-sample averaging weight
-        double sampleWeight = 1.0 / sampleCount;
+        double sampleWeight = 1.0 / effectiveSamples;
         // Configure parallel loop cancellation
         ParallelOptions parallelOptions = new() { CancellationToken = cancellationToken };
 
@@ -75,16 +81,16 @@ internal static class CpuComposerRenderer
                 // Reset per-pixel color accumulator
                 Vec3 accumulated = Vec3.Zero;
                 // Loop anti-aliasing samples
-                for (int sampleIndex = 0; sampleIndex < sampleCount; sampleIndex++)
+                for (int sampleIndex = 0; sampleIndex < effectiveSamples; sampleIndex++)
                 // Begin per-sample loop
                 {
                     // Honor render cancellation promptly
                     cancellationToken.ThrowIfCancellationRequested();
 
                     // Compute horizontal subpixel jitter offset
-                    double jitterX = sampleCount == 1 ? 0.5 : Jitter01(x, y, sampleIndex, 0);
+                    double jitterX = effectiveSamples == 1 ? 0.5 : Jitter01(x, y, sampleIndex, 0);
                     // Compute vertical subpixel jitter offset
-                    double jitterY = sampleCount == 1 ? 0.5 : Jitter01(x, y, sampleIndex, 1);
+                    double jitterY = effectiveSamples == 1 ? 0.5 : Jitter01(x, y, sampleIndex, 1);
                     // Compute primary ray direction
                     Vec3 direction = RayTracer.RayDirection(
                         // Jittered pixel horizontal coordinate
@@ -102,12 +108,16 @@ internal static class CpuComposerRenderer
 
                     // Build primary ray from camera
                     Ray ray = new(camera.Position, direction);
-                    // Choose direct or path tracing
-                    Vec3 sample = options.Bounces <= 0
-                        // Trace single direct-lighting ray
-                        ? tracer.Trace(ray, RenderMode.Lit)
-                        // Trace multi-bounce path sample
-                        : tracer.TracePath(ray, options.Bounces, x, y, sampleIndex);
+                    // Choose wireframe direct or path tracing
+                    Vec3 sample = wireframe
+                        // Trace wireframe hidden-line ray
+                        ? tracer.Trace(ray, RenderMode.Wireframe)
+                        // Fall back to shaded tracing
+                        : options.Bounces <= 0
+                            // Trace single direct-lighting ray
+                            ? tracer.Trace(ray, RenderMode.Lit)
+                            // Trace multi-bounce path sample
+                            : tracer.TracePath(ray, options.Bounces, x, y, sampleIndex);
                     // Accumulate sample into pixel color
                     accumulated += sample;
                 // End per-sample loop
@@ -130,6 +140,8 @@ internal static class CpuComposerRenderer
             $"CPU ray/path tracer - {width}x{height}, samples={options.Samples}, " +
             // Format bounces field of view exposure
             $"bounces={options.Bounces}, fov={options.FieldOfViewDegrees:0.##}°, exposure={options.Exposure:0.###}";
+        // Tag wireframe renders in details
+        if (wireframe) details += ", wireframe";
         // Return finished render image
         return new RenderImage(width, height, pixels);
     // End Render method

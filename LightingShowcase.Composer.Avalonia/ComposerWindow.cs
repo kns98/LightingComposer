@@ -348,7 +348,9 @@ internal sealed class ComposerWindow : Window
             index => gizmoModeBox.SelectedIndex = index,
             index => moveAxisBox.SelectedIndex = index,
             () => { OpenLightEditor(session.SelectedLightIndex); return Task.CompletedTask; },
-            OpenRenderSettingsAsync);
+            OpenRenderSettingsAsync,
+            () => renderController.GetOptions(SelectedRenderer.Kind).Wireframe,
+            ToggleWireframeAsync);
 
         selectionController = new ComposerSelectionController(
             session, renderController, dialogController, menuController,
@@ -402,6 +404,20 @@ internal sealed class ComposerWindow : Window
         Closed += (_, _) => DisposeWindowResources();
     }
 
+    /// <summary>Toggles wireframe view for the current renderer and requests a fresh render.</summary>
+    private async Task ToggleWireframeAsync()
+    {
+        ComposerRendererKind kind = SelectedRenderer.Kind;
+        ComposerRenderOptions options = renderController.GetOptions(kind);
+        ComposerRenderOptions updated = options with { Wireframe = !options.Wireframe };
+        renderController.SetOptions(kind, updated);
+        menuController.SetWireframeChecked(updated.Wireframe);
+        detailsText.Text = $"{SelectedRenderer.Description} {updated.Describe(kind)}";
+        statusText.Text = updated.Wireframe ? "Wireframe view enabled." : "Wireframe view disabled.";
+        if (session.HasRenderableScene)
+            await renderController.RequestRenderAsync(interactive: false);
+    }
+
     /// <summary>Wires button clicks, combo boxes, and viewport input to their handlers.</summary>
     private void WireEvents()
     {
@@ -427,6 +443,7 @@ internal sealed class ComposerWindow : Window
         rendererBox.SelectionChanged += (_, _) =>
         {
             menuController.SyncChecks();
+            menuController.SetWireframeChecked(renderController.GetOptions(SelectedRenderer.Kind).Wireframe);
             menuController.SyncEnabledState();
             ComposerRendererKind kind = SelectedRenderer.Kind;
             detailsText.Text = $"{SelectedRenderer.Description} {renderController.GetOptions(kind).Describe(kind)}";
@@ -528,6 +545,7 @@ private async Task OpenRenderSettingsAsync()
             return;
 
         renderController.SetOptions(kind, updated);
+        menuController.SetWireframeChecked(updated.Wireframe);
         detailsText.Text = $"{renderer.Label} settings: {updated.Describe(kind)}";
 
         if (SelectedRenderer.Kind == kind && session.HasRenderableScene)

@@ -867,6 +867,7 @@ Hit traceClosest(vec3 ro, vec3 rd, float maxT, uint ignoreIndex)
                     if (dot(h.normal, rd) > 0.0)
                         // Flip mapped normal forward
                         h.normal = -h.normal;
+                    // Record base color
                     h.baseColor = sampledBase.rgb;
                     // Record emission color
                     h.emission = triangleEmissionAt(tri, hitUv, sampledBase.rgb);
@@ -1408,6 +1409,94 @@ vec3 tracePath(vec3 ro, vec3 rd, uint maxBounces)
 // End path tracer function
 }
 
+// Measure point to segment distance
+float pointSegmentDistance(vec3 p, vec3 a, vec3 b)
+// Begin point segment function
+{
+    // Build segment direction vector
+    vec3 ab = b - a;
+    // Compute squared segment length
+    float denom = dot(ab, ab);
+    // Handle degenerate segment case
+    if (denom < 0.000000000001)
+        // Return distance to endpoint
+        return length(p - a);
+    // Project point onto segment line
+    float t = clamp(dot(p - a, ab) / denom, 0.0, 1.0);
+    // Return distance to closest point
+    return length(p - (a + ab * t));
+// End point segment function
+}
+
+// Measure world distance to triangle edges
+float triangleEdgeDistance(uint triIndex, vec3 p)
+// Begin edge distance function
+{
+    // Fetch candidate triangle record
+    GpuTriangle tri = triangles[triIndex];
+    // Measure distance to first edge
+    float dab = pointSegmentDistance(p, tri.a.xyz, tri.b.xyz);
+    // Measure distance to second edge
+    float dbc = pointSegmentDistance(p, tri.b.xyz, tri.c.xyz);
+    // Measure distance to third edge
+    float dca = pointSegmentDistance(p, tri.c.xyz, tri.a.xyz);
+    // Return nearest edge distance
+    return min(dab, min(dbc, dca));
+// End edge distance function
+}
+
+// Trace wireframe view with dashed hidden lines
+vec3 traceWireframe(vec3 ro, vec3 rd, ivec2 pixel)
+// Begin wireframe trace function
+{
+    // Define solid wireframe color
+    vec3 solidColor = vec3(0.85, 0.92, 1.0);
+    // Define dashed hidden line color
+    vec3 hiddenColor = vec3(0.30, 0.38, 0.52);
+    // Start with no ignored triangle
+    uint ignoreIndex = 0xffffffffu;
+    // March through successive hits
+    for (uint depth = 0u; depth < 6u; depth++)
+    // Begin hit marching loop
+    {
+        // Find nearest remaining hit
+        Hit h = traceClosest(ro, rd, 1.0e30, ignoreIndex);
+        // Missed everything shows background
+        if (!h.hit)
+            // Return background gradient color
+            return background(rd);
+        // Scale pixel width by hit distance
+        float pixelWorld = 2.0 * h.t * max(constants.backgroundTopFov.w, 0.0001) / max(float(constants.viewportAndCounts.y), 1.0);
+        // Measure world distance to edges
+        float edgeDistance = triangleEdgeDistance(h.index, h.point);
+        // Test hit against line width
+        if (edgeDistance <= pixelWorld * 0.75)
+        // Begin edge pixel branch
+        {
+            // Nearest edge draws solid line
+            if (depth == 0u)
+                // Return solid wireframe color
+                return solidColor;
+            // Phase screen-space dash pattern
+            float dashPhase = mod(float(pixel.x + pixel.y * 2), 8.0);
+            // Draw dash segment color
+            if (dashPhase < 4.0)
+                // Return dashed hidden color
+                return hiddenColor;
+            // Dash gaps keep marching deeper
+        // End edge pixel branch
+        }
+        // Advance ray origin past hit
+        ro = h.point + rd * max(0.004, h.t * 0.0001);
+        // Ignore current triangle next trace
+        ignoreIndex = h.index;
+    // End hit marching loop
+    }
+    // Return background when march exhausts
+    return background(rd);
+// End wireframe trace function
+}
+
 // Applies exposure, tone mapping, and sRGB conversion, then packs RGBA8.
 // Declare output color packer
 uint packColor(vec3 c)
@@ -1467,8 +1556,12 @@ void main()
     // Initialize pixel accumulator
     vec3 color = vec3(0.0);
 
+    // Detect wireframe view request
+    bool wireframe = constants.lightingOptions.z > 0.5;
+    // Render single pass for wireframe
+    uint wireLoops = wireframe ? 1u : sampleCount;
     // Loop over pixel sample batch
-    for (uint sampleOffset = 0u; sampleOffset < sampleCount; sampleOffset++)
+    for (uint sampleOffset = 0u; sampleOffset < wireLoops; sampleOffset++)
     // Begin per-sample loop
     {
         // Compute absolute sample index
@@ -1497,13 +1590,13 @@ void main()
 
         // Clamp configured bounce count
         uint bounces = min(constants.renderParams.x, 8u);
-        // Accumulate traced path sample
-        color += tracePath(ro, rd, bounces);
+        // Trace wireframe or full path sample
+        color += wireframe ? traceWireframe(ro, rd, ivec2(x, y)) : tracePath(ro, rd, bounces);
     // End per-sample loop
     }
 
     // Average accumulated pixel samples
-    color /= float(sampleCount);
+    color /= float(wireframe ? 1u : sampleCount);
     // Pack and store pixel color
     pixels[y * width + x] = packColor(color);
 // End main kernel function

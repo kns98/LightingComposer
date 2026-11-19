@@ -29,6 +29,12 @@ public sealed class RayTracer
     private const double Pi = Math.PI;
     // Store traced scene reference
     private readonly Scene scene;
+    // World units per pixel at unit distance for wireframe lines
+    public double WireframePixelWorld { get; set; } = 0.002;
+    // Bright color for visible wireframe lines
+    private static readonly Vec3 WireframeLineColor = new Vec3(0.85, 0.92, 1.0);
+    // Dim color for dashed hidden wireframe lines
+    private static readonly Vec3 WireframeHiddenColor = new Vec3(0.30, 0.38, 0.52);
 
     /// <summary>Initializes a new ray tracer for the given scene.</summary>
     // Construct tracer for scene
@@ -49,8 +55,16 @@ public sealed class RayTracer
     public Vec3 Trace(Ray ray, RenderMode mode)
     // Begin Trace overload
     {
-        // Dispatch lit or debug tracing
-        return mode == RenderMode.Lit ? Trace(ray, 0) : TraceDebug(ray, mode);
+        // Dispatch lit wireframe or debug tracing
+        return mode switch
+        {
+            // Trace direct lighting ray
+            RenderMode.Lit => Trace(ray, 0),
+            // Trace wireframe hidden-line view
+            RenderMode.Wireframe => TraceWireframe(ray),
+            // Trace remaining debug views
+            _ => TraceDebug(ray, mode)
+        };
     // End Trace overload
     }
 
@@ -952,6 +966,101 @@ public sealed class RayTracer
         // Combines basis vectors into normalized ray
         return (basis.Forward + basis.Right * u + basis.Up * v).Normalize();
     // End camera ray direction method
+    }
+
+    /// <summary>Traces a wireframe view ray, marching past hits to find dashed hidden lines.</summary>
+    // Trace wireframe hidden-line view
+    private Vec3 TraceWireframe(Ray ray)
+    // Begin TraceWireframe
+    {
+        // Limit marched hits per ray
+        const int MaxMarchHits = 6;
+        // Start marching from camera ray
+        Ray current = ray;
+        // March through successive scene hits
+        for (int depth = 0; depth < MaxMarchHits; depth++)
+        // Begin hit marching loop
+        {
+            // Find nearest remaining hit
+            Hit? hit = scene.Intersect(current);
+            // Missed everything shows background
+            if (hit == null)
+                // Return background gradient color
+                return Background(ray);
+            // Measure world distance to triangle edge
+            double edgeDistance = EdgeDistanceToTriangle(hit);
+            // Scale pixel width by hit distance
+            double pixelWorld = WireframePixelWorld * Math.Max(hit.T, 1e-6);
+            // Test hit against line half width
+            if (edgeDistance <= pixelWorld * 0.75)
+            // Begin edge pixel branch
+            {
+                // Nearest edge draws solid line
+                if (depth == 0)
+                    // Return solid wireframe color
+                    return WireframeLineColor;
+                // Phase dashes through world position
+                double phase = (hit.Point.X * 0.37 + hit.Point.Y * 0.73 + hit.Point.Z * 0.91) / Math.Max(pixelWorld * 6.0, 1e-9);
+                // Fold phase into unit interval
+                double frac = phase - Math.Floor(phase);
+                // Draw dash segment color
+                if (frac < 0.55)
+                    // Return dashed hidden color
+                    return WireframeHiddenColor;
+                // Dash gaps keep marching deeper
+            // End edge pixel branch
+            }
+            // Advance ray origin past hit
+            current = new Ray(
+                // Offset past hit point
+                hit.Point + current.Direction * Math.Max(1e-4, hit.T * 1e-4),
+                // Preserve ray direction
+                current.Direction);
+        // End hit marching loop
+        }
+        // Return background when march exhausts
+        return Background(ray);
+    // End TraceWireframe
+    }
+
+    /// <summary>Measures the world-space distance from a hit point to its triangle edges.</summary>
+    // Measure hit distance to edges
+    private static double EdgeDistanceToTriangle(Hit hit)
+    // Begin EdgeDistanceToTriangle
+    {
+        // Read source triangle vertices
+        Triangle source = hit.SourceTriangle;
+        // Read hit world position
+        Vec3 p = hit.Point;
+        // Measure distance to first edge
+        double ab = PointSegmentDistance(p, source.A, source.B);
+        // Measure distance to second edge
+        double bc = PointSegmentDistance(p, source.B, source.C);
+        // Measure distance to third edge
+        double ca = PointSegmentDistance(p, source.C, source.A);
+        // Return nearest edge distance
+        return Math.Min(ab, Math.Min(bc, ca));
+    // End EdgeDistanceToTriangle
+    }
+
+    /// <summary>Measures the distance from a point to a line segment.</summary>
+    // Measure point to segment distance
+    private static double PointSegmentDistance(Vec3 p, Vec3 a, Vec3 b)
+    // Begin PointSegmentDistance
+    {
+        // Build segment direction vector
+        Vec3 ab = b - a;
+        // Compute squared segment length
+        double denom = ab.Dot(ab);
+        // Degenerate segment measures to endpoint
+        if (denom < 1e-18)
+            // Return distance to endpoint
+            return (p - a).Length();
+        // Project point onto segment line
+        double t = Math.Clamp((p - a).Dot(ab) / denom, 0.0, 1.0);
+        // Return distance to closest point
+        return (p - (a + ab * t)).Length();
+    // End PointSegmentDistance
     }
 // End RayTracer class
 }

@@ -40,6 +40,10 @@ public static class ShadowRasterRenderer
     private const int MaxShadowCastingLights = 4;
     // Limit interactive preview lights
     private const int MaxInteractiveLights = 2;
+    // Packed solid wireframe line color
+    private static readonly uint WireframeSolidColor = PackRgba(ToByte(Gamma(0.83)), ToByte(Gamma(0.91)), ToByte(Gamma(1.0)), 255);
+    // Packed dashed hidden line color
+    private static readonly uint WireframeHiddenColor = PackRgba(ToByte(Gamma(0.15)), ToByte(Gamma(0.23)), ToByte(Gamma(0.40)), 255);
 
 
     /// <summary>
@@ -126,13 +130,15 @@ public static class ShadowRasterRenderer
         // Cancellation token for render
         CancellationToken cancellationToken,
         // Render statistics output text
-        out string details)
+        out string details,
+        // Render wireframe view flag
+        bool wireframe = false)
     // Begin Render overload block
     {
         // Build fresh shadow cache
         PreviewCache cache = BuildCache(scene, cancellationToken);
         // Delegate to cached render
-        return Render(cache, cameraPosition, cameraBasis, width, height, cancellationToken, out details);
+        return Render(cache, cameraPosition, cameraBasis, width, height, cancellationToken, out details, interactiveFast: false, wireframe: wireframe);
     // End Render overload block
     }
 
@@ -154,7 +160,9 @@ public static class ShadowRasterRenderer
         // Render statistics output text
         out string details,
         // Fast preview mode flag
-        bool interactiveFast = false)
+        bool interactiveFast = false,
+        // Render wireframe view flag
+        bool wireframe = false)
     // Begin cached Render block
     {
         // Reject null cache argument
@@ -163,6 +171,10 @@ public static class ShadowRasterRenderer
         width = Math.Max(1, width);
         // Clamp height to minimum
         height = Math.Max(1, height);
+        // Branch to wireframe renderer
+        if (wireframe)
+            // Return wireframe view image
+            return RenderWireframe(cache.Scene, cameraPosition, cameraBasis, width, height, cancellationToken, out details);
 
         // Start frame render timer
         Stopwatch stopwatch = Stopwatch.StartNew();
@@ -1307,6 +1319,232 @@ public static class ShadowRasterRenderer
         // End basis builder
         }
     // End ShadowProjection struct
+    }
+
+    /// <summary>Renders a wireframe view with solid visible lines and dashed hidden lines.</summary>
+    // Render wireframe hidden-line view
+    private static RenderImage RenderWireframe(Scene scene, Vec3 cameraPosition, CameraBasis basis, int width, int height, CancellationToken cancellationToken, out string details)
+    // Begin RenderWireframe block
+    {
+        // Start wireframe frame timer
+        Stopwatch stopwatch = Stopwatch.StartNew();
+        // Allocate output pixel buffer
+        uint[] pixels = new uint[checked(width * height)];
+        // Allocate depth buffer
+        double[] zBuffer = new double[pixels.Length];
+        // Reset depth to infinity
+        Array.Fill(zBuffer, double.PositiveInfinity);
+        // Paint gradient background
+        ClearBackground(pixels, width, height);
+        // Fill depth with opaque surfaces
+        foreach (Triangle tri in scene.Triangles)
+        // Begin depth prepass loop
+        {
+            // Honor render cancellation request
+            cancellationToken.ThrowIfCancellationRequested();
+            // Rasterize triangle depth only
+            RasterizeDepthOnly(zBuffer, width, height, tri, cameraPosition, basis);
+        // End depth prepass loop
+        }
+        // Count solid visible line pixels
+        int solidPixels = 0;
+        // Count dashed hidden line pixels
+        int hiddenPixels = 0;
+        // Draw wireframe edges over depth
+        foreach (Triangle tri in scene.Triangles)
+        // Begin wireframe edge loop
+        {
+            // Honor render cancellation request
+            cancellationToken.ThrowIfCancellationRequested();
+            // Rasterize triangle wireframe edges
+            RasterizeWireframeTriangle(pixels, zBuffer, width, height, tri, cameraPosition, basis, ref solidPixels, ref hiddenPixels);
+        // End wireframe edge loop
+        }
+        // Stop wireframe frame timer
+        stopwatch.Stop();
+        // Format wireframe statistics string
+        details = $"Shadow raster wireframe - {width}x{height}, triangles={scene.Triangles.Count}, solid={solidPixels}, hidden={hiddenPixels}, frame={stopwatch.ElapsedMilliseconds}ms";
+        // Return completed wireframe image
+        return new RenderImage(width, height, pixels);
+    // End RenderWireframe block
+    }
+
+    /// <summary>Rasterizes one triangle into the depth buffer without shading.</summary>
+    // Rasterize triangle depth only
+    private static void RasterizeDepthOnly(double[] zBuffer, int width, int height, Triangle tri, Vec3 cameraPosition, CameraBasis basis)
+    // Begin RasterizeDepthOnly block
+    {
+        // Project first triangle vertex
+        if (!TryProjectCamera(tri.A, cameraPosition, basis, width, height, out RasterVertex a))
+            // Skip unprojectable triangle
+            return;
+        // Project second triangle vertex
+        if (!TryProjectCamera(tri.B, cameraPosition, basis, width, height, out RasterVertex b))
+            // Skip unprojectable triangle
+            return;
+        // Project third triangle vertex
+        if (!TryProjectCamera(tri.C, cameraPosition, basis, width, height, out RasterVertex c))
+            // Skip unprojectable triangle
+            return;
+        // Measure signed triangle area
+        double area = Edge(a.X, a.Y, b.X, b.Y, c.X, c.Y);
+        // Skip degenerate triangles
+        if (Math.Abs(area) < 1e-9)
+            // Ignore zero-area triangle
+            return;
+        // Clamp horizontal pixel minimum
+        int minX = Math.Clamp((int)Math.Floor(Math.Min(a.X, Math.Min(b.X, c.X))), 0, width - 1);
+        // Clamp horizontal pixel maximum
+        int maxX = Math.Clamp((int)Math.Ceiling(Math.Max(a.X, Math.Max(b.X, c.X))), 0, width - 1);
+        // Clamp vertical pixel minimum
+        int minY = Math.Clamp((int)Math.Floor(Math.Min(a.Y, Math.Min(b.Y, c.Y))), 0, height - 1);
+        // Clamp vertical pixel maximum
+        int maxY = Math.Clamp((int)Math.Ceiling(Math.Max(a.Y, Math.Max(b.Y, c.Y))), 0, height - 1);
+        // Scan covered pixel rows
+        for (int y = minY; y <= maxY; y++)
+        // Begin depth row loop
+        {
+            // Scan covered pixel columns
+            for (int x = minX; x <= maxX; x++)
+            // Begin depth pixel loop
+            {
+                // Compute first barycentric weight
+                double wa = Edge(b.X, b.Y, c.X, c.Y, x + 0.5, y + 0.5) / area;
+                // Compute second barycentric weight
+                double wb = Edge(c.X, c.Y, a.X, a.Y, x + 0.5, y + 0.5) / area;
+                // Compute third barycentric weight
+                double wc = 1.0 - wa - wb;
+                // Reject pixels outside triangle
+                if (wa < 0.0 || wb < 0.0 || wc < 0.0)
+                    // Skip exterior pixel
+                    continue;
+                // Interpolate pixel camera depth
+                double depth = wa * a.Z + wb * b.Z + wc * c.Z;
+                // Locate depth buffer entry
+                int index = y * width + x;
+                // Keep nearest surface depth
+                if (depth < zBuffer[index])
+                    // Store nearer depth value
+                    zBuffer[index] = depth;
+            // End depth pixel loop
+            }
+        // End depth row loop
+        }
+    // End RasterizeDepthOnly block
+    }
+
+    /// <summary>Draws one triangle's edges as solid visible or dashed hidden lines.</summary>
+    // Rasterize wireframe triangle edges
+    private static void RasterizeWireframeTriangle(uint[] pixels, double[] zBuffer, int width, int height, Triangle tri, Vec3 cameraPosition, CameraBasis basis, ref int solidPixels, ref int hiddenPixels)
+    // Begin RasterizeWireframeTriangle block
+    {
+        // Project first triangle vertex
+        if (!TryProjectCamera(tri.A, cameraPosition, basis, width, height, out RasterVertex a))
+            // Skip unprojectable triangle
+            return;
+        // Project second triangle vertex
+        if (!TryProjectCamera(tri.B, cameraPosition, basis, width, height, out RasterVertex b))
+            // Skip unprojectable triangle
+            return;
+        // Project third triangle vertex
+        if (!TryProjectCamera(tri.C, cameraPosition, basis, width, height, out RasterVertex c))
+            // Skip unprojectable triangle
+            return;
+        // Measure signed triangle area
+        double area = Edge(a.X, a.Y, b.X, b.Y, c.X, c.Y);
+        // Skip degenerate triangles
+        if (Math.Abs(area) < 1e-9)
+            // Ignore zero-area triangle
+            return;
+        // Precompute first edge reciprocal length
+        double dxA = c.X - b.X;
+        // Precompute first edge vertical span
+        double dyA = c.Y - b.Y;
+        // Invert first edge length safely
+        double invBc = 1.0 / Math.Max(1e-9, Math.Sqrt(dxA * dxA + dyA * dyA));
+        // Precompute second edge horizontal span
+        double dxB = a.X - c.X;
+        // Precompute second edge vertical span
+        double dyB = a.Y - c.Y;
+        // Invert second edge length safely
+        double invCa = 1.0 / Math.Max(1e-9, Math.Sqrt(dxB * dxB + dyB * dyB));
+        // Precompute third edge horizontal span
+        double dxC = b.X - a.X;
+        // Precompute third edge vertical span
+        double dyC = b.Y - a.Y;
+        // Invert third edge length safely
+        double invAb = 1.0 / Math.Max(1e-9, Math.Sqrt(dxC * dxC + dyC * dyC));
+        // Use absolute area for distances
+        double absArea = Math.Abs(area);
+        // Clamp horizontal pixel minimum
+        int minX = Math.Clamp((int)Math.Floor(Math.Min(a.X, Math.Min(b.X, c.X))), 0, width - 1);
+        // Clamp horizontal pixel maximum
+        int maxX = Math.Clamp((int)Math.Ceiling(Math.Max(a.X, Math.Max(b.X, c.X))), 0, width - 1);
+        // Clamp vertical pixel minimum
+        int minY = Math.Clamp((int)Math.Floor(Math.Min(a.Y, Math.Min(b.Y, c.Y))), 0, height - 1);
+        // Clamp vertical pixel maximum
+        int maxY = Math.Clamp((int)Math.Ceiling(Math.Max(a.Y, Math.Max(b.Y, c.Y))), 0, height - 1);
+        // Scan covered pixel rows
+        for (int y = minY; y <= maxY; y++)
+        // Begin wireframe row loop
+        {
+            // Scan covered pixel columns
+            for (int x = minX; x <= maxX; x++)
+            // Begin wireframe pixel loop
+            {
+                // Compute first barycentric weight
+                double wa = Edge(b.X, b.Y, c.X, c.Y, x + 0.5, y + 0.5) / area;
+                // Compute second barycentric weight
+                double wb = Edge(c.X, c.Y, a.X, a.Y, x + 0.5, y + 0.5) / area;
+                // Compute third barycentric weight
+                double wc = 1.0 - wa - wb;
+                // Reject pixels outside triangle
+                if (wa < 0.0 || wb < 0.0 || wc < 0.0)
+                    // Skip exterior pixel
+                    continue;
+                // Measure distance to first edge
+                double distA = Math.Abs(wa) * absArea * invBc;
+                // Measure distance to second edge
+                double distB = Math.Abs(wb) * absArea * invCa;
+                // Measure distance to third edge
+                double distC = Math.Abs(wc) * absArea * invAb;
+                // Find nearest edge distance
+                double edgeDistance = Math.Min(distA, Math.Min(distB, distC));
+                // Skip pixels away from edges
+                if (edgeDistance > 0.75)
+                    // Ignore interior pixel
+                    continue;
+                // Interpolate pixel camera depth
+                double depth = wa * a.Z + wb * b.Z + wc * c.Z;
+                // Locate pixel buffer entry
+                int index = y * width + x;
+                // Classify visible lines by depth
+                if (depth <= zBuffer[index] + 1e-6 * (1.0 + zBuffer[index]))
+                // Begin visible line branch
+                {
+                    // Draw solid visible line
+                    pixels[index] = WireframeSolidColor;
+                    // Count solid line pixel
+                    solidPixels++;
+                    // Record line depth for crossings
+                    zBuffer[index] = Math.Min(zBuffer[index], depth);
+                // End visible line branch
+                }
+                // Classify hidden lines by dash
+                else if (((x + 2 * y) & 7) < 4)
+                // Begin hidden dash branch
+                {
+                    // Draw dashed hidden line
+                    pixels[index] = WireframeHiddenColor;
+                    // Count hidden line pixel
+                    hiddenPixels++;
+                // End hidden dash branch
+                }
+            // End wireframe pixel loop
+            }
+        // End wireframe row loop
+        }
+    // End RasterizeWireframeTriangle block
     }
 // End renderer class
 }

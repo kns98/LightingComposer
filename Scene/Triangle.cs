@@ -97,6 +97,7 @@ public sealed class Triangle
             ray.Origin + ray.Direction * t,
             shadingNormal,
             Material,
+            this,
             GroupId,
             uv.U,
             uv.V,

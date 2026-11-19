@@ -140,6 +140,12 @@ public static class VulkanRasterRenderer
         public required Pipeline OpaquePipeline { get; init; }
         // Hold transparent pipeline
         public required Pipeline TransparentPipeline { get; init; }
+        // Hold wireframe depth prepass pipeline
+        public required Pipeline DepthPrepassPipeline { get; init; }
+        // Hold solid wireframe pipeline
+        public required Pipeline WireframePipeline { get; init; }
+        // Hold dashed wireframe pipeline
+        public required Pipeline WireframeDashedPipeline { get; init; }
 
         /// <summary>Disposes the shared raster pipelines, shaders, and resource layout.</summary>
         // Release shared raster resources
@@ -150,6 +156,12 @@ public static class VulkanRasterRenderer
             try { OpaquePipeline.Dispose(); } catch { }
             // Dispose transparent pipeline safely
             try { TransparentPipeline.Dispose(); } catch { }
+            // Dispose prepass pipeline safely
+            try { DepthPrepassPipeline.Dispose(); } catch { }
+            // Dispose wireframe pipeline safely
+            try { WireframePipeline.Dispose(); } catch { }
+            // Dispose dashed pipeline safely
+            try { WireframeDashedPipeline.Dispose(); } catch { }
             // Check shaders before disposal
             if (Shaders != null)
             // Begin shader null check
@@ -1150,7 +1162,9 @@ public static class VulkanRasterRenderer
         // Cancellation token for render
         CancellationToken cancellationToken,
         // Output render details
-        out string details)
+        out string details,
+        // Render wireframe view flag
+        bool wireframe = false)
     // Begin Render method
     {
         // Serialize the Veldrid/Vulkan raster path against disposal and resize/backend
@@ -1167,7 +1181,7 @@ public static class VulkanRasterRenderer
                 // Forward scene and preview arguments
                 scene, cameraPosition, basis, width, height, preview, meshEditPreview,
                 // Forward cancellation and details
-                cancellationToken, out details);
+                cancellationToken, out details, wireframe);
         // End RenderSync lock
         }
     // End Render method
@@ -1193,7 +1207,9 @@ public static class VulkanRasterRenderer
         // Cancellation token for render
         CancellationToken cancellationToken,
         // Output render details
-        out string details)
+        out string details,
+        // Render wireframe view flag
+        bool wireframe = false)
     // Begin RenderLocked method
     {
         // Reject null scene argument
@@ -1282,8 +1298,88 @@ public static class VulkanRasterRenderer
         commandList.ClearColorTarget(0, new RgbaFloat(0.035f, 0.040f, 0.050f, 1.0f));
         // Clear depth buffer
         commandList.ClearDepthStencil(1.0f);
+        // Branch to wireframe passes
+        if (wireframe)
+        // Begin wireframe pass branch
+        {
+            // Fill depth with filled prepass
+            if (prepared.OpaqueVertexCount > 0)
+            // Begin prepass opaque branch
+            {
+                // Bind depth prepass pipeline
+                commandList.SetPipeline(resources.DepthPrepassPipeline);
+                // Bind opaque vertex buffer
+                commandList.SetVertexBuffer(0, prepared.OpaqueVertexBuffer);
+                // Draw opaque prepass vertices
+                DrawVertexRanges(commandList, (uint)prepared.OpaqueVertexCount, previewRanges?.Opaque, prepared.IdentityResourceSet, prepared.PreviewResourceSet);
+            // End prepass opaque branch
+            }
+            // Fill depth with transparent prepass
+            if (prepared.TransparentVertexCount > 0)
+            // Begin prepass transparent branch
+            {
+                // Bind depth prepass pipeline
+                commandList.SetPipeline(resources.DepthPrepassPipeline);
+                // Bind transparent vertex buffer
+                commandList.SetVertexBuffer(0, prepared.TransparentVertexBuffer);
+                // Draw transparent prepass vertices
+                DrawVertexRanges(commandList, (uint)prepared.TransparentVertexCount, previewRanges?.Transparent, prepared.IdentityResourceSet, prepared.PreviewResourceSet);
+            // End prepass transparent branch
+            }
+            // Restore background over prepass
+            commandList.ClearColorTarget(0, new RgbaFloat(0.035f, 0.040f, 0.050f, 1.0f));
+            // Draw solid lines over depth
+            if (prepared.OpaqueVertexCount > 0)
+            // Begin solid opaque branch
+            {
+                // Bind solid wireframe pipeline
+                commandList.SetPipeline(resources.WireframePipeline);
+                // Bind opaque vertex buffer
+                commandList.SetVertexBuffer(0, prepared.OpaqueVertexBuffer);
+                // Draw opaque wireframe vertices
+                DrawVertexRanges(commandList, (uint)prepared.OpaqueVertexCount, previewRanges?.Opaque, prepared.IdentityResourceSet, prepared.PreviewResourceSet);
+            // End solid opaque branch
+            }
+            // Draw transparent solid lines
+            if (prepared.TransparentVertexCount > 0)
+            // Begin solid transparent branch
+            {
+                // Bind solid wireframe pipeline
+                commandList.SetPipeline(resources.WireframePipeline);
+                // Bind transparent vertex buffer
+                commandList.SetVertexBuffer(0, prepared.TransparentVertexBuffer);
+                // Draw transparent wireframe vertices
+                DrawVertexRanges(commandList, (uint)prepared.TransparentVertexCount, previewRanges?.Transparent, prepared.IdentityResourceSet, prepared.PreviewResourceSet);
+            // End solid transparent branch
+            }
+            // Draw dashed lines behind depth
+            if (prepared.OpaqueVertexCount > 0)
+            // Begin dashed opaque branch
+            {
+                // Bind dashed wireframe pipeline
+                commandList.SetPipeline(resources.WireframeDashedPipeline);
+                // Bind opaque vertex buffer
+                commandList.SetVertexBuffer(0, prepared.OpaqueVertexBuffer);
+                // Draw opaque dashed vertices
+                DrawVertexRanges(commandList, (uint)prepared.OpaqueVertexCount, previewRanges?.Opaque, prepared.IdentityResourceSet, prepared.PreviewResourceSet);
+            // End dashed opaque branch
+            }
+            // Draw transparent dashed lines
+            if (prepared.TransparentVertexCount > 0)
+            // Begin dashed transparent branch
+            {
+                // Bind dashed wireframe pipeline
+                commandList.SetPipeline(resources.WireframeDashedPipeline);
+                // Bind transparent vertex buffer
+                commandList.SetVertexBuffer(0, prepared.TransparentVertexBuffer);
+                // Draw transparent dashed vertices
+                DrawVertexRanges(commandList, (uint)prepared.TransparentVertexCount, previewRanges?.Transparent, prepared.IdentityResourceSet, prepared.PreviewResourceSet);
+            // End dashed transparent branch
+            }
+        // End wireframe pass branch
+        }
         // Skip empty opaque pass
-        if (prepared.OpaqueVertexCount > 0)
+        if (!wireframe && prepared.OpaqueVertexCount > 0)
         // Begin opaque pass branch
         {
             // Bind opaque PBR pipeline
@@ -1305,7 +1401,7 @@ public static class VulkanRasterRenderer
         // End opaque pass branch
         }
         // Skip empty transparent pass
-        if (prepared.TransparentVertexCount > 0)
+        if (!wireframe && prepared.TransparentVertexCount > 0)
         // Begin transparent pass branch
         {
             // Bind transparent PBR pipeline
@@ -1382,7 +1478,7 @@ public static class VulkanRasterRenderer
             // Append mesh edit selection id
             previewMode += $", live-mesh-edit={meshEditPreview!.SelectionId}";
         // Build frame timing summary
-        details = $"VULKAN RASTER PBR CACHED - {width}x{height}, revision={prepared.CacheStamp.Revision}, {triangleMode}, lights={prepared.LightCount}, {textureMode}, cache={(prepareMs == 0 ? "hot" : "ready")}{previewMode}, device={deviceMs}ms, targets={targetMs}ms, prepare={prepareMs}ms, mesh-edit-upload={meshEditUploadMs}ms, uniform={uniformMs}ms, record={recordMs}ms, gpu+wait={gpuWaitMs}ms, readback={readbackMs}ms, total={total.ElapsedMilliseconds}ms";
+        details = $"VULKAN RASTER PBR CACHED - {width}x{height}, revision={prepared.CacheStamp.Revision}, {triangleMode}, lights={prepared.LightCount}, {textureMode}, cache={(prepareMs == 0 ? "hot" : "ready")}{previewMode}, device={deviceMs}ms, targets={targetMs}ms, prepare={prepareMs}ms, mesh-edit-upload={meshEditUploadMs}ms, uniform={uniformMs}ms, record={recordMs}ms, gpu+wait={gpuWaitMs}ms, readback={readbackMs}ms, total={total.ElapsedMilliseconds}ms" + (wireframe ? ", wireframe" : string.Empty);
         // Log frame stage summary
         Stage(details);
         // Return rendered image
@@ -2602,8 +2698,16 @@ public static class VulkanRasterRenderer
             try
             // Begin pipeline creation block
             {
-                // Compile raster shader stages
-                Shader[] shaders = CreateRasterShaders(factory);
+                // Compile shared vertex shader
+                Shader vertexShader = CreateRasterVertexShader(factory);
+                // Compile shaded fragment shader
+                Shader fragmentShader = CreateRasterFragmentShader(factory, null);
+                // Compile wireframe fragment shader
+                Shader wireframeFragmentShader = CreateRasterFragmentShader(factory, "WIREFRAME_SOLID");
+                // Compile dashed fragment shader
+                Shader dashedFragmentShader = CreateRasterFragmentShader(factory, "WIREFRAME_DASHED");
+                // Collect shaders for disposal
+                Shader[] shaders = [vertexShader, fragmentShader, wireframeFragmentShader, dashedFragmentShader];
                 // Begin shader use guard
                 try
                 // Begin shader use block
@@ -2633,7 +2737,15 @@ public static class VulkanRasterRenderer
                         scissorTestEnabled: false);
 
                     // Combine layout with shaders
-                    ShaderSetDescription shaderSet = new(new[] { vertexLayout }, shaders);
+                    ShaderSetDescription shaderSet = new(new[] { vertexLayout }, [vertexShader, fragmentShader]);
+                    // Combine layout with wireframe shaders
+                    ShaderSetDescription wireframeShaderSet = new(new[] { vertexLayout }, [vertexShader, wireframeFragmentShader]);
+                    // Combine layout with dashed shaders
+                    ShaderSetDescription dashedShaderSet = new(new[] { vertexLayout }, [vertexShader, dashedFragmentShader]);
+                    // Clone rasterizer state for wireframe
+                    RasterizerStateDescription wireframeRasterizerState = rasterizerState;
+                    // Switch clone to wireframe fill
+                    wireframeRasterizerState.FillMode = PolygonFillMode.Wireframe;
 
                     // Declare opaque pipeline description
                     GraphicsPipelineDescription opaquePipelineDescription = new()
@@ -2689,6 +2801,87 @@ public static class VulkanRasterRenderer
                     // End transparent pipeline initializer
                     };
 
+                    // Declare depth prepass pipeline description
+                    GraphicsPipelineDescription depthPrepassDescription = new()
+                    // Begin prepass pipeline initializer block
+                    {
+                        // Disable blending for prepass pass
+                        BlendState = BlendStateDescription.SingleDisabled,
+                        // Begin prepass depth state setup
+                        DepthStencilState = new DepthStencilStateDescription(
+                            // Enable prepass depth testing
+                            depthTestEnabled: true,
+                            // Enable prepass depth writes
+                            depthWriteEnabled: true,
+                            // Use less depth comparison
+                            comparisonKind: ComparisonKind.Less),
+                        // Assign shared rasterizer state
+                        RasterizerState = rasterizerState,
+                        // Render triangles as list
+                        PrimitiveTopology = PrimitiveTopology.TriangleList,
+                        // Bind shared resource layout
+                        ResourceLayouts = new[] { layout },
+                        // Assign wireframe shader set
+                        ShaderSet = wireframeShaderSet,
+                        // Assign pipeline output description
+                        Outputs = outputDescription
+                    // End prepass pipeline initializer
+                    };
+
+                    // Declare wireframe pipeline description
+                    GraphicsPipelineDescription wireframePipelineDescription = new()
+                    // Begin wireframe pipeline initializer block
+                    {
+                        // Disable blending for wireframe pass
+                        BlendState = BlendStateDescription.SingleDisabled,
+                        // Begin wireframe depth state setup
+                        DepthStencilState = new DepthStencilStateDescription(
+                            // Enable wireframe depth testing
+                            depthTestEnabled: true,
+                            // Enable wireframe depth writes
+                            depthWriteEnabled: true,
+                            // Use less-equal depth comparison
+                            comparisonKind: ComparisonKind.LessEqual),
+                        // Assign wireframe rasterizer state
+                        RasterizerState = wireframeRasterizerState,
+                        // Render triangles as list
+                        PrimitiveTopology = PrimitiveTopology.TriangleList,
+                        // Bind shared resource layout
+                        ResourceLayouts = new[] { layout },
+                        // Assign wireframe shader set
+                        ShaderSet = wireframeShaderSet,
+                        // Assign pipeline output description
+                        Outputs = outputDescription
+                    // End wireframe pipeline initializer
+                    };
+
+                    // Declare dashed pipeline description
+                    GraphicsPipelineDescription dashedPipelineDescription = new()
+                    // Begin dashed pipeline initializer block
+                    {
+                        // Disable blending for dashed pass
+                        BlendState = BlendStateDescription.SingleDisabled,
+                        // Begin dashed depth state setup
+                        DepthStencilState = new DepthStencilStateDescription(
+                            // Enable dashed depth testing
+                            depthTestEnabled: true,
+                            // Disable dashed depth writes
+                            depthWriteEnabled: false,
+                            // Use greater depth comparison
+                            comparisonKind: ComparisonKind.Greater),
+                        // Assign wireframe rasterizer state
+                        RasterizerState = wireframeRasterizerState,
+                        // Render triangles as list
+                        PrimitiveTopology = PrimitiveTopology.TriangleList,
+                        // Bind shared resource layout
+                        ResourceLayouts = new[] { layout },
+                        // Assign dashed shader set
+                        ShaderSet = dashedShaderSet,
+                        // Assign pipeline output description
+                        Outputs = outputDescription
+                    // End dashed pipeline initializer
+                    };
+
                     // Create opaque graphics pipeline
                     Pipeline opaquePipeline = factory.CreateGraphicsPipeline(opaquePipelineDescription);
                     // Declare transparent pipeline variable
@@ -2712,6 +2905,37 @@ public static class VulkanRasterRenderer
                     // End pipeline cleanup handler
                     }
 
+                    // Declare wireframe pipeline variables
+                    Pipeline depthPrepassPipeline;
+                    // Declare solid wireframe pipeline
+                    Pipeline wireframePipeline;
+                    // Declare dashed wireframe pipeline
+                    Pipeline wireframeDashedPipeline;
+                    // Guard wireframe pipeline creation
+                    try
+                    // Begin wireframe creation guard
+                    {
+                        // Create depth prepass pipeline
+                        depthPrepassPipeline = factory.CreateGraphicsPipeline(depthPrepassDescription);
+                        // Create solid wireframe pipeline
+                        wireframePipeline = factory.CreateGraphicsPipeline(wireframePipelineDescription);
+                        // Create dashed wireframe pipeline
+                        wireframeDashedPipeline = factory.CreateGraphicsPipeline(dashedPipelineDescription);
+                    // End wireframe creation guard
+                    }
+                    // Handle wireframe creation failure
+                    catch
+                    // Begin wireframe cleanup handler
+                    {
+                        // Dispose opaque pipeline on failure
+                        try { opaquePipeline.Dispose(); } catch { }
+                        // Dispose transparent pipeline on failure
+                        try { transparentPipeline.Dispose(); } catch { }
+                        // Rethrow pipeline creation error
+                        throw;
+                    // End wireframe cleanup handler
+                    }
+
                     // Assign new shared raster resources
                     sharedRasterResources = new SharedRasterResources
                     // Begin shared resources block
@@ -2723,7 +2947,13 @@ public static class VulkanRasterRenderer
                         // Store opaque pipeline
                         OpaquePipeline = opaquePipeline,
                         // Store transparent pipeline
-                        TransparentPipeline = transparentPipeline
+                        TransparentPipeline = transparentPipeline,
+                        // Store depth prepass pipeline
+                        DepthPrepassPipeline = depthPrepassPipeline,
+                        // Store solid wireframe pipeline
+                        WireframePipeline = wireframePipeline,
+                        // Store dashed wireframe pipeline
+                        WireframeDashedPipeline = wireframeDashedPipeline
                     // End shared resources initializer
                     };
                     // Log pipeline creation stage
@@ -2765,10 +2995,10 @@ public static class VulkanRasterRenderer
     // End GetOrCreateSharedRasterResources method
     }
 
-    /// <summary>Creates the raster vertex and fragment shaders from the embedded sources.</summary>
-    // Declare raster shader factory method
-    private static Shader[] CreateRasterShaders(ResourceFactory factory)
-    // Begin CreateRasterShaders method
+    /// <summary>Creates the shared raster vertex shader from the embedded source.</summary>
+    // Declare raster vertex shader factory
+    private static Shader CreateRasterVertexShader(ResourceFactory factory)
+    // Begin CreateRasterVertexShader method
     {
         // Begin vertex shader description
         ShaderDescription vertex = new(
@@ -2778,50 +3008,115 @@ public static class VulkanRasterRenderer
             Encoding.UTF8.GetBytes(VertexShaderSource),
             // Set vertex entry point
             "main");
+        // Guard vertex shader creation
+        try
+        // Begin vertex creation guard
+        {
+            // Log vertex compile stage
+            Stage("Compile/create Vulkan raster vertex shader");
+            // Create vertex shader from SPIRV
+            return factory.CreateFromSpirv(vertex);
+        // End vertex creation guard
+        }
+        // Handle vertex compile failure
+        catch (Exception ex)
+        // Begin vertex failure handler
+        {
+            // Log vertex compile failure
+            Stage("Vulkan raster vertex shader compile/create failed");
+            // Log vertex exception details
+            Stage(ex.ToString());
+            // Throw vertex compilation failure
+            throw new InvalidOperationException("Vulkan raster vertex shader compilation failed. See " + StageLogPath + ".", ex);
+        // End vertex failure handler
+        }
+    // End CreateRasterVertexShader method
+    }
+
+    /// <summary>Creates a raster fragment shader variant, optionally with a compile define.</summary>
+    // Declare raster fragment shader factory
+    private static Shader CreateRasterFragmentShader(ResourceFactory factory, string? define)
+    // Begin CreateRasterFragmentShader method
+    {
+        // Inject compile define after version
+        string source = WithFragmentDefine(FragmentShaderSource, define);
         // Begin fragment shader description
         ShaderDescription fragment = new(
             // Select fragment shader stage
             ShaderStages.Fragment,
             // Encode fragment source as UTF8
-            Encoding.UTF8.GetBytes(FragmentShaderSource),
+            Encoding.UTF8.GetBytes(source),
             // Set fragment entry point
             "main");
-
-        // Guard shader creation
+        // Guard fragment shader creation
         try
-        // Begin shader creation guard
+        // Begin fragment creation guard
         {
-            // Log shader compile stage
-            Stage("Compile/create Vulkan raster vertex+fragment shaders");
-            // Create shaders from SPIRV
-            return factory.CreateFromSpirv(vertex, fragment);
-        // End shader creation guard
+            // Log fragment compile stage
+            Stage("Compile/create Vulkan raster fragment shader " + (define ?? "default"));
+            // Create fragment shader from SPIRV
+            return factory.CreateFromSpirv(fragment);
+        // End fragment creation guard
         }
-        // Handle shader compile failure
+        // Handle fragment compile failure
         catch (Exception ex)
-        // Begin shader failure handler
+        // Begin fragment failure handler
         {
-            // Log shader compile failure
-            Stage("Vulkan raster shader compile/create failed");
-            // Log shader exception details
+            // Log fragment compile failure
+            Stage("Vulkan raster fragment shader compile/create failed");
+            // Log fragment exception details
             Stage(ex.ToString());
-            // Guard debug shader dump
+            // Guard debug fragment dump
             try
-            // Begin shader dump guard
+            // Begin fragment dump guard
             {
-                // Dump failed vertex shader source
-                File.WriteAllText(Path.Combine(Path.GetTempPath(), "LightingShowcase-vulkan-raster-failed.vert"), VertexShaderSource);
                 // Dump failed fragment shader source
-                File.WriteAllText(Path.Combine(Path.GetTempPath(), "LightingShowcase-vulkan-raster-failed.frag"), FragmentShaderSource);
-            // End shader dump guard
+                File.WriteAllText(Path.Combine(Path.GetTempPath(), "LightingShowcase-vulkan-raster-failed.frag"), source);
+            // End fragment dump guard
             }
-            // Ignore shader dump errors
+            // Ignore fragment dump errors
             catch { }
-            // Throw shader compilation failure
-            throw new InvalidOperationException("Vulkan raster shader compilation failed. See " + StageLogPath + " and %TEMP%\\LightingShowcase-vulkan-raster-failed.vert/.frag.", ex);
-        // End shader failure handler
+            // Throw fragment compilation failure
+            throw new InvalidOperationException("Vulkan raster fragment shader compilation failed. See " + StageLogPath + " and %TEMP%\\LightingShowcase-vulkan-raster-failed.frag.", ex);
+        // End fragment failure handler
         }
-    // End CreateRasterShaders method
+    // End CreateRasterFragmentShader method
+    }
+
+    /// <summary>Inserts a compile define after the GLSL version line.</summary>
+    // Declare shader define injector
+    private static string WithFragmentDefine(string source, string? define)
+    // Begin WithFragmentDefine method
+    {
+        // Return source unchanged without define
+        if (string.IsNullOrEmpty(define))
+            // Pass source through unchanged
+            return source;
+        // Scan source lines for version directive
+        int lineStart = 0;
+        // Walk lines until version found
+        while (lineStart < source.Length)
+        // Begin version search loop
+        {
+            // Find end of current line
+            int newline = source.IndexOf('\n', lineStart);
+            // Stop scanning at missing newline
+            if (newline < 0)
+                // Abort search at end of source
+                break;
+            // Read current source line
+            string line = source.Substring(lineStart, newline - lineStart);
+            // Insert after version directive
+            if (line.TrimStart().StartsWith("#version", StringComparison.Ordinal))
+                // Inject define after version line
+                return source.Insert(newline + 1, "#define " + define + " 1\n");
+            // Advance past current line
+            lineStart = newline + 1;
+        // End version search loop
+        }
+        // Fail loudly when version missing
+        throw new InvalidOperationException("Cannot inject '" + define + "': no #version line in fragment shader source.");
+    // End WithFragmentDefine method
     }
 
     /// <summary>Counts opaque and transparent triangles and assigns material ids with texture placements.</summary>
@@ -4425,6 +4720,22 @@ vec3 diffuseEnvironment(vec3 normal)
 void main()
 // Begin main function
 {
+    // Mark solid wireframe override block
+#ifdef WIREFRAME_SOLID
+    // Output flat wireframe line color
+    outColor = vec4(0.92, 0.96, 1.0, 1.0);
+    // Exit after wireframe output
+    return;
+#endif
+    // Mark dashed wireframe override block
+#ifdef WIREFRAME_DASHED
+    // Discard dashed gap fragments
+    if (mod(gl_FragCoord.x + gl_FragCoord.y * 2.0, 8.0) >= 4.0) discard;
+    // Output flat hidden line color
+    outColor = vec4(0.42, 0.52, 0.66, 1.0);
+    // Exit after dashed output
+    return;
+#endif
     // Read debug visualization mode selector
     int debugMode = int(Camera.Counts.z + 0.5);
     // Fetch fragment material record

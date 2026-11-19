@@ -1145,7 +1145,8 @@ internal sealed partial class ComposerSceneSession : IDisposable
                     height,
                     cancellationToken,
                     out details,
-                    interactiveFast: interactive),
+                    interactiveFast: interactive,
+                    wireframe: renderOptions?.Wireframe == true),
 
                 ComposerRendererKind.VulkanRaster => VulkanRasterRenderer.Render(
                     scene,
@@ -1156,7 +1157,8 @@ internal sealed partial class ComposerSceneSession : IDisposable
                     transformPreview,
                     meshEditPreview,
                     cancellationToken,
-                    out details),
+                    out details,
+                    wireframe: renderOptions?.Wireframe == true),
 
                 ComposerRendererKind.VulkanCompute => RenderVulkanCompute(
                     scene,
@@ -1259,6 +1261,7 @@ private static RenderImage RenderVulkanCompute(
         AmbientStrength = options.AmbientStrength,
         BackgroundTop = options.BackgroundTop,
         BackgroundBottom = options.BackgroundBottom,
+        Mode = options.Wireframe ? RenderMode.Wireframe : RenderMode.Lit,
         UseShadows = options.UseShadows
     };
 

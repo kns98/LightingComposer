@@ -955,8 +955,8 @@ public static class VulkanSceneComputeRenderer
                 (float)Math.Clamp(settings.AmbientStrength, 0.0, 100.0),
                 // Encode shadow toggle flag
                 settings.UseShadows ? 1.0f : 0.0f,
-                // Reserve third lighting slot
-                0.0f,
+                // Encode wireframe view flag
+                settings.Mode == RenderMode.Wireframe ? 1.0f : 0.0f,
                 // Reserve fourth lighting slot
                 0.0f);
         // End CameraConstants constructor

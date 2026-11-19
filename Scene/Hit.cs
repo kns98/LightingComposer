@@ -23,6 +23,7 @@ public sealed class Hit
     public double TextureV { get; }
     public Vec3 Tangent { get; }
     public Vec3 Bitangent { get; }
+    public Triangle SourceTriangle { get; }
 
     /// <summary>Initializes a new nearest-hit record.</summary>
     public Hit(
@@ -30,6 +31,7 @@ public sealed class Hit
         Vec3 point,
         Vec3 normal,
         Material material,
+        Triangle sourceTriangle,
         int groupId = -1,
         double textureU = 0.0,
         double textureV = 0.0,
@@ -40,6 +42,7 @@ public sealed class Hit
         Point = point;
         Normal = normal;
         Material = material;
+        SourceTriangle = sourceTriangle;
         GroupId = groupId;
         TextureU = textureU;
         TextureV = textureV;

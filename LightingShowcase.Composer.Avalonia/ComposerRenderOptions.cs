@@ -25,7 +25,8 @@ internal sealed record ComposerRenderOptions(
     double AmbientStrength,
     bool UseShadows,
     Vec3 BackgroundTop,
-    Vec3 BackgroundBottom)
+    Vec3 BackgroundBottom,
+    bool Wireframe)
 {
     public static readonly Vec3 DefaultBackgroundTop = new(0.055, 0.060, 0.072);
     public static readonly Vec3 DefaultBackgroundBottom = new(0.010, 0.012, 0.016);
@@ -43,7 +44,8 @@ internal sealed record ComposerRenderOptions(
             AmbientStrength: 1.0,
             UseShadows: true,
             BackgroundTop: DefaultBackgroundTop,
-            BackgroundBottom: DefaultBackgroundBottom),
+            BackgroundBottom: DefaultBackgroundBottom,
+            Wireframe: false),
 
         ComposerRendererKind.VulkanRaster => new(
             Width: 1280,
@@ -55,7 +57,8 @@ internal sealed record ComposerRenderOptions(
             AmbientStrength: 1.0,
             UseShadows: true,
             BackgroundTop: DefaultBackgroundTop,
-            BackgroundBottom: DefaultBackgroundBottom),
+            BackgroundBottom: DefaultBackgroundBottom,
+            Wireframe: false),
 
         ComposerRendererKind.VulkanCompute => new(
             Width: 960,
@@ -67,7 +70,8 @@ internal sealed record ComposerRenderOptions(
             AmbientStrength: 1.0,
             UseShadows: true,
             BackgroundTop: DefaultBackgroundTop,
-            BackgroundBottom: DefaultBackgroundBottom),
+            BackgroundBottom: DefaultBackgroundBottom,
+            Wireframe: false),
 
         ComposerRendererKind.Cpu => new(
             Width: 640,
@@ -79,7 +83,8 @@ internal sealed record ComposerRenderOptions(
             AmbientStrength: 1.0,
             UseShadows: true,
             BackgroundTop: DefaultBackgroundTop,
-            BackgroundBottom: DefaultBackgroundBottom),
+            BackgroundBottom: DefaultBackgroundBottom,
+            Wireframe: false),
 
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Unknown renderer.")
     };
@@ -161,6 +166,7 @@ internal sealed record ComposerRenderOptions(
         if (SupportsExposure(kind)) parts.Add($"exposure={Exposure:0.###}");
         if (SupportsAmbient(kind)) parts.Add($"ambient={AmbientStrength:0.###}");
         if (SupportsShadows(kind)) parts.Add($"shadows={(UseShadows ? "on" : "off")}");
+        if (Wireframe) parts.Add("wireframe");
         return string.Join(", ", parts);
     }
 

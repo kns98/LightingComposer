@@ -30,6 +30,7 @@ internal sealed class RenderSettingsDialog : Window
     private readonly TextBox exposureBox;
     private readonly TextBox ambientBox;
     private readonly CheckBox shadowsBox;
+    private readonly CheckBox wireframeBox;
     private readonly TextBox backgroundTopBox;
     private readonly TextBox backgroundBottomBox;
     private readonly TextBlock validationText;
@@ -67,6 +68,11 @@ internal sealed class RenderSettingsDialog : Window
             IsChecked = current.UseShadows,
             VerticalAlignment = VerticalAlignment.Center
         };
+        wireframeBox = new CheckBox
+        {
+            IsChecked = current.Wireframe,
+            VerticalAlignment = VerticalAlignment.Center
+        };
         backgroundTopBox = TextBoxFor(ColorText(current.BackgroundTop));
         backgroundBottomBox = TextBoxFor(ColorText(current.BackgroundBottom));
 
@@ -80,6 +86,7 @@ internal sealed class RenderSettingsDialog : Window
         exposureBox.IsEnabled = ComposerRenderOptions.SupportsExposure(kind);
         ambientBox.IsEnabled = ComposerRenderOptions.SupportsAmbient(kind);
         shadowsBox.IsEnabled = ComposerRenderOptions.SupportsShadows(kind);
+        wireframeBox.IsEnabled = true;
         backgroundTopBox.IsEnabled = ComposerRenderOptions.SupportsBackground(kind);
         backgroundBottomBox.IsEnabled = ComposerRenderOptions.SupportsBackground(kind);
 
@@ -143,6 +150,7 @@ internal sealed class RenderSettingsDialog : Window
         fields.Children.Add(Field("Exposure", exposureBox, Hint("0.01–100", ComposerRenderOptions.SupportsExposure(kind))));
         fields.Children.Add(Field("Ambient strength", ambientBox, Hint("0–100", ComposerRenderOptions.SupportsAmbient(kind))));
         fields.Children.Add(Field("Shadows", shadowsBox, Hint("Vulkan compute shadow toggle", ComposerRenderOptions.SupportsShadows(kind))));
+        fields.Children.Add(Field("Wireframe", wireframeBox, "Solid visible lines with dashed hidden lines"));
         fields.Children.Add(Field("Background top (R,G,B)", backgroundTopBox, Hint("linear RGB, non-negative", ComposerRenderOptions.SupportsBackground(kind))));
         fields.Children.Add(Field("Background bottom (R,G,B)", backgroundBottomBox, Hint("linear RGB, non-negative", ComposerRenderOptions.SupportsBackground(kind))));
 
@@ -267,7 +275,8 @@ internal sealed class RenderSettingsDialog : Window
             ambient,
             shadowsBox.IsChecked == true,
             backgroundTop,
-            backgroundBottom);
+            backgroundBottom,
+            wireframeBox.IsChecked == true);
         result.Validate();
 
         accepted = true;
@@ -286,6 +295,7 @@ internal sealed class RenderSettingsDialog : Window
         exposureBox.Text = options.Exposure.ToString("0.###", CultureInfo.InvariantCulture);
         ambientBox.Text = options.AmbientStrength.ToString("0.###", CultureInfo.InvariantCulture);
         shadowsBox.IsChecked = options.UseShadows;
+        wireframeBox.IsChecked = options.Wireframe;
         backgroundTopBox.Text = ColorText(options.BackgroundTop);
         backgroundBottomBox.Text = ColorText(options.BackgroundBottom);
 
