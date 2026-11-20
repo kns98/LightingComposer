@@ -32,7 +32,7 @@
 
 
   <ItemGroup>
-    <None Include="../Shaders/vulkan_scene_primary.comp"
+    <None Include="../Rendering/Compute/Shaders/vulkan_scene_primary.comp"
           Link="Shaders/vulkan_scene_primary.comp"
           CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
