@@ -4,19 +4,31 @@ Scene composer and renderer (Avalonia 12.1, .NET 10) for glTF/GLB, FBX, OBJ, 3DS
 
 ## Render gallery
 
-Official [KhronosGroup glTF sample models](https://github.com/KhronosGroup/glTF-Sample-Models) in `models/`, rendered headless at 640×480 with 4 samples, 2 bounces, and zoom 1.6 as 36-frame turntable GIFs at 12 fps.
+Official [KhronosGroup glTF sample models](https://github.com/KhronosGroup/glTF-Sample-Models) in `models/`, rendered headless at 640×480 with 4 samples, 2 bounces, and zoom 1.6 as 36-frame turntable GIFs at 12 fps. Stills from the other backends follow each turntable.
 
 ### Duck
 
 ![](screenshots/Duck.gif)
 
+| raster | vulkan | cpu |
+|---|---|---|
+| ![](screenshots/Duck-raster.png) | ![](screenshots/Duck-vulkan.png) | ![](screenshots/Duck-cpu.png) |
+
 ### CesiumMan
 
 ![](screenshots/CesiumMan.gif)
 
+| raster | vulkan | cpu |
+|---|---|---|
+| ![](screenshots/CesiumMan-raster.png) | ![](screenshots/CesiumMan-vulkan.png) | ![](screenshots/CesiumMan-cpu.png) |
+
 ### DamagedHelmet
 
 ![](screenshots/DamagedHelmet.gif)
+
+| raster | vulkan | cpu |
+|---|---|---|
+| ![](screenshots/DamagedHelmet-raster.png) | ![](screenshots/DamagedHelmet-vulkan.png) | ![](screenshots/DamagedHelmet-cpu.png) |
 
 Model licenses: Duck under SCEA Shared Source 1.0; DamagedHelmet under CC Attribution-NonCommercial; CesiumMan under CC-BY 4.0.
 
