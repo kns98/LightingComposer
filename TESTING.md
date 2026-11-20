@@ -130,3 +130,7 @@ For interactive validation, select an object, open **Material…**, apply a libr
 - two sibling objects can be grouped into one hierarchy parent and ungrouped back to the same child IDs.
 
 Interactive check: add a Cube, press `3`, click one side and confirm the whole quad highlights with no diagonal selection boundary. Right-click the face and test **Extrude Face…** with both `+0.25 m` (outward) and `-0.25 m` (inward), then test **Inset Face…** using meter values. For Inset, leave the default `0.02 m` recess and confirm the reveal walls/shadow make the inset obvious in the rendered view; then set recess to `0` to confirm the classic planar behavior still works. Return to Object mode (`4`), Ctrl-click two objects, then test **Group** / **Ungroup** and `Ctrl+G` / `Ctrl+Shift+G`.
+
+## Headless lighting CLI coverage
+
+`LightRequestTests` covers `--light` parsing: a fully specified light, defaults for a position-only spec, and rejection of missing positions, unknown kinds, malformed vectors, bad numbers, unknown keys, and bad booleans, plus conversion to a scene light. `HeadlessLightingTests` covers default-light placement: defaults move next to the camera, authored lights stay put, fresh defaults appear when no light is enabled, explicit lights replace the scene set, and `--zoom` with repeated `--light` options parses in order. `HeadlessRenderTests` renders a two-triangle OBJ twice through the software raster backend and verifies that different light positions produce different pixels.

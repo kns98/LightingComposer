@@ -64,6 +64,7 @@ public sealed class RenderJobRunner
             throw new InvalidDataException("The scene contains no renderable triangles.");
 
         CameraDefinition camera = BuildCamera(scene, request);
+        HeadlessLighting.Resolve(scene, camera, request);
         RenderSettings renderSettings = request.ToRenderSettings();
         int triangleCount = scene.Triangles.Count;
         int lightCount = scene.Lights.Count;
@@ -191,7 +192,7 @@ public sealed class RenderJobRunner
 
         Vec3 target = RenderRequest.ParseVector(request.CameraTarget, nameof(request.CameraTarget)) ?? center;
         Vec3 position = RenderRequest.ParseVector(request.CameraPosition, nameof(request.CameraPosition))
-            ?? target + new Vec3(radius * 0.75, radius * 0.45, -radius * 2.25);
+            ?? target + new Vec3(radius * 0.75, radius * 0.45, -radius * 2.25) / request.Zoom;
         Vec3 up = RenderRequest.ParseVector(request.CameraUp, nameof(request.CameraUp)) ?? new Vec3(0, 1, 0);
 
         return new CameraDefinition

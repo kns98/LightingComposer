@@ -15,7 +15,7 @@ public sealed class RenderRequest
     private static readonly string[] KnownOptions =
     [
         "input", "output", "width", "height", "samples", "bounces",
-        "camera-position", "camera-target", "camera-up", "fov",
+        "camera-position", "camera-target", "camera-up", "fov", "zoom", "light",
         "exposure", "ambient", "background-top", "background-bottom",
         "shadows", "no-shadows", "renderer", "help"
     ];
@@ -30,6 +30,8 @@ public sealed class RenderRequest
     public string? CameraTarget { get; set; }
     public string? CameraUp { get; set; }
     public double FieldOfViewDegrees { get; set; } = 72.0;
+    public double Zoom { get; set; } = 1.0;
+    public IReadOnlyList<LightRequest> Lights { get; set; } = Array.Empty<LightRequest>();
     public double Exposure { get; set; } = 1.0;
     public double AmbientStrength { get; set; } = 1.0;
     public string? BackgroundTop { get; set; }
@@ -61,6 +63,8 @@ public sealed class RenderRequest
             CameraTarget = values.Get("camera-target"),
             CameraUp = values.Get("camera-up"),
             FieldOfViewDegrees = values.GetDouble("fov", 72.0, 1.0, 179.0),
+            Zoom = values.GetDouble("zoom", 1.0, 0.2, 10.0),
+            Lights = values.GetAll("light").Select((spec, index) => LightRequest.Parse(spec, index)).ToList(),
             Exposure = values.GetDouble("exposure", 1.0, 0.01, 100.0),
             AmbientStrength = values.GetDouble("ambient", 1.0, 0.0, 100.0),
             BackgroundTop = values.Get("background-top"),
@@ -127,6 +131,7 @@ public sealed class RenderRequest
         if (Samples is < 1 or > 4096) throw new ArgumentOutOfRangeException(nameof(Samples), "Samples must be between 1 and 4096.");
         if (Bounces is < 0 or > 8) throw new ArgumentOutOfRangeException(nameof(Bounces), "Bounces must be between 0 and 8.");
         if (FieldOfViewDegrees is < 1.0 or > 179.0) throw new ArgumentOutOfRangeException(nameof(FieldOfViewDegrees), "Field of view must be between 1 and 179 degrees.");
+        if (Zoom is < 0.2 or > 10.0) throw new ArgumentOutOfRangeException(nameof(Zoom), "Zoom must be between 0.2 and 10.");
         if (Exposure is < 0.01 or > 100.0) throw new ArgumentOutOfRangeException(nameof(Exposure), "Exposure must be between 0.01 and 100.");
         if (AmbientStrength is < 0.0 or > 100.0) throw new ArgumentOutOfRangeException(nameof(AmbientStrength), "Ambient strength must be between 0 and 100.");
         if (Backend is RenderBackend.VulkanDiagnostic) throw new ArgumentOutOfRangeException(nameof(Backend), "Vulkan diagnostic is not one of the four command-line renderers.");

@@ -16,12 +16,14 @@ internal sealed class CommandLineArguments
     };
 
     private readonly Dictionary<string, string> _values;
+    private readonly Dictionary<string, List<string>> _allValues;
     private readonly HashSet<string> _switches;
 
     /// <summary>Creates command-line arguments from the given parsed values and switches.</summary>
-    private CommandLineArguments(Dictionary<string, string> values, HashSet<string> switches)
+    private CommandLineArguments(Dictionary<string, string> values, Dictionary<string, List<string>> allValues, HashSet<string> switches)
     {
         _values = values;
+        _allValues = allValues;
         _switches = switches;
     }
 
@@ -32,6 +34,7 @@ internal sealed class CommandLineArguments
     public static CommandLineArguments Parse(string[] args)
     {
         Dictionary<string, string> values = new(StringComparer.OrdinalIgnoreCase);
+        Dictionary<string, List<string>> allValues = new(StringComparer.OrdinalIgnoreCase);
         HashSet<string> switches = new(StringComparer.OrdinalIgnoreCase);
         List<string> positionals = [];
 
@@ -55,14 +58,14 @@ internal sealed class CommandLineArguments
                 string value = token[(equals + 1)..];
                 if (string.IsNullOrWhiteSpace(key))
                     throw new ArgumentException("An option name cannot be empty.");
-                values[key] = value;
+                SetValue(values, allValues, key, value);
                 switches.Remove(key);
                 continue;
             }
 
             if (!FlagOptions.Contains(token) && i + 1 < args.Length && !args[i + 1].StartsWith("--", StringComparison.Ordinal))
             {
-                values[token] = args[++i];
+                SetValue(values, allValues, token, args[++i]);
                 switches.Remove(token);
             }
             else
@@ -72,11 +75,26 @@ internal sealed class CommandLineArguments
             }
         }
 
-        return new CommandLineArguments(values, switches) { Positionals = positionals };
+        return new CommandLineArguments(values, allValues, switches) { Positionals = positionals };
+    }
+
+    private static void SetValue(Dictionary<string, string> values, Dictionary<string, List<string>> allValues, string key, string value)
+    {
+        values[key] = value;
+        if (!allValues.TryGetValue(key, out List<string>? all))
+        {
+            all = new List<string>();
+            allValues[key] = all;
+        }
+        all.Add(value);
     }
 
     /// <summary>Returns the value stored for the given key, or null when the key is absent.</summary>
     public string? Get(string key) => _values.TryGetValue(key, out string? value) ? value : null;
+
+    /// <summary>Returns every value supplied for a repeatable option, in order.</summary>
+    public IReadOnlyList<string> GetAll(string key) =>
+        _allValues.TryGetValue(key, out List<string>? all) ? all : Array.Empty<string>();
 
     /// <summary>Returns true when the given key was supplied as a value or a switch.</summary>
     public bool Has(string key) => _switches.Contains(key) || _values.ContainsKey(key);

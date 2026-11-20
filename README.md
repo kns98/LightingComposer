@@ -1,12 +1,12 @@
 # LightingShowcase Avalonia Composer
 
-A standalone, platform-neutral scene composer and renderer built with Avalonia 12.1 and .NET 10. Open or insert glTF/GLB, FBX, OBJ, 3DS, PLY, STL, and PropXML assets, add procedural primitives, edit materials and lights, and preview with software raster, Vulkan raster, Vulkan compute, or CPU ray rendering — in the UI or headless.
+Scene composer and renderer (Avalonia 12.1, .NET 10) for glTF/GLB, FBX, OBJ, 3DS, PLY, STL, and PropXML: procedural primitives, material and light editing, four render backends, UI or headless.
 
 ## Render gallery
 
-Official [KhronosGroup glTF sample models](https://github.com/KhronosGroup/glTF-Sample-Models) in `models/`, rendered headless at 640×480 with 4 samples and 2 bounces.
+Official [KhronosGroup glTF sample models](https://github.com/KhronosGroup/glTF-Sample-Models) in `models/`, rendered headless at 640×480 with 4 samples, 2 bounces, and zoom 1.6.
 
-### Duck — 4,212 triangles
+### Duck
 
 | raster | raster-vulkan |
 |---|---|
@@ -14,7 +14,7 @@ Official [KhronosGroup glTF sample models](https://github.com/KhronosGroup/glTF-
 | vulkan | cpu |
 | ![](screenshots/Duck-vulkan.png) | ![](screenshots/Duck-cpu.png) |
 
-### CesiumMan — 4,672 triangles, bind pose
+### CesiumMan
 
 | raster | raster-vulkan |
 |---|---|
@@ -22,7 +22,7 @@ Official [KhronosGroup glTF sample models](https://github.com/KhronosGroup/glTF-
 | vulkan | cpu |
 | ![](screenshots/CesiumMan-vulkan.png) | ![](screenshots/CesiumMan-cpu.png) |
 
-### DamagedHelmet — 15,452 triangles, full PBR
+### DamagedHelmet
 
 | raster | raster-vulkan |
 |---|---|
@@ -38,13 +38,21 @@ AMD Ryzen 3 7320U (8 threads), AMD Radeon integrated graphics, 8 GB RAM, Windows
 
 | Model | Triangles | raster | raster-vulkan | vulkan | cpu |
 |---|---|---|---|---|---|
-| Duck | 4,212 | 0.4 s | 1.7 s | 3.6 s | 1.0 s |
-| CesiumMan | 4,672 | 0.4 s | 1.7 s | 3.7 s | 0.7 s |
-| DamagedHelmet | 15,452 | 1.8 s | 4.1 s | 6.1 s | 2.3 s |
+| Duck | 4,212 | 0.6 s | 1.6 s | 3.6 s | 1.9 s |
+| CesiumMan | 4,672 | 0.5 s | 1.7 s | 3.7 s | 1.0 s |
+| DamagedHelmet | 15,452 | 1.9 s | 4.0 s | 6.2 s | 3.3 s |
+
+```bash
+./run.sh render ./models/DamagedHelmet.glb --renderer raster-vulkan \
+  --output ./screenshots/DamagedHelmet-raster-vulkan.png \
+  --width 640 --height 480 --samples 4 --bounces 2 --zoom 1.6
+```
+
+Headless default lights are seated relative to the camera so they always cover the visible area. Override them with repeatable `--light "kind=point;position=3,4,-2;color=1,1,1;intensity=5"` (kind, direction, range, cones, shadows, id, enabled also supported).
 
 ### glTF feature support
 
-The importer reads glTF 2.0 `.gltf`/`.glb`: triangle primitives (`POSITION`, `NORMAL`, `TEXCOORD_n`, `COLOR_0`), node hierarchy with matrix or TRS transforms, core PBR materials, `KHR_materials_transmission`, `_ior`, `_volume`, `_clearcoat`, `KHR_texture_transform`, and `KHR_lights_punctual`. Not supported: skins, animations, morph targets, cameras, Draco/meshopt, sheen/specular/anisotropy/iridescence.
+The importer reads glTF 2.0 `.gltf`/`.glb`: triangle primitives (`POSITION`, `NORMAL`, `TEXCOORD_n`, `COLOR_0`), node hierarchies, core PBR materials, `KHR_materials_transmission`, `_ior`, `_volume`, `_clearcoat`, `KHR_texture_transform`, and `KHR_lights_punctual`. Not supported: skins, animations, morph targets, cameras, Draco/meshopt, sheen/specular/anisotropy/iridescence.
 
 | Feature | raster | raster-vulkan | vulkan | cpu |
 |---|---|---|---|---|
@@ -57,7 +65,7 @@ The importer reads glTF 2.0 `.gltf`/`.glb`: triangle primitives (`POSITION`, `NO
 
 ## Build and run
 
-Requires the .NET 10 SDK and, for Vulkan modes, a Vulkan-capable driver. Open `LightingShowcase.Composer.sln` in Visual Studio 2022 17.8+, Rider, or build with `dotnet build`. Run with `./run.sh`, optionally passing a scene (`./run.sh compose ./scene.glb`). Headless: `./run.sh render ./scene.glb --renderer raster-vulkan --output ./out.png` (`render`, `export`, `formats`, `--help`).
+Requires the .NET 10 SDK and, for Vulkan modes, a Vulkan-capable driver. Open `LightingShowcase.Composer.sln` in VS 2022 17.8+/Rider, or `dotnet build`. Run `./run.sh`; headless verbs: `render`, `export`, `formats`, `--help`.
 
 ## Controls
 
