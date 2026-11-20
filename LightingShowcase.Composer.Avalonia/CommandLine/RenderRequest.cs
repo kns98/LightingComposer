@@ -16,6 +16,7 @@ public sealed class RenderRequest
     [
         "input", "output", "width", "height", "samples", "bounces",
         "camera-position", "camera-target", "camera-up", "fov", "zoom", "light",
+        "frames", "fps",
         "exposure", "ambient", "background-top", "background-bottom",
         "shadows", "no-shadows", "renderer", "help"
     ];
@@ -32,6 +33,8 @@ public sealed class RenderRequest
     public double FieldOfViewDegrees { get; set; } = 72.0;
     public double Zoom { get; set; } = 1.0;
     public IReadOnlyList<LightRequest> Lights { get; set; } = Array.Empty<LightRequest>();
+    public int Frames { get; set; } = 1;
+    public int Fps { get; set; } = 12;
     public double Exposure { get; set; } = 1.0;
     public double AmbientStrength { get; set; } = 1.0;
     public string? BackgroundTop { get; set; }
@@ -65,6 +68,8 @@ public sealed class RenderRequest
             FieldOfViewDegrees = values.GetDouble("fov", 72.0, 1.0, 179.0),
             Zoom = values.GetDouble("zoom", 1.0, 0.2, 10.0),
             Lights = values.GetAll("light").Select((spec, index) => LightRequest.Parse(spec, index)).ToList(),
+            Frames = values.GetInt("frames", 1, 1, 360),
+            Fps = values.GetInt("fps", 12, 1, 50),
             Exposure = values.GetDouble("exposure", 1.0, 0.01, 100.0),
             AmbientStrength = values.GetDouble("ambient", 1.0, 0.0, 100.0),
             BackgroundTop = values.Get("background-top"),
@@ -132,6 +137,12 @@ public sealed class RenderRequest
         if (Bounces is < 0 or > 8) throw new ArgumentOutOfRangeException(nameof(Bounces), "Bounces must be between 0 and 8.");
         if (FieldOfViewDegrees is < 1.0 or > 179.0) throw new ArgumentOutOfRangeException(nameof(FieldOfViewDegrees), "Field of view must be between 1 and 179 degrees.");
         if (Zoom is < 0.2 or > 10.0) throw new ArgumentOutOfRangeException(nameof(Zoom), "Zoom must be between 0.2 and 10.");
+        if (Frames is < 1 or > 360) throw new ArgumentOutOfRangeException(nameof(Frames), "Frames must be between 1 and 360.");
+        if (Fps is < 1 or > 50) throw new ArgumentOutOfRangeException(nameof(Fps), "Fps must be between 1 and 50.");
+        if (Frames > 1 && Backend != RenderBackend.VulkanRasterPreview)
+            throw new ArgumentException("Turntable animation requires --renderer raster-vulkan, the only backend fast enough for video.");
+        if (Frames > 1 && !string.IsNullOrWhiteSpace(Output) && !Output.EndsWith(".gif", StringComparison.OrdinalIgnoreCase))
+            throw new ArgumentException("Turntable animation output must end with .gif.");
         if (Exposure is < 0.01 or > 100.0) throw new ArgumentOutOfRangeException(nameof(Exposure), "Exposure must be between 0.01 and 100.");
         if (AmbientStrength is < 0.0 or > 100.0) throw new ArgumentOutOfRangeException(nameof(AmbientStrength), "Ambient strength must be between 0 and 100.");
         if (Backend is RenderBackend.VulkanDiagnostic) throw new ArgumentOutOfRangeException(nameof(Backend), "Vulkan diagnostic is not one of the four command-line renderers.");
@@ -184,4 +195,5 @@ public sealed record RenderJobResult(
     int LightCount,
     double ElapsedSeconds,
     string Details,
-    string Output);
+    string Output,
+    IReadOnlyList<double>? FrameMilliseconds = null);

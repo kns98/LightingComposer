@@ -58,6 +58,9 @@
     <Compile Include="../Rendering/Ray.cs" Link="Rendering/Ray.cs" />
     <Compile Include="../Rendering/RayTracer.cs" Link="Rendering/RayTracer.cs" />
     <Compile Include="../Rendering/RenderImage.cs" Link="Rendering/RenderImage.cs" />
+    <Compile Include="../Rendering/GifWriter.cs" Link="Rendering/GifWriter.cs" />
+    <Compile Include="../Rendering/GifLzwCompressor.cs" Link="Rendering/GifLzwCompressor.cs" />
+    <Compile Include="../Rendering/MedianCutQuantizer.cs" Link="Rendering/MedianCutQuantizer.cs" />
     <Compile Include="../Rendering/SceneCacheStamp.cs" Link="Rendering/SceneCacheStamp.cs" />
     <Compile Include="../Rendering/PngWriter.cs" Link="Rendering/PngWriter.cs" />
     <Compile Include="../Rendering/Shadow/**/*.cs" LinkBase="Rendering/Shadow" />

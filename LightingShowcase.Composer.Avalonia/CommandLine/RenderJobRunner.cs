@@ -69,7 +69,7 @@ public sealed class RenderJobRunner
         int triangleCount = scene.Triangles.Count;
         int lightCount = scene.Lights.Count;
         string rendererName = RenderRequest.BackendName(request.Backend);
-        string outputPath = ResolveOutputPath(request.Output, input.ScenePath);
+        string outputPath = ResolveOutputPath(request.Output, input.ScenePath, request.Frames > 1);
         string? outputDirectory = Path.GetDirectoryName(outputPath);
         if (!string.IsNullOrWhiteSpace(outputDirectory))
             Directory.CreateDirectory(outputDirectory);
@@ -80,6 +80,7 @@ public sealed class RenderJobRunner
             $"fov={request.FieldOfViewDegrees:0.##}, assets={input.AssetDirectory}.");
 
         string details;
+        List<double>? frameTimes = null;
         switch (request.Backend)
         {
             case RenderBackend.VulkanGpu:
@@ -126,6 +127,11 @@ public sealed class RenderJobRunner
             }
             case RenderBackend.VulkanRasterPreview:
             {
+                if (request.Frames > 1)
+                {
+                    (details, frameTimes) = RenderTurntableGif(scene, camera, request, outputPath, cancellationToken);
+                    break;
+                }
                 RenderImage image = VulkanRasterRenderer.Render(
                     scene,
                     camera.Position,
@@ -159,7 +165,49 @@ public sealed class RenderJobRunner
             lightCount,
             stopwatch.Elapsed.TotalSeconds,
             details,
-            outputPath);
+            outputPath,
+            frameTimes);
+    }
+
+    /// <summary>Renders one full camera orbit as an animated GIF with per-frame timings.</summary>
+    private static (string Details, List<double> FrameTimes) RenderTurntableGif(
+        Scene scene, CameraDefinition camera, RenderRequest request, string outputPath, CancellationToken cancellationToken)
+    {
+        IReadOnlyList<Vec3> positions = TurntableCamera.Orbit(camera, request.Frames);
+        List<RenderImage> frames = new(positions.Count);
+        List<double> frameTimes = new(positions.Count);
+        string lastDetails = string.Empty;
+        for (int i = 0; i < positions.Count; i++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            CameraDefinition frameCamera = new()
+            {
+                Position = positions[i],
+                Target = camera.Target,
+                Up = camera.Up,
+                FieldOfViewDegrees = camera.FieldOfViewDegrees
+            };
+            Stopwatch frame = Stopwatch.StartNew();
+            RenderImage image = VulkanRasterRenderer.Render(
+                scene,
+                frameCamera.Position,
+                frameCamera.ToBasis(),
+                request.Width,
+                request.Height,
+                cancellationToken,
+                out lastDetails);
+            frame.Stop();
+            frameTimes.Add(frame.Elapsed.TotalMilliseconds);
+            frames.Add(image);
+            Console.WriteLine($"Frame {i + 1}/{positions.Count}: {frame.Elapsed.TotalMilliseconds:0} ms");
+        }
+
+        int delayCentiseconds = Math.Max(1, (int)Math.Round(100.0 / request.Fps));
+        GifWriter.Write(outputPath, frames, delayCentiseconds);
+        string details =
+            $"VULKAN RASTER turntable - {frames.Count} frames {request.Width}x{request.Height}, " +
+            $"avg={frameTimes.Average():0.0}ms min={frameTimes.Min():0.0}ms max={frameTimes.Max():0.0}ms, {request.Fps} fps";
+        return (details, frameTimes);
     }
 
     /// <summary>Loads a scene from a binary scene file or an importable model file.</summary>
@@ -234,7 +282,7 @@ public sealed class RenderJobRunner
     }
 
     /// <summary>Resolves the render output path, defaulting to a render image beside the scene file.</summary>
-    private static string ResolveOutputPath(string? requested, string scenePath)
+    private static string ResolveOutputPath(string? requested, string scenePath, bool animated)
     {
         if (!string.IsNullOrWhiteSpace(requested))
             return Path.GetFullPath(requested);
@@ -243,6 +291,6 @@ public sealed class RenderJobRunner
         string fileName = Path.GetFileNameWithoutExtension(scenePath);
         if (scenePath.EndsWith(".prop.xml", StringComparison.OrdinalIgnoreCase))
             fileName = Path.GetFileNameWithoutExtension(fileName);
-        return Path.Combine(directory, $"{fileName}-render.png");
+        return Path.Combine(directory, animated ? $"{fileName}-render.gif" : $"{fileName}-render.png");
     }
 }

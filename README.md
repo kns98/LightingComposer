@@ -4,48 +4,37 @@ Scene composer and renderer (Avalonia 12.1, .NET 10) for glTF/GLB, FBX, OBJ, 3DS
 
 ## Render gallery
 
-Official [KhronosGroup glTF sample models](https://github.com/KhronosGroup/glTF-Sample-Models) in `models/`, rendered headless at 640×480 with 4 samples, 2 bounces, and zoom 1.6.
+Official [KhronosGroup glTF sample models](https://github.com/KhronosGroup/glTF-Sample-Models) in `models/`, rendered headless at 640×480 with 4 samples, 2 bounces, and zoom 1.6 as 36-frame turntable GIFs at 12 fps.
 
 ### Duck
 
-| raster | raster-vulkan |
-|---|---|
-| ![](screenshots/Duck-raster.png) | ![](screenshots/Duck-raster-vulkan.png) |
-| vulkan | cpu |
-| ![](screenshots/Duck-vulkan.png) | ![](screenshots/Duck-cpu.png) |
+![](screenshots/Duck.gif)
 
 ### CesiumMan
 
-| raster | raster-vulkan |
-|---|---|
-| ![](screenshots/CesiumMan-raster.png) | ![](screenshots/CesiumMan-raster-vulkan.png) |
-| vulkan | cpu |
-| ![](screenshots/CesiumMan-vulkan.png) | ![](screenshots/CesiumMan-cpu.png) |
+![](screenshots/CesiumMan.gif)
 
 ### DamagedHelmet
 
-| raster | raster-vulkan |
-|---|---|
-| ![](screenshots/DamagedHelmet-raster.png) | ![](screenshots/DamagedHelmet-raster-vulkan.png) |
-| vulkan | cpu |
-| ![](screenshots/DamagedHelmet-vulkan.png) | ![](screenshots/DamagedHelmet-cpu.png) |
+![](screenshots/DamagedHelmet.gif)
 
 Model licenses: Duck under SCEA Shared Source 1.0; DamagedHelmet under CC Attribution-NonCommercial; CesiumMan under CC-BY 4.0.
 
 ### Render times
 
-AMD Ryzen 3 7320U (8 threads), AMD Radeon integrated graphics, 8 GB RAM, Windows 11, .NET 10. End to end per render: startup, import, GPU setup, and frame.
+AMD Ryzen 3 7320U (8 threads), AMD Radeon integrated graphics, 8 GB RAM, Windows 11, .NET 10. Per-frame Vulkan raster times; steady excludes the first frame (one-time scene upload).
 
-| Model | Triangles | raster | raster-vulkan | vulkan | cpu |
-|---|---|---|---|---|---|
-| Duck | 4,212 | 0.6 s | 1.6 s | 3.6 s | 1.9 s |
-| CesiumMan | 4,672 | 0.5 s | 1.7 s | 3.7 s | 1.0 s |
-| DamagedHelmet | 15,452 | 1.9 s | 4.0 s | 6.2 s | 3.3 s |
+| Model | Frames | Steady/frame | First frame | Total |
+|---|---|---|---|---|
+| Duck | 36 | 3.6 ms | 1.4 s | 9.0 s |
+| CesiumMan | 36 | 3.1 ms | 1.4 s | 8.7 s |
+| DamagedHelmet | 36 | 8.8 ms | 2.9 s | 13.1 s |
 
 ```bash
 ./run.sh render ./models/DamagedHelmet.glb --renderer raster-vulkan \
-  --output ./screenshots/DamagedHelmet-raster-vulkan.png \
-  --width 640 --height 480 --samples 4 --bounces 2 --zoom 1.6
+  --output ./screenshots/DamagedHelmet.gif \
+  --width 640 --height 480 --samples 4 --bounces 2 --zoom 1.6 \
+  --frames 36 --fps 12
 ```
 
 Headless default lights are seated relative to the camera so they always cover the visible area. Override them with repeatable `--light "kind=point;position=3,4,-2;color=1,1,1;intensity=5"` (kind, direction, range, cones, shadows, id, enabled also supported).

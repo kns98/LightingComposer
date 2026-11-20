@@ -134,3 +134,7 @@ Interactive check: add a Cube, press `3`, click one side and confirm the whole q
 ## Headless lighting CLI coverage
 
 `LightRequestTests` covers `--light` parsing: a fully specified light, defaults for a position-only spec, and rejection of missing positions, unknown kinds, malformed vectors, bad numbers, unknown keys, and bad booleans, plus conversion to a scene light. `HeadlessLightingTests` covers default-light placement: defaults move next to the camera, authored lights stay put, fresh defaults appear when no light is enabled, explicit lights replace the scene set, and `--zoom` with repeated `--light` options parses in order. `HeadlessRenderTests` renders a two-triangle OBJ twice through the software raster backend and verifies that different light positions produce different pixels.
+
+## Turntable GIF coverage
+
+`GifWriterTests` checks the animated GIF container (signature, trailer, loop extension, per-frame delays, dimension validation) and round-trips solid and noisy frames through an independent decoder. `TurntableCameraTests` checks full-circle orbit positions and that animation requests require GIF output with the Vulkan raster backend.
