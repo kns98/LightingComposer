@@ -18,13 +18,13 @@
 
   <ItemGroup>
     <ProjectReference Include="../LightingShowcase.Core/LightingShowcase.Core.csproj" />
-    <ProjectReference Include="../LightingShowcase.ImportExport.Obj/LightingShowcase.ImportExport.Obj.csproj" />
-    <ProjectReference Include="../LightingShowcase.ImportExport.Stl/LightingShowcase.ImportExport.Stl.csproj" />
-    <ProjectReference Include="../LightingShowcase.ImportExport.Ply/LightingShowcase.ImportExport.Ply.csproj" />
-    <ProjectReference Include="../LightingShowcase.ImportExport.ThreeDs/LightingShowcase.ImportExport.ThreeDs.csproj" />
-    <ProjectReference Include="../LightingShowcase.ImportExport.Gltf/LightingShowcase.ImportExport.Gltf.csproj" />
-    <ProjectReference Include="../LightingShowcase.ImportExport.PropXml/LightingShowcase.ImportExport.PropXml.csproj" />
-    <ProjectReference Include="../LightingShowcase.ImportExport.Fbx/LightingShowcase.ImportExport.Fbx.csproj" />
+    <ProjectReference Include="../ImportExport/LightingShowcase.ImportExport.Obj/LightingShowcase.ImportExport.Obj.csproj" />
+    <ProjectReference Include="../ImportExport/LightingShowcase.ImportExport.Stl/LightingShowcase.ImportExport.Stl.csproj" />
+    <ProjectReference Include="../ImportExport/LightingShowcase.ImportExport.Ply/LightingShowcase.ImportExport.Ply.csproj" />
+    <ProjectReference Include="../ImportExport/LightingShowcase.ImportExport.ThreeDs/LightingShowcase.ImportExport.ThreeDs.csproj" />
+    <ProjectReference Include="../ImportExport/LightingShowcase.ImportExport.Gltf/LightingShowcase.ImportExport.Gltf.csproj" />
+    <ProjectReference Include="../ImportExport/LightingShowcase.ImportExport.PropXml/LightingShowcase.ImportExport.PropXml.csproj" />
+    <ProjectReference Include="../ImportExport/LightingShowcase.ImportExport.Fbx/LightingShowcase.ImportExport.Fbx.csproj" />
     <ProjectReference Include="../LightingShowcase.ObjectLibrary.BuiltIns/LightingShowcase.ObjectLibrary.BuiltIns.csproj" />
     <ProjectReference Include="../LightingShowcase.ObjectLibrary.ReadyMade/LightingShowcase.ObjectLibrary.ReadyMade.csproj" />
   </ItemGroup>

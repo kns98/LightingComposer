@@ -6,19 +6,19 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LightingShowcase.Composer.A
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LightingShowcase.Core", "LightingShowcase.Core/LightingShowcase.Core.csproj", "{A1000000-0000-0000-0000-000000000002}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LightingShowcase.ImportExport.Gltf", "LightingShowcase.ImportExport.Gltf/LightingShowcase.ImportExport.Gltf.csproj", "{A1000000-0000-0000-0000-000000000003}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LightingShowcase.ImportExport.Gltf", "ImportExport/LightingShowcase.ImportExport.Gltf/LightingShowcase.ImportExport.Gltf.csproj", "{A1000000-0000-0000-0000-000000000003}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LightingShowcase.ImportExport.Obj", "LightingShowcase.ImportExport.Obj/LightingShowcase.ImportExport.Obj.csproj", "{A1000000-0000-0000-0000-000000000004}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LightingShowcase.ImportExport.Obj", "ImportExport/LightingShowcase.ImportExport.Obj/LightingShowcase.ImportExport.Obj.csproj", "{A1000000-0000-0000-0000-000000000004}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LightingShowcase.ImportExport.Stl", "LightingShowcase.ImportExport.Stl/LightingShowcase.ImportExport.Stl.csproj", "{A1000000-0000-0000-0000-000000000005}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LightingShowcase.ImportExport.Stl", "ImportExport/LightingShowcase.ImportExport.Stl/LightingShowcase.ImportExport.Stl.csproj", "{A1000000-0000-0000-0000-000000000005}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LightingShowcase.ImportExport.Ply", "LightingShowcase.ImportExport.Ply/LightingShowcase.ImportExport.Ply.csproj", "{A1000000-0000-0000-0000-000000000006}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LightingShowcase.ImportExport.Ply", "ImportExport/LightingShowcase.ImportExport.Ply/LightingShowcase.ImportExport.Ply.csproj", "{A1000000-0000-0000-0000-000000000006}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LightingShowcase.ImportExport.ThreeDs", "LightingShowcase.ImportExport.ThreeDs/LightingShowcase.ImportExport.ThreeDs.csproj", "{A1000000-0000-0000-0000-000000000007}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LightingShowcase.ImportExport.ThreeDs", "ImportExport/LightingShowcase.ImportExport.ThreeDs/LightingShowcase.ImportExport.ThreeDs.csproj", "{A1000000-0000-0000-0000-000000000007}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LightingShowcase.ImportExport.Fbx", "LightingShowcase.ImportExport.Fbx/LightingShowcase.ImportExport.Fbx.csproj", "{A1000000-0000-0000-0000-000000000008}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LightingShowcase.ImportExport.Fbx", "ImportExport/LightingShowcase.ImportExport.Fbx/LightingShowcase.ImportExport.Fbx.csproj", "{A1000000-0000-0000-0000-000000000008}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LightingShowcase.ImportExport.PropXml", "LightingShowcase.ImportExport.PropXml/LightingShowcase.ImportExport.PropXml.csproj", "{A1000000-0000-0000-0000-000000000009}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LightingShowcase.ImportExport.PropXml", "ImportExport/LightingShowcase.ImportExport.PropXml/LightingShowcase.ImportExport.PropXml.csproj", "{A1000000-0000-0000-0000-000000000009}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LightingShowcase.ObjectLibrary.BuiltIns", "LightingShowcase.ObjectLibrary.BuiltIns/LightingShowcase.ObjectLibrary.BuiltIns.csproj", "{A1000000-0000-0000-0000-000000000010}"
 EndProject

@@ -7,19 +7,19 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "LightingShowcase.Composer.A
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "LightingShowcase.Core", "LightingShowcase.Core\LightingShowcase.Core.csproj", "{55D079A1-6DDD-4E41-B669-402C0BB342A9}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "LightingShowcase.ImportExport.Gltf", "LightingShowcase.ImportExport.Gltf\LightingShowcase.ImportExport.Gltf.csproj", "{C8C90DAF-2A52-4390-95DD-AF914EAE6DC7}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "LightingShowcase.ImportExport.Gltf", "ImportExport\LightingShowcase.ImportExport.Gltf\LightingShowcase.ImportExport.Gltf.csproj", "{C8C90DAF-2A52-4390-95DD-AF914EAE6DC7}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "LightingShowcase.ImportExport.Obj", "LightingShowcase.ImportExport.Obj\LightingShowcase.ImportExport.Obj.csproj", "{D3EEE3E1-54D7-4DFA-9E6E-F965F14B7E36}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "LightingShowcase.ImportExport.Obj", "ImportExport\LightingShowcase.ImportExport.Obj\LightingShowcase.ImportExport.Obj.csproj", "{D3EEE3E1-54D7-4DFA-9E6E-F965F14B7E36}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "LightingShowcase.ImportExport.Stl", "LightingShowcase.ImportExport.Stl\LightingShowcase.ImportExport.Stl.csproj", "{BA7576E0-6189-4AAF-97A7-75AD297EF8B3}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "LightingShowcase.ImportExport.Stl", "ImportExport\LightingShowcase.ImportExport.Stl\LightingShowcase.ImportExport.Stl.csproj", "{BA7576E0-6189-4AAF-97A7-75AD297EF8B3}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "LightingShowcase.ImportExport.Ply", "LightingShowcase.ImportExport.Ply\LightingShowcase.ImportExport.Ply.csproj", "{034B98BC-EF43-496C-99A5-0EA54BBF38E5}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "LightingShowcase.ImportExport.Ply", "ImportExport\LightingShowcase.ImportExport.Ply\LightingShowcase.ImportExport.Ply.csproj", "{034B98BC-EF43-496C-99A5-0EA54BBF38E5}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "LightingShowcase.ImportExport.ThreeDs", "LightingShowcase.ImportExport.ThreeDs\LightingShowcase.ImportExport.ThreeDs.csproj", "{689AFFD9-CAA4-45BC-90C1-2ABCA4500BE3}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "LightingShowcase.ImportExport.ThreeDs", "ImportExport\LightingShowcase.ImportExport.ThreeDs\LightingShowcase.ImportExport.ThreeDs.csproj", "{689AFFD9-CAA4-45BC-90C1-2ABCA4500BE3}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "LightingShowcase.ImportExport.Fbx", "LightingShowcase.ImportExport.Fbx\LightingShowcase.ImportExport.Fbx.csproj", "{7CF7F9BD-6933-4C49-833B-ABD2207962A9}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "LightingShowcase.ImportExport.Fbx", "ImportExport\LightingShowcase.ImportExport.Fbx\LightingShowcase.ImportExport.Fbx.csproj", "{7CF7F9BD-6933-4C49-833B-ABD2207962A9}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "LightingShowcase.ImportExport.PropXml", "LightingShowcase.ImportExport.PropXml\LightingShowcase.ImportExport.PropXml.csproj", "{A28CECB0-F901-4397-94BE-3EF9E7D2362D}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "LightingShowcase.ImportExport.PropXml", "ImportExport\LightingShowcase.ImportExport.PropXml\LightingShowcase.ImportExport.PropXml.csproj", "{A28CECB0-F901-4397-94BE-3EF9E7D2362D}"
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "LightingShowcase.ObjectLibrary.BuiltIns", "LightingShowcase.ObjectLibrary.BuiltIns\LightingShowcase.ObjectLibrary.BuiltIns.csproj", "{4B11BB7E-B14C-4587-A417-AA58FE91C70C}"
 EndProject

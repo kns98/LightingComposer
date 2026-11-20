@@ -73,4 +73,4 @@ Requires the .NET 10 SDK and, for Vulkan modes, a Vulkan-capable driver. Open `L
 
 ## Docs
 
-[Primitives](PARAMETERIZED_PRIMITIVES.md) · [Materials](MATERIAL_EDITING.md) · [Lighting](LIGHTING_EDITOR.md) · [Mesh editing](MESH_EDITING.md) · [Transform preview](GIZMO_TRANSFORM_PREVIEW.md)
+[Primitives](docs/PARAMETERIZED_PRIMITIVES.md) · [Materials](docs/MATERIAL_EDITING.md) · [Lighting](docs/LIGHTING_EDITOR.md) · [Mesh editing](docs/MESH_EDITING.md) · [Transform preview](docs/GIZMO_TRANSFORM_PREVIEW.md)
