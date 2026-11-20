@@ -486,3 +486,6 @@ $RECYCLE.BIN/
 # Publish
 */publish
 
+# Local build sandbox and render probes
+.build-tmp/
+

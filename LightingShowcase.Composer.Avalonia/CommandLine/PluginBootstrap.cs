@@ -36,7 +36,7 @@ internal static class PluginBootstrap
         _ = typeof(PropXmlSceneFormatPlugin).Assembly;
         _ = typeof(StlSceneFormatPlugin).Assembly;
         _ = typeof(ThreeDsSceneFormatPlugin).Assembly;
-        _ = typeof(BuiltInObjectLibraryPlugin).Assembly;
+        _ = typeof(PrimitiveBase).Assembly;
         _ = typeof(DiningTableObject).Assembly;
 
         SceneFormatRegistry.EnsureInitialized();

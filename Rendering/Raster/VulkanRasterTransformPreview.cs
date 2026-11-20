@@ -1,9 +1,7 @@
-// -----------------------------------------------------------------------------
-// File: Rendering/VulkanRasterTransformPreview.cs
+// File: Rendering/Raster/VulkanRasterTransformPreview.cs
 // Purpose: Transient Vulkan transform preview.
 //
 // Previews gizmo transforms without changing geometry or revision; release uses the normal bake and history path.
-// -----------------------------------------------------------------------------
 
 using LightingShowcase.Math3D;
 

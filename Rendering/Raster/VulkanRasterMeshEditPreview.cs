@@ -1,9 +1,7 @@
-// -----------------------------------------------------------------------------
-// File: Rendering/VulkanRasterMeshEditPreview.cs
+// File: Rendering/Raster/VulkanRasterMeshEditPreview.cs
 // Purpose: Transient Vulkan mesh-edit preview.
 //
 // Patches only affected triangle vertices in allocated GPU buffers during a drag; the scene and history change only on release.
-// -----------------------------------------------------------------------------
 
 using LightingShowcase.Math3D;
 

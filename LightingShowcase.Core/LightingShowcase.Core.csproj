@@ -61,11 +61,8 @@
     <Compile Include="../Rendering/SceneCacheStamp.cs" Link="Rendering/SceneCacheStamp.cs" />
     <Compile Include="../Rendering/PngWriter.cs" Link="Rendering/PngWriter.cs" />
     <Compile Include="../Rendering/ShadowRasterRenderer.cs" Link="Rendering/ShadowRasterRenderer.cs" />
-    <Compile Include="../Rendering/VulkanRasterRenderer.cs" Link="Rendering/VulkanRasterRenderer.cs" />
-    <Compile Include="../Rendering/VulkanRasterCpu.cs" Link="Rendering/VulkanRasterCpu.cs" />
-    <Compile Include="../Rendering/VulkanRasterTransform.cs" Link="Rendering/VulkanRasterTransform.cs" />
-    <Compile Include="../Rendering/VulkanRasterTransformPreview.cs" Link="Rendering/VulkanRasterTransformPreview.cs" />
-    <Compile Include="../Rendering/VulkanRasterMeshEditPreview.cs" Link="Rendering/VulkanRasterMeshEditPreview.cs" />
+    <Compile Include="../Rendering/Raster/**/*.cs" LinkBase="Rendering/Raster" />
+    <EmbeddedResource Include="../Rendering/Raster/Shaders/*.glsl" LogicalName="Raster.%(Filename)%(Extension)" />
     <Compile Include="../Rendering/VeldridVulkanDevicePreflight.cs" Link="Rendering/VeldridVulkanDevicePreflight.cs" />
     <Compile Include="../Rendering/VulkanSceneComputeRenderer.cs" Link="Rendering/VulkanSceneComputeRenderer.cs" />
   </ItemGroup>
