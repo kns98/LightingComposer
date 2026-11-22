@@ -46,28 +46,21 @@ public sealed class TurntableCameraTests
         Assert.Equal(new Vec3(1, 2, 3), positions[0]);
     }
 
-    [Fact]
-    public void RenderRequest_AnimationRequiresGifAndFastBackend()
+    [Theory]
+    [InlineData(LightingShowcase.SceneGraph.RenderBackend.ShadowRasterPreview)]
+    [InlineData(LightingShowcase.SceneGraph.RenderBackend.VulkanRasterPreview)]
+    [InlineData(LightingShowcase.SceneGraph.RenderBackend.VulkanGpu)]
+    [InlineData(LightingShowcase.SceneGraph.RenderBackend.Cpu)]
+    public void RenderRequest_AnimationAllowsEveryBackend(LightingShowcase.SceneGraph.RenderBackend backend)
     {
-        RenderRequest gif = new()
-        {
-            Input = "scene.obj",
-            Frames = 12,
-            Output = "out.gif",
-            Backend = LightingShowcase.SceneGraph.RenderBackend.VulkanRasterPreview
-        };
+        RenderRequest gif = new() { Input = "scene.obj", Frames = 12, Output = "out.gif", Backend = backend };
         gif.Validate();
+    }
 
+    [Fact]
+    public void RenderRequest_AnimationRequiresGifOutput()
+    {
         RenderRequest noGif = new() { Input = "scene.obj", Frames = 12, Output = "out.png" };
         Assert.Throws<ArgumentException>(() => noGif.Validate());
-
-        RenderRequest slow = new()
-        {
-            Input = "scene.obj",
-            Frames = 12,
-            Output = "out.gif",
-            Backend = LightingShowcase.SceneGraph.RenderBackend.Cpu
-        };
-        Assert.Throws<ArgumentException>(() => slow.Validate());
     }
 }

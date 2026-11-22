@@ -139,8 +139,6 @@ public sealed class RenderRequest
         if (Zoom is < 0.2 or > 10.0) throw new ArgumentOutOfRangeException(nameof(Zoom), "Zoom must be between 0.2 and 10.");
         if (Frames is < 1 or > 360) throw new ArgumentOutOfRangeException(nameof(Frames), "Frames must be between 1 and 360.");
         if (Fps is < 1 or > 50) throw new ArgumentOutOfRangeException(nameof(Fps), "Fps must be between 1 and 50.");
-        if (Frames > 1 && Backend != RenderBackend.VulkanRasterPreview)
-            throw new ArgumentException("Turntable animation requires --renderer raster-vulkan, the only backend fast enough for video.");
         if (Frames > 1 && !string.IsNullOrWhiteSpace(Output) && !Output.EndsWith(".gif", StringComparison.OrdinalIgnoreCase))
             throw new ArgumentException("Turntable animation output must end with .gif.");
         if (Exposure is < 0.01 or > 100.0) throw new ArgumentOutOfRangeException(nameof(Exposure), "Exposure must be between 0.01 and 100.");

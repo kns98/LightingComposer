@@ -79,19 +79,33 @@ public sealed class RenderJobRunner
             $"{request.Width}x{request.Height}; samples={request.Samples}, bounces={request.Bounces}, " +
             $"fov={request.FieldOfViewDegrees:0.##}, assets={input.AssetDirectory}.");
 
+        if (request.Backend == RenderBackend.VulkanGpu)
+        {
+            // The editable hierarchy is redundant after the Vulkan compute
+            // renderer has packed the world triangles for a headless render.
+            scene.ReleaseEditorGeometryForHeadlessRender();
+        }
+
         string details;
         List<double>? frameTimes = null;
-        switch (request.Backend)
+        if (request.Frames > 1)
         {
-            case RenderBackend.VulkanGpu:
+            (details, frameTimes) = RenderTurntableGif(camera, request, outputPath, RenderFrame, cancellationToken);
+        }
+        else
+        {
+            RenderImage image = RenderFrame(camera);
+            image.SavePng(outputPath);
+        }
+
+        RenderImage RenderFrame(CameraDefinition view)
+        {
+            return request.Backend switch
             {
-                // The editable hierarchy is redundant after the Vulkan compute
-                // renderer has packed the world triangles for a headless render.
-                scene.ReleaseEditorGeometryForHeadlessRender();
-                RenderImage image = VulkanSceneComputeRenderer.Render(
+                RenderBackend.VulkanGpu => VulkanSceneComputeRenderer.Render(
                     scene,
-                    camera.Position,
-                    camera.ToBasis(),
+                    view.Position,
+                    view.ToBasis(),
                     request.Width,
                     request.Height,
                     request.Bounces,
@@ -101,55 +115,32 @@ public sealed class RenderJobRunner
                     out details,
                     progressCallback: null,
                     settings: renderSettings,
-                    fieldOfViewDegrees: request.FieldOfViewDegrees);
-                image.SavePng(outputPath);
-                break;
-            }
-            case RenderBackend.Cpu:
-            {
-                RenderImage image = CpuCommandLineRenderer.Render(
-                    scene, camera, request, cancellationToken, out details);
-                image.SavePng(outputPath);
-                break;
-            }
-            case RenderBackend.ShadowRasterPreview:
-            {
-                RenderImage image = ShadowRasterRenderer.Render(
+                    fieldOfViewDegrees: request.FieldOfViewDegrees),
+                RenderBackend.Cpu => CpuCommandLineRenderer.Render(
+                    scene, view, request, cancellationToken, out details),
+                RenderBackend.ShadowRasterPreview => ShadowRasterRenderer.Render(
                     scene,
-                    camera.Position,
-                    camera.ToBasis(),
+                    view.Position,
+                    view.ToBasis(),
                     request.Width,
                     request.Height,
                     cancellationToken,
                     out details,
                     backgroundTop: renderSettings.BackgroundTop,
-                    backgroundBottom: renderSettings.BackgroundBottom);
-                image.SavePng(outputPath);
-                break;
-            }
-            case RenderBackend.VulkanRasterPreview:
-            {
-                if (request.Frames > 1)
-                {
-                    (details, frameTimes) = RenderTurntableGif(scene, camera, request, outputPath, cancellationToken);
-                    break;
-                }
-                RenderImage image = VulkanRasterRenderer.Render(
+                    backgroundBottom: renderSettings.BackgroundBottom),
+                RenderBackend.VulkanRasterPreview => VulkanRasterRenderer.Render(
                     scene,
-                    camera.Position,
-                    camera.ToBasis(),
+                    view.Position,
+                    view.ToBasis(),
                     request.Width,
                     request.Height,
                     cancellationToken,
                     out details,
                     backgroundTop: renderSettings.BackgroundTop,
-                    backgroundBottom: renderSettings.BackgroundBottom);
-                image.SavePng(outputPath);
-                break;
-            }
-            default:
-                throw new ArgumentOutOfRangeException(
-                    nameof(request.Backend), request.Backend, "Unsupported command-line renderer.");
+                    backgroundBottom: renderSettings.BackgroundBottom),
+                _ => throw new ArgumentOutOfRangeException(
+                    nameof(request.Backend), request.Backend, "Unsupported command-line renderer."),
+            };
         }
 
         stopwatch.Stop();
@@ -175,13 +166,12 @@ public sealed class RenderJobRunner
 
     /// <summary>Renders one full camera orbit as an animated GIF with per-frame timings.</summary>
     private static (string Details, List<double> FrameTimes) RenderTurntableGif(
-        Scene scene, CameraDefinition camera, RenderRequest request, string outputPath, CancellationToken cancellationToken)
+        CameraDefinition camera, RenderRequest request, string outputPath,
+        Func<CameraDefinition, RenderImage> renderFrame, CancellationToken cancellationToken)
     {
         IReadOnlyList<Vec3> positions = TurntableCamera.Orbit(camera, request.Frames);
         List<RenderImage> frames = new(positions.Count);
         List<double> frameTimes = new(positions.Count);
-        RenderSettings frameSettings = request.ToRenderSettings();
-        string lastDetails = string.Empty;
         for (int i = 0; i < positions.Count; i++)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -193,26 +183,16 @@ public sealed class RenderJobRunner
                 FieldOfViewDegrees = camera.FieldOfViewDegrees
             };
             Stopwatch frame = Stopwatch.StartNew();
-            RenderImage image = VulkanRasterRenderer.Render(
-                scene,
-                frameCamera.Position,
-                frameCamera.ToBasis(),
-                request.Width,
-                request.Height,
-                cancellationToken,
-                out lastDetails,
-                backgroundTop: frameSettings.BackgroundTop,
-                backgroundBottom: frameSettings.BackgroundBottom);
+            frames.Add(renderFrame(frameCamera));
             frame.Stop();
             frameTimes.Add(frame.Elapsed.TotalMilliseconds);
-            frames.Add(image);
             Console.WriteLine($"Frame {i + 1}/{positions.Count}: {frame.Elapsed.TotalMilliseconds:0} ms");
         }
 
         int delayCentiseconds = Math.Max(1, (int)Math.Round(100.0 / request.Fps));
         GifWriter.Write(outputPath, frames, delayCentiseconds);
         string details =
-            $"VULKAN RASTER turntable - {frames.Count} frames {request.Width}x{request.Height}, " +
+            $"{RenderRequest.BackendName(request.Backend)} turntable - {frames.Count} frames {request.Width}x{request.Height}, " +
             $"avg={frameTimes.Average():0.0}ms min={frameTimes.Min():0.0}ms max={frameTimes.Max():0.0}ms, {request.Fps} fps";
         return (details, frameTimes);
     }
