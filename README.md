@@ -4,33 +4,25 @@ Scene composer and renderer (Avalonia 12.1, .NET 10) for glTF/GLB, FBX, OBJ, 3DS
 
 ## Render gallery
 
-Official [KhronosGroup glTF sample models](https://github.com/KhronosGroup/glTF-Sample-Models) samples in `models/`, headless at 640×480, 4 samples, 2 bounces, zoom 1.6. ▶ 36-frame GIFs at 12 fps, one per backend, playing automatically.
+Official [KhronosGroup glTF sample models](https://github.com/KhronosGroup/glTF-Sample-Models) samples in `models/`, headless at 480×360 with 4 samples and 2 bounces (zoom 1.6 lamp, 2.6 car). ▶ 36-frame GIFs at 12 fps, one per backend, playing automatically.
 
-### Duck — 4,212 triangles
-
-| ▶ raster | ▶ Vulkan raster |
-|---|---|
-| ![▶ Duck turntable, raster backend](screenshots/Duck-raster.gif) | ![▶ Duck turntable, Vulkan raster backend](screenshots/Duck-raster-vulkan.gif) |
-| ▶ Vulkan compute | ▶ CPU |
-| ![▶ Duck turntable, Vulkan compute backend](screenshots/Duck-vulkan.gif) | ![▶ Duck turntable, CPU backend](screenshots/Duck-cpu.gif) |
-
-### CesiumMan — 4,672 triangles, bind pose
+### StainedGlassLamp — 35,132 triangles
 
 | ▶ raster | ▶ Vulkan raster |
 |---|---|
-| ![▶ CesiumMan turntable, raster backend](screenshots/CesiumMan-raster.gif) | ![▶ CesiumMan turntable, Vulkan raster backend](screenshots/CesiumMan-raster-vulkan.gif) |
+| ![▶ StainedGlassLamp turntable, raster backend](screenshots/StainedGlassLamp-raster.gif) | ![▶ StainedGlassLamp turntable, Vulkan raster backend](screenshots/StainedGlassLamp-raster-vulkan.gif) |
 | ▶ Vulkan compute | ▶ CPU |
-| ![▶ CesiumMan turntable, Vulkan compute backend](screenshots/CesiumMan-vulkan.gif) | ![▶ CesiumMan turntable, CPU backend](screenshots/CesiumMan-cpu.gif) |
+| ![▶ StainedGlassLamp turntable, Vulkan compute backend](screenshots/StainedGlassLamp-vulkan.gif) | ![▶ StainedGlassLamp turntable, CPU backend](screenshots/StainedGlassLamp-cpu.gif) |
 
-### DamagedHelmet — 15,452 triangles, full PBR
+### ToyCar — 108,936 triangles
 
 | ▶ raster | ▶ Vulkan raster |
 |---|---|
-| ![▶ DamagedHelmet turntable, raster backend](screenshots/DamagedHelmet-raster.gif) | ![▶ DamagedHelmet turntable, Vulkan raster backend](screenshots/DamagedHelmet-raster-vulkan.gif) |
+| ![▶ ToyCar turntable, raster backend](screenshots/ToyCar-raster.gif) | ![▶ ToyCar turntable, Vulkan raster backend](screenshots/ToyCar-raster-vulkan.gif) |
 | ▶ Vulkan compute | ▶ CPU |
-| ![▶ DamagedHelmet turntable, Vulkan compute backend](screenshots/DamagedHelmet-vulkan.gif) | ![▶ DamagedHelmet turntable, CPU backend](screenshots/DamagedHelmet-cpu.gif) |
+| ![▶ ToyCar turntable, Vulkan compute backend](screenshots/ToyCar-vulkan.gif) | ![▶ ToyCar turntable, CPU backend](screenshots/ToyCar-cpu.gif) |
 
-Model licenses: Duck under SCEA Shared Source 1.0; DamagedHelmet under CC Attribution-NonCommercial; CesiumMan under CC-BY 4.0.
+Model licenses: StainedGlassLamp under CC-BY 4.0 (Wayfair); ToyCar public domain (CC0).
 
 ### Render times
 
@@ -38,14 +30,13 @@ AMD Ryzen 3 7320U (8 threads), AMD Radeon integrated graphics, 8 GB RAM, Windows
 
 | Model | raster | raster-vulkan | vulkan | cpu |
 |---|---|---|---|---|
-| Duck | 221 ms | 4.4 ms | 342 ms | 1.7 s |
-| CesiumMan | 111 ms | 4.1 ms | 181 ms | 0.7 s |
-| DamagedHelmet | 368 ms | 8.5 ms | 574 ms | 2.2 s |
+| StainedGlassLamp | 217 ms | 7.9 ms | 665 ms | 1.3 s |
+| ToyCar | 851 ms | 9.3 ms | 1.3 s | 4.3 s |
 
 ```bash
-./run.sh render ./models/DamagedHelmet.glb --renderer raster-vulkan \
-  --output ./screenshots/DamagedHelmet-raster-vulkan.gif \
-  --width 640 --height 480 --samples 4 --bounces 2 --zoom 1.6 --frames 36 --fps 12
+./run.sh render ./models/StainedGlassLamp/StainedGlassLamp.gltf --renderer raster-vulkan \
+  --output ./screenshots/StainedGlassLamp-raster-vulkan.gif \
+  --width 480 --height 360 --samples 4 --bounces 2 --zoom 1.6 --frames 36 --fps 12
 ```
 
 Headless default lights are seated relative to the camera so they always cover the visible area. Override them with repeatable `--light "kind=point;position=3,4,-2;color=1,1,1;intensity=5"` (kind, direction, range, cones, shadows, id, enabled also supported).
