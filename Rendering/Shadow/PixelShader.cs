@@ -21,6 +21,6 @@ internal abstract class PixelShader
     /// <summary>Prepares triangle-level values; returns false to skip the triangle.</summary>
     public virtual bool Prepare(Triangle tri, ProjectedVertex a, ProjectedVertex b, ProjectedVertex c) => true;
 
-    /// <summary>Shades one pixel; returns false to skip it.</summary>
-    public abstract bool TryShade(in PixelSample sample, out Vec3 shaded);
+    /// <summary>Shades one pixel; returns false to skip it. Alpha is 1 for opaque output.</summary>
+    public abstract bool TryShade(in PixelSample sample, out Vec3 shaded, out double alpha);
 }

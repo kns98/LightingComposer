@@ -62,6 +62,16 @@ internal sealed class MaterialEditorWindow : Window
     private readonly TextBox clearcoatRoughnessBox;
     private readonly TextBox normalScaleBox;
     private readonly TextBox occlusionStrengthBox;
+    private readonly TextBox specularBox;
+    private readonly TextBox specularColorBox;
+    private readonly TextBox sheenColorBox;
+    private readonly TextBox sheenRoughnessBox;
+    private readonly TextBox anisotropyBox;
+    private readonly TextBox anisotropyRotationBox;
+    private readonly TextBox iridescenceBox;
+    private readonly TextBox iridescenceIorBox;
+    private readonly TextBox iridescenceThicknessMinBox;
+    private readonly TextBox iridescenceThicknessMaxBox;
     private readonly ComboBox alphaModeBox;
     private readonly TextBox alphaCutoffBox;
     private readonly CheckBox doubleSidedBox;
@@ -141,6 +151,16 @@ internal sealed class MaterialEditorWindow : Window
         clearcoatRoughnessBox = PropertyBox();
         normalScaleBox = PropertyBox();
         occlusionStrengthBox = PropertyBox();
+        specularBox = PropertyBox();
+        specularColorBox = new TextBox { MinWidth = 100, TextAlignment = TextAlignment.Right, Watermark = "#FFFFFF" };
+        sheenColorBox = new TextBox { MinWidth = 100, TextAlignment = TextAlignment.Right, Watermark = "#000000" };
+        sheenRoughnessBox = PropertyBox();
+        anisotropyBox = PropertyBox();
+        anisotropyRotationBox = PropertyBox();
+        iridescenceBox = PropertyBox();
+        iridescenceIorBox = PropertyBox();
+        iridescenceThicknessMinBox = PropertyBox();
+        iridescenceThicknessMaxBox = PropertyBox();
         alphaModeBox = new ComboBox
         {
             ItemsSource = Enum.GetValues<MaterialAlphaMode>(),
@@ -290,6 +310,12 @@ internal sealed class MaterialEditorWindow : Window
         stack.Children.Add(LabeledControl("Attenuation color", attenuationColorBox));
         stack.Children.Add(TwoPropertyRow("Clearcoat (0–1)", clearcoatBox, "Clearcoat roughness (0–1)", clearcoatRoughnessBox));
         stack.Children.Add(TwoPropertyRow("Normal scale (-8–8)", normalScaleBox, "Occlusion strength (0–1)", occlusionStrengthBox));
+        stack.Children.Add(TwoPropertyRow("Specular (0–1)", specularBox, "Sheen roughness (0–1)", sheenRoughnessBox));
+        stack.Children.Add(LabeledControl("Specular color", specularColorBox));
+        stack.Children.Add(LabeledControl("Sheen color", sheenColorBox));
+        stack.Children.Add(TwoPropertyRow("Anisotropy (0–1)", anisotropyBox, "Anisotropy rotation (rad)", anisotropyRotationBox));
+        stack.Children.Add(TwoPropertyRow("Iridescence (0–1)", iridescenceBox, "Iridescence IOR (≥1)", iridescenceIorBox));
+        stack.Children.Add(TwoPropertyRow("Iridescence min (nm)", iridescenceThicknessMinBox, "Iridescence max (nm)", iridescenceThicknessMaxBox));
         stack.Children.Add(TwoPropertyRow("Alpha mode", alphaModeBox, "Alpha cutoff (0–1)", alphaCutoffBox));
         stack.Children.Add(doubleSidedBox);
         Button applyProperties = NewButton("Apply properties");
@@ -537,6 +563,16 @@ internal sealed class MaterialEditorWindow : Window
         clearcoatRoughnessBox.Text = Format(model.ClearcoatRoughness);
         normalScaleBox.Text = Format(model.NormalScale);
         occlusionStrengthBox.Text = Format(model.OcclusionStrength);
+        specularBox.Text = Format(model.Specular);
+        specularColorBox.Text = ToHex(model.SpecularColor);
+        sheenColorBox.Text = ToHex(model.SheenColor);
+        sheenRoughnessBox.Text = Format(model.SheenRoughness);
+        anisotropyBox.Text = Format(model.Anisotropy);
+        anisotropyRotationBox.Text = Format(model.AnisotropyRotation);
+        iridescenceBox.Text = Format(model.Iridescence);
+        iridescenceIorBox.Text = Format(model.IridescenceIor);
+        iridescenceThicknessMinBox.Text = Format(model.IridescenceThicknessMinimum);
+        iridescenceThicknessMaxBox.Text = Format(model.IridescenceThicknessMaximum);
         alphaModeBox.SelectedItem = model.AlphaMode;
         alphaCutoffBox.Text = Format(model.AlphaCutoff);
         doubleSidedBox.IsChecked = model.DoubleSided;
@@ -645,6 +681,26 @@ internal sealed class MaterialEditorWindow : Window
             return Fail("Normal scale must be between -8 and 8.", out error);
         if (!TryRange(occlusionStrengthBox.Text, 0.0, 1.0, out double occlusionStrength))
             return Fail("Occlusion strength must be between 0 and 1.", out error);
+        if (!TryRange(specularBox.Text, 0.0, 1.0, out double specular))
+            return Fail("Specular must be between 0 and 1.", out error);
+        if (!TryParseHex(specularColorBox.Text, out Vec3 specularColor))
+            return Fail("Specular color must be a hex color such as #FFFFFF.", out error);
+        if (!TryParseHex(sheenColorBox.Text, out Vec3 sheenColor))
+            return Fail("Sheen color must be a hex color such as #FFFFFF.", out error);
+        if (!TryRange(sheenRoughnessBox.Text, 0.0, 1.0, out double sheenRoughness))
+            return Fail("Sheen roughness must be between 0 and 1.", out error);
+        if (!TryRange(anisotropyBox.Text, 0.0, 1.0, out double anisotropy))
+            return Fail("Anisotropy must be between 0 and 1.", out error);
+        if (!TryDouble(anisotropyRotationBox.Text, out double anisotropyRotation) || !double.IsFinite(anisotropyRotation))
+            return Fail("Anisotropy rotation must be finite radians.", out error);
+        if (!TryRange(iridescenceBox.Text, 0.0, 1.0, out double iridescence))
+            return Fail("Iridescence must be between 0 and 1.", out error);
+        if (!TryRange(iridescenceIorBox.Text, 1.0, double.MaxValue, out double iridescenceIor))
+            return Fail("Iridescence IOR must be 1.0 or greater.", out error);
+        if (!TryRange(iridescenceThicknessMinBox.Text, 0.0, double.MaxValue, out double iridescenceThicknessMinimum))
+            return Fail("Iridescence minimum thickness must be zero or greater nanometers.", out error);
+        if (!TryRange(iridescenceThicknessMaxBox.Text, 0.0, double.MaxValue, out double iridescenceThicknessMaximum))
+            return Fail("Iridescence maximum thickness must be zero or greater nanometers.", out error);
         if (alphaModeBox.SelectedItem is not MaterialAlphaMode alphaMode)
             return Fail("Choose an alpha mode.", out error);
         if (!TryRange(alphaCutoffBox.Text, 0.0, 1.0, out double alphaCutoff))
@@ -667,7 +723,17 @@ internal sealed class MaterialEditorWindow : Window
             clearcoat,
             clearcoatRoughness,
             normalScale,
-            occlusionStrength);
+            occlusionStrength,
+            specular,
+            specularColor,
+            sheenColor,
+            sheenRoughness,
+            anisotropy,
+            anisotropyRotation,
+            iridescence,
+            iridescenceIor,
+            iridescenceThicknessMinimum,
+            iridescenceThicknessMaximum);
         return true;
     }
 

@@ -11,13 +11,13 @@ namespace LightingShowcase.Rendering;
 internal sealed class WireframeFrameRenderer
 {
     /// <summary>Renders a wireframe view with solid visible lines and dashed hidden lines.</summary>
-    public RenderImage Render(Scene scene, Vec3 cameraPosition, CameraBasis basis, int width, int height, CancellationToken cancellationToken, out string details, Vec3 backgroundTop, Vec3 backgroundBottom)
+    public RenderImage Render(Scene scene, Vec3 cameraPosition, CameraBasis basis, int width, int height, CancellationToken cancellationToken, out string details, Vec3 backgroundTop, Vec3 backgroundBottom, double exposure)
     {
         Stopwatch stopwatch = Stopwatch.StartNew();
         uint[] pixels = new uint[checked(width * height)];
         double[] zBuffer = new double[pixels.Length];
         Array.Fill(zBuffer, double.PositiveInfinity);
-        BackgroundPainter.Clear(pixels, width, height, backgroundTop, backgroundBottom);
+        BackgroundPainter.Clear(pixels, width, height, backgroundTop, backgroundBottom, exposure);
         foreach (Triangle tri in scene.Triangles)
         {
             cancellationToken.ThrowIfCancellationRequested();

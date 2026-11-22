@@ -19,7 +19,7 @@ internal sealed class PreparedSceneCache
     }
 
     /// <summary>Returns the cached GPU scene, rebuilding buffers, atlas, and descriptors when stale.</summary>
-    public PreparedRasterScene GetOrCreate(GraphicsDevice gd, SharedRasterResources resources, Scene scene, CancellationToken token)
+    public PreparedRasterScene GetOrCreate(GraphicsDevice gd, SharedRasterResources resources, RasterShadowResources shadow, Scene scene, CancellationToken token)
     {
         bool requested = options.UseGpuTextureSampling;
         if (prepared != null &&
@@ -30,7 +30,7 @@ internal sealed class PreparedSceneCache
         prepared?.Dispose();
         prepared = null;
         log.ThrowIfCancellationRequested(token, "build cached Vulkan scene");
-        PreparedRasterScene built = new PreparedSceneBuilder(log).Build(gd, resources.Layout, scene, token, requested);
+        PreparedRasterScene built = new PreparedSceneBuilder(log).Build(gd, resources.Layout, shadow, scene, token, requested);
         prepared = built;
         return built;
     }

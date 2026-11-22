@@ -25,6 +25,9 @@ internal readonly struct GpuTriangle
     public readonly Vector4 UvC; // xy=UV C, zw=normal C.yz
     public readonly Vector4 TextureInfo; // x=base index, y=emissive index, z=alpha/double-sided flags, w=alpha cutoff
     public readonly Vector4 TextureInfo2; // x=MR index, y=normal index, z=occlusion index, w=occlusion strength
+    public readonly Vector4 OpticalFactors; // x=ior, y=thickness, z=clearcoat, w=clearcoat roughness
+    public readonly Vector4 Attenuation; // rgb=attenuation color, w=distance (0=infinite)
+    public readonly Vector4 TextureInfo3; // x=transmission index, y=clearcoat uses transmission, zw=reserved
 
     /// <summary>Packs a scene triangle and its material into GPU format.</summary>
     public GpuTriangle(Triangle triangle, IReadOnlyDictionary<TextureMap, int> textureIds)
@@ -70,6 +73,21 @@ internal readonly struct GpuTriangle
             TextureIndex(textureIds, material.NormalTexture),
             TextureIndex(textureIds, material.OcclusionTexture),
             (float)material.OcclusionStrength);
+        OpticalFactors = new Vector4(
+            (float)material.Ior,
+            (float)material.Thickness,
+            (float)material.Clearcoat,
+            (float)material.ClearcoatRoughness);
+        Attenuation = new Vector4(
+            (float)material.AttenuationColor.X,
+            (float)material.AttenuationColor.Y,
+            (float)material.AttenuationColor.Z,
+            (float)material.AttenuationDistance);
+        TextureInfo3 = new Vector4(
+            TextureIndex(textureIds, material.TransmissionTexture),
+            material.ClearcoatUsesTransmissionTexture ? 1.0f : 0.0f,
+            0.0f,
+            0.0f);
     }
 
     /// <summary>Returns the GPU texture index for a texture map.</summary>

@@ -15,6 +15,7 @@ internal sealed class RasterEngine
     private readonly RasterOptions options;
     private readonly RasterDeviceFactory devices;
     private readonly RasterPipelineFactory pipelines;
+    private readonly RasterShadowFactory shadows;
     private readonly PreparedSceneCache scenes;
     private readonly RasterTargetCache targets;
     private readonly FrameRenderer frames;
@@ -25,9 +26,10 @@ internal sealed class RasterEngine
         log = new RasterStageLog(options);
         devices = new RasterDeviceFactory(log, options, deviceSync);
         pipelines = new RasterPipelineFactory(log, deviceSync);
+        shadows = new RasterShadowFactory(log, deviceSync);
         scenes = new PreparedSceneCache(log, options);
         targets = new RasterTargetCache(log);
-        frames = new FrameRenderer(devices, targets, pipelines, scenes, log, options);
+        frames = new FrameRenderer(devices, targets, pipelines, shadows, scenes, log, options);
     }
 
     /// <summary>Renders one frame, serialized against disposal and renderer switches.</summary>
@@ -84,6 +86,7 @@ internal sealed class RasterEngine
                 targets.DisposeAll();
                 scenes.Release();
                 pipelines.Release();
+                shadows.Release();
                 devices.DisposeCurrent();
             }
         }

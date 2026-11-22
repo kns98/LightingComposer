@@ -19,6 +19,7 @@ public sealed class SceneLoadOptions
     public bool ReplaceScene { get; init; }
     public double? SimplifyKeepFraction { get; init; }
     public Action<ObjLoadProgress>? Progress { get; init; }
+    public string? Variant { get; init; }
 }
 
 public sealed class SceneSaveOptions

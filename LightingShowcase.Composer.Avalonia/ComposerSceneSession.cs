@@ -1148,7 +1148,8 @@ internal sealed partial class ComposerSceneSession : IDisposable
                     interactiveFast: interactive,
                     wireframe: renderOptions?.Wireframe == true,
                     backgroundTop: renderOptions?.BackgroundTop,
-                    backgroundBottom: renderOptions?.BackgroundBottom),
+                    backgroundBottom: renderOptions?.BackgroundBottom,
+                    exposure: renderOptions?.Exposure ?? 1.0),
 
                 ComposerRendererKind.VulkanRaster => VulkanRasterRenderer.Render(
                     scene,
@@ -1162,7 +1163,8 @@ internal sealed partial class ComposerSceneSession : IDisposable
                     out details,
                     wireframe: renderOptions?.Wireframe == true,
                     backgroundTop: renderOptions?.BackgroundTop,
-                    backgroundBottom: renderOptions?.BackgroundBottom),
+                    backgroundBottom: renderOptions?.BackgroundBottom,
+                    exposure: renderOptions?.Exposure ?? 1.0),
 
                 ComposerRendererKind.VulkanCompute => RenderVulkanCompute(
                     scene,

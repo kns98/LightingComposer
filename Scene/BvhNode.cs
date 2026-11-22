@@ -109,7 +109,7 @@ public sealed class BvhNode
                 if (hit == null || hit.T <= tMin || hit.T >= tMax)
                     continue;
 
-                double opacity = hit.Material.SampleAlpha(hit.TextureU, hit.TextureV) * (1.0 - hit.Material.Transmission * 0.82);
+                double opacity = hit.Material.SampleAlpha(hit.TextureU, hit.TextureV) * (1.0 - hit.Material.SampleTransmission(hit.TextureU, hit.TextureV) * 0.82);
                 remaining *= 1.0 - Math.Clamp(opacity, 0.0, 1.0);
                 samples++;
                 if (remaining <= 0.02 || samples >= maxSamples)

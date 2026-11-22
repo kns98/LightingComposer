@@ -10,10 +10,12 @@ internal sealed class FramePassRecorder
     private static readonly RgbaFloat ClearColor = new(0.035f, 0.040f, 0.050f, 1.0f);
 
     public void Record(
-        CommandList commandList, RasterTargets targets, SharedRasterResources resources,
+        CommandList commandList, RasterTargets targets, SharedRasterResources resources, RasterShadowResources shadow,
         PreparedRasterScene prepared, PreviewRangeSet? preview, bool wireframe, int width, int height)
     {
         commandList.Begin();
+        if (!wireframe && prepared.ShadowLights.Count > 0)
+            new ShadowPassRecorder().Record(commandList, shadow, prepared);
         commandList.SetFramebuffer(targets.Framebuffer);
         commandList.ClearColorTarget(0, ClearColor);
         commandList.ClearDepthStencil(1.0f);

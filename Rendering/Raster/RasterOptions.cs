@@ -24,6 +24,7 @@ internal sealed class RasterOptions
         "emissive" => 9,
         "direct" => 10,
         "ibl" => 11,
+        "shadow" => 12,
         _ => 0
     };
 

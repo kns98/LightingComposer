@@ -17,11 +17,12 @@ internal readonly struct RasterCameraConstants
     public readonly Vector4 CameraUp;
     public readonly Vector4 Projection; // x=aspect, y=tanHalfFov, z=near, w=far
     public readonly Vector4 Counts;     // x=lightCount, y=textureCount, z=debugMode, w=materialCount
+    public readonly Vector4 Exposure;   // x=exposure
 
     /// <summary>Initializes camera projection constants from position, basis, resolution, and counts.</summary>
     public RasterCameraConstants(
         Vec3 position, CameraBasis basis, int width, int height,
-        int lightCount, int textureCount, int debugMode, int materialCount, double farPlane)
+        int lightCount, int textureCount, int debugMode, int materialCount, double farPlane, double exposure = 1.0)
     {
         CameraPosition = position.ToVector4(1.0f);
         CameraForward = basis.Forward.ToVector4(0.0f);
@@ -36,5 +37,6 @@ internal readonly struct RasterCameraConstants
             Math.Max(0, textureCount),
             Math.Max(0, debugMode),
             Math.Max(0, materialCount));
+        Exposure = new Vector4((float)Math.Max(0.0, exposure), 0.0f, 0.0f, 0.0f);
     }
 }

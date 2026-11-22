@@ -112,6 +112,8 @@ layout(std140, set = 0, binding = 0) uniform CameraConstants
     vec4 Projection;
     // Store light and material counts
     vec4 Counts;
+    // Store exposure in x
+    vec4 Exposure;
 // End fragment camera block
 } Camera;
 
@@ -137,6 +139,20 @@ layout(std430, set = 0, binding = 3) readonly buffer MaterialBuffer
 layout(set = 0, binding = 4) uniform texture2DArray AtlasTexture;
 // Declare atlas texture sampler
 layout(set = 0, binding = 5) uniform sampler AtlasSampler;
+
+// Declare shadow camera rows buffer
+layout(std430, set = 0, binding = 6) readonly buffer ShadowCameraBuffer
+// Begin shadow camera block
+{
+    // Store packed shadow camera rows
+    vec4 ShadowRows[];
+// End shadow camera block
+};
+
+// Declare shadow map array
+layout(set = 0, binding = 7) uniform texture2DArray ShadowMaps;
+// Declare shadow map sampler
+layout(set = 0, binding = 8) uniform sampler ShadowSampler;
 
 // Declare texture addressing helper
 float addressTexture(float v, float mode)
@@ -205,6 +221,107 @@ vec4 sampleAtlasTexture(vec2 uv, vec4 atlasTransform, vec4 textureAddress, vec4 
     // Sample atlas array layer
     return texture(sampler2DArray(AtlasTexture, AtlasSampler), vec3(atlasUv, textureAddress.w));
 // End atlas sampling block
+}
+
+// Samples one 3x3 PCF shadow factor. The texel below must match RasterLimits.ShadowMapSize.
+// Declare shadow map sampling helper
+float sampleShadow(float layer, vec3 worldPos, vec3 normal)
+// Begin shadow sampling block
+{
+    // Offset receiver along normal against acne
+    vec3 biasedPos = worldPos + normal * 0.2;
+    // Decode shadow camera base index
+    int base = int(layer + 0.5) * 5;
+    // Read shadow camera position
+    vec3 camPos = ShadowRows[base].xyz;
+    // Read shadow camera forward
+    vec3 camForward = ShadowRows[base + 1].xyz;
+    // Read shadow camera right
+    vec3 camRight = ShadowRows[base + 2].xyz;
+    // Read shadow camera up
+    vec3 camUp = ShadowRows[base + 3].xyz;
+    // Read shadow projection parameters
+    vec4 proj = ShadowRows[base + 4];
+    // Compute position relative to light
+    vec3 rel = biasedPos - camPos;
+    // Project onto shadow right axis
+    float vx = dot(rel, camRight);
+    // Project onto shadow up axis
+    float vy = dot(rel, camUp);
+    // Project onto shadow forward axis
+    float vz = dot(rel, camForward);
+    // Clamp aspect ratio minimum
+    float aspect = max(proj.x, 0.0001);
+    // Read field of view factor
+    float tanHalfFov = proj.y;
+    // Clamp near plane minimum
+    float nearPlane = max(proj.z, 0.0);
+    // Ensure far plane beyond near
+    float farPlane = max(proj.w, nearPlane + 1.0);
+    // Normalize depth between planes
+    float ndcDepth = (vz - nearPlane) / (farPlane - nearPlane);
+    // Declare clip coordinates
+    vec2 clip;
+    // Declare clip divisor
+    float w;
+    // Test orthographic projection mode
+    if (tanHalfFov < 0.0)
+    // Begin orthographic block
+    {
+        // Decode orthographic half height
+        float halfH = max(-tanHalfFov, 0.0001);
+        // Decode orthographic half width
+        float halfW = max(aspect * halfH, 0.0001);
+        // Map to post-flip clip coordinates
+        clip = vec2(-vx / halfW, -(vy / halfH));
+        // Use unit orthographic divisor
+        w = 1.0;
+    // End orthographic block
+    }
+    else
+    // Begin perspective block
+    {
+        // Clamp field of view factor
+        float t = max(tanHalfFov, 0.0001);
+        // Map to post-flip clip coordinates
+        clip = vec2(-vx / (aspect * t), -(vy / t));
+        // Use view depth divisor
+        w = vz;
+        // Test geometry behind light
+        if (w <= 0.0)
+            // Leave unshadowed behind light
+            return 1.0;
+    // End perspective block
+    }
+    // Map clip to shadow UV
+    vec2 uv = clip / w * 0.5 + 0.5;
+    // Test frustum bounds
+    if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0 || ndcDepth > 1.0 || ndcDepth < 0.0)
+        // Leave outside pixels unshadowed
+        return 1.0;
+    // Measure shadow texel size from fixed map dimensions
+    vec2 texel = vec2(1.0 / 512.0);
+    // Accumulate PCF kernel taps
+    float sum = 0.0;
+    // Loop over kernel rows
+    for (int oy = -1; oy <= 1; oy++)
+    // Begin kernel row loop
+    {
+        // Loop over kernel columns
+        for (int ox = -1; ox <= 1; ox++)
+        // Begin kernel column loop
+        {
+            // Sample stored occluder depth
+            float occluder = texture(sampler2DArray(ShadowMaps, ShadowSampler), vec3(uv + vec2(ox, oy) * texel, layer)).r;
+            // Compare against biased receiver depth
+            sum += occluder + 0.0005 >= ndcDepth ? 1.0 : 0.0;
+        // End kernel column loop
+        }
+    // End kernel row loop
+    }
+    // Return averaged shadow factor
+    return sum / 9.0;
+// End shadow sampling block
 }
 
 // Declare sRGB to linear helper
@@ -828,6 +945,12 @@ void main()
         vec3 diffuse = (vec3(1.0) - fresnel) * (1.0 - metallic) * baseColor / PI;
         // Scale light color by falloff
         vec3 radiance = light.ColorIntensity.rgb * light.ColorIntensity.w * attenuation * cone * 0.18;
+        // Read shadow map layer
+        float shadowLayer = light.ConeEnabled.z;
+        // Test shadow map presence
+        if (shadowLayer > -0.5)
+            // Scale radiance by shadow factor
+            radiance *= sampleShadow(shadowLayer, fsWorldPos, normal);
         // Accumulate diffuse plus specular lighting
         directLighting += (diffuse + specular) * radiance * nDotL;
 
@@ -889,6 +1012,36 @@ void main()
         // Exit after indirect debug output
         return;
     // End indirect debug block
+    }
+    // Test shadow debug view
+    if (debugMode == 12)
+    // Begin shadow debug block
+    {
+        // Default shadow factor to lit
+        float shadowDebug = 1.0;
+        // Loop over active lights
+        for (int debugLight = 0; debugLight < lightCount; debugLight++)
+        // Begin shadow debug loop
+        {
+            // Read shadow map layer
+            float debugLayer = Lights[debugLight].ConeEnabled.z;
+            // Test shadow map presence
+            if (debugLayer > -0.5)
+            // Begin shadow debug sample block
+            {
+                // Sample first shadow map factor
+                shadowDebug = sampleShadow(debugLayer, fsWorldPos, normal);
+                // Stop after first shadow map
+                break;
+            // End shadow debug sample block
+            }
+        // End shadow debug loop
+        }
+        // Output shadow factor debug grayscale
+        outColor = vec4(vec3(shadowDebug), 1.0);
+        // Exit after shadow debug output
+        return;
+    // End shadow debug block
     }
 
     // Sum direct and indirect lighting
@@ -981,7 +1134,7 @@ void main()
     float outputAlpha = alphaMode == 2 ? alpha : 1.0;
 
     // Tone map and encode output
-    vec3 outputColor = linearToSrgb(pbrNeutralToneMap(linearColor));
+    vec3 outputColor = linearToSrgb(pbrNeutralToneMap(linearColor * max(Camera.Exposure.x, 0.0)));
     // Write final fragment color
     outColor = vec4(outputColor, outputAlpha);
 // End main function

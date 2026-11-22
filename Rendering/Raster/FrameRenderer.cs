@@ -2,6 +2,7 @@
 // Purpose: Orchestrates one hardware-rasterized frame from caches to readback.
 
 using System.Diagnostics;
+using System.Numerics;
 using Veldrid;
 
 namespace LightingShowcase.Rendering;
@@ -11,17 +12,19 @@ internal sealed class FrameRenderer
     private readonly RasterDeviceFactory devices;
     private readonly RasterTargetCache targets;
     private readonly RasterPipelineFactory pipelines;
+    private readonly RasterShadowFactory shadows;
     private readonly PreparedSceneCache scenes;
     private readonly RasterStageLog log;
     private readonly RasterOptions options;
 
     public FrameRenderer(
         RasterDeviceFactory devices, RasterTargetCache targets, RasterPipelineFactory pipelines,
-        PreparedSceneCache scenes, RasterStageLog log, RasterOptions options)
+        RasterShadowFactory shadows, PreparedSceneCache scenes, RasterStageLog log, RasterOptions options)
     {
         this.devices = devices;
         this.targets = targets;
         this.pipelines = pipelines;
+        this.shadows = shadows;
         this.scenes = scenes;
         this.log = log;
         this.options = options;
@@ -43,10 +46,11 @@ internal sealed class FrameRenderer
         phase.Restart();
         RasterTargets rasterTargets = targets.GetOrCreate(gd, request.Width, request.Height);
         SharedRasterResources resources = pipelines.GetOrCreate(gd, rasterTargets.Framebuffer.OutputDescription);
+        RasterShadowResources shadow = shadows.GetOrCreate(gd);
         long targetMs = phase.ElapsedMilliseconds;
 
         phase.Restart();
-        PreparedRasterScene prepared = scenes.GetOrCreate(gd, resources, request.Scene, request.Token);
+        PreparedRasterScene prepared = scenes.GetOrCreate(gd, resources, shadow, request.Scene, request.Token);
         long prepareMs = phase.ElapsedMilliseconds;
 
         phase.Restart();
@@ -57,20 +61,22 @@ internal sealed class FrameRenderer
         double cameraFar = CameraPlanes.CachedFarPlane(prepared.Stats.BoundingCenter, prepared.Stats.BoundingRadius, request.CameraPosition);
         gd.UpdateBuffer(prepared.Buffers.Camera, 0, new RasterCameraConstants(
             request.CameraPosition, request.Basis, request.Width, request.Height,
-            prepared.Stats.LightCount, prepared.Stats.TextureCount, options.RasterDebugMode, prepared.Stats.MaterialCount, cameraFar));
+            prepared.Stats.LightCount, prepared.Stats.TextureCount, options.RasterDebugMode, prepared.Stats.MaterialCount, cameraFar, request.Exposure));
         PreviewRangeSet? previewRanges = null;
         if (request.TransformPreview != null && !request.TransformPreview.IsIdentity && request.TransformPreview.GroupIds.Count > 0)
         {
             gd.UpdateBuffer(prepared.Buffers.PreviewTransform, 0, new RasterTransformConstants(request.TransformPreview));
             previewRanges = prepared.PreviewCache.GetOrCreate(request.TransformPreview, prepared.GroupRanges);
         }
-        gd.UpdateBuffer(resources.BackgroundConstants, 0, new RasterBackgroundConstants(request.BackgroundTop, request.BackgroundBottom));
+        gd.UpdateBuffer(resources.BackgroundConstants, 0, new RasterBackgroundConstants(request.BackgroundTop, request.BackgroundBottom, request.Exposure));
+        if (!request.Wireframe && prepared.ShadowLights.Count > 0)
+            UpdateShadowCameras(gd, shadow, prepared);
         long uniformMs = phase.ElapsedMilliseconds;
 
         log.ThrowIfCancellationRequested(request.Token, "record Vulkan raster command list");
         phase.Restart();
         new FramePassRecorder().Record(
-            rasterTargets.CommandList, rasterTargets, resources, prepared, previewRanges, request.Wireframe, request.Width, request.Height);
+            rasterTargets.CommandList, rasterTargets, resources, shadow, prepared, previewRanges, request.Wireframe, request.Width, request.Height);
         long recordMs = phase.ElapsedMilliseconds;
 
         log.ThrowIfCancellationRequested(request.Token, "submit Vulkan raster command list");
@@ -90,5 +96,14 @@ internal sealed class FrameRenderer
         details = FrameDetails.Build(request, prepared, timings, total.ElapsedMilliseconds);
         log.Stage(details);
         return image;
+    }
+
+    /// <summary>Uploads per-frame shadow camera rows to the shared shadow buffers.</summary>
+    private static void UpdateShadowCameras(GraphicsDevice gd, RasterShadowResources shadow, PreparedRasterScene prepared)
+    {
+        Vector4[] rows = ShadowCameraBuilder.BuildFrameRows(prepared.ShadowLights, prepared.Stats.BoundingCenter, prepared.Stats.BoundingRadius);
+        gd.UpdateBuffer(shadow.ShadowMatrices, 0, rows);
+        for (int layer = 0; layer < RasterLimits.MaxShadowLights; layer++)
+            gd.UpdateBuffer(shadow.LayerUniforms[layer], 0, rows.AsSpan(layer * 5, 5).ToArray());
     }
 }

@@ -13,7 +13,8 @@ internal sealed class SceneBufferFactory
     /// <summary>Creates sized vertex, uniform, storage, atlas, and descriptor resources.</summary>
     public SceneGpuResources Create(
         ResourceFactory factory, ResourceLayout layout,
-        RasterGeometryBuildResult geometry, int lightCount, TextureBuildResult textures)
+        RasterGeometryBuildResult geometry, int lightCount, TextureBuildResult textures,
+        RasterShadowResources shadow)
     {
         int vertexStride = Marshal.SizeOf<RasterVertex>();
         int lightStride = Marshal.SizeOf<RasterLight>();
@@ -47,9 +48,11 @@ internal sealed class SceneBufferFactory
         SceneDescriptorSets descriptors = new()
         {
             Identity = scope.Track(factory.CreateResourceSet(new ResourceSetDescription(
-                layout, camera, identityTransform, light, material, atlas, sampler))),
+                layout, camera, identityTransform, light, material, atlas, sampler,
+                shadow.ShadowMatrices, shadow.ShadowMaps, shadow.ShadowSampler))),
             Preview = scope.Track(factory.CreateResourceSet(new ResourceSetDescription(
-                layout, camera, previewTransform, light, material, atlas, sampler)))
+                layout, camera, previewTransform, light, material, atlas, sampler,
+                shadow.ShadowMatrices, shadow.ShadowMaps, shadow.ShadowSampler)))
         };
 
         scope.Commit();

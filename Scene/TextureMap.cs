@@ -7,6 +7,7 @@
 
 using LightingShowcase.Math3D;
 using LightingShowcase.Rendering;
+using SkiaSharp;
 using StbImageSharp;
 
 namespace LightingShowcase.SceneGraph;
@@ -212,16 +213,17 @@ public sealed partial class TextureMap
         if (resolved == null)
             throw new FileNotFoundException("Texture image file was not found.", path);
 
-        using FileStream stream = File.OpenRead(resolved);
-        return FromEncodedStream(Path.GetFileName(resolved), stream, resolved);
+        return FromBytes(Path.GetFileName(resolved), File.ReadAllBytes(resolved), resolved);
     }
 
-    /// <summary>Loads an encoded PNG/JPEG/BMP/TGA/PSD/GIF/HDR image from memory.</summary>
+    /// <summary>Loads an encoded PNG/JPEG/BMP/TGA/PSD/GIF/HDR/WebP image from memory.</summary>
     public static TextureMap FromBytes(string name, byte[] encodedBytes, string? sourcePath = null)
     {
         if (encodedBytes == null || encodedBytes.Length == 0)
             throw new ArgumentException("Encoded texture bytes are required.", nameof(encodedBytes));
 
+        if (IsWebP(encodedBytes))
+            return FromWebPBytes(name, encodedBytes, sourcePath);
         using MemoryStream stream = new(encodedBytes, writable: false);
         return FromEncodedStream(name, stream, sourcePath);
     }
@@ -243,6 +245,46 @@ public sealed partial class TextureMap
             int offset = i * 4;
             pixels[i] = new Vec3(rgba[offset] / 255.0, rgba[offset + 1] / 255.0, rgba[offset + 2] / 255.0);
             alpha[i] = rgba[offset + 3] / 255.0;
+        }
+
+        return new TextureMap(name, width, height, pixels, alpha, sourcePath);
+    }
+
+    /// <summary>Returns true when the bytes carry a WebP container signature.</summary>
+    private static bool IsWebP(byte[] encodedBytes) =>
+        encodedBytes.Length >= 12 &&
+        encodedBytes[0] == (byte)'R' && encodedBytes[1] == (byte)'I' && encodedBytes[2] == (byte)'F' && encodedBytes[3] == (byte)'F' &&
+        encodedBytes[8] == (byte)'W' && encodedBytes[9] == (byte)'E' && encodedBytes[10] == (byte)'B' && encodedBytes[11] == (byte)'P';
+
+    /// <summary>Decodes WebP bytes with SkiaSharp into straight-alpha RGBA pixels.</summary>
+    private static TextureMap FromWebPBytes(string name, byte[] encodedBytes, string? sourcePath)
+    {
+        using SKCodec codec = SKCodec.Create(new MemoryStream(encodedBytes, writable: false))
+            ?? throw new InvalidDataException("Texture WebP image could not be decoded.");
+        int width = codec.Info.Width;
+        int height = codec.Info.Height;
+        if (width <= 0 || height <= 0)
+            throw new InvalidDataException("Texture WebP image has invalid dimensions.");
+
+        SKImageInfo info = new(width, height, SKColorType.Rgba8888, SKAlphaType.Unpremul);
+        using SKBitmap bitmap = new(info);
+        if (codec.GetPixels(bitmap.Info, bitmap.GetPixels(out _)) != SKCodecResult.Success)
+            throw new InvalidDataException("Texture WebP pixels could not be decoded.");
+
+        SKPixmap pixmap = bitmap.PeekPixels();
+        ReadOnlySpan<byte> span = pixmap.GetPixelSpan();
+        int stride = pixmap.RowBytes;
+        Vec3[] pixels = new Vec3[checked(width * height)];
+        double[] alpha = new double[pixels.Length];
+        for (int y = 0; y < height; y++)
+        {
+            for (int x = 0; x < width; x++)
+            {
+                int offset = y * stride + x * 4;
+                int i = y * width + x;
+                pixels[i] = new Vec3(span[offset] / 255.0, span[offset + 1] / 255.0, span[offset + 2] / 255.0);
+                alpha[i] = span[offset + 3] / 255.0;
+            }
         }
 
         return new TextureMap(name, width, height, pixels, alpha, sourcePath);

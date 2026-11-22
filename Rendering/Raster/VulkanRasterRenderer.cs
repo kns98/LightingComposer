@@ -41,9 +41,9 @@ public static class VulkanRasterRenderer
     public static RenderImage Render(
         Scene scene, Vec3 cameraPosition, CameraBasis basis, int width, int height,
         CancellationToken cancellationToken, out string details,
-        Vec3? backgroundTop = null, Vec3? backgroundBottom = null) =>
+        Vec3? backgroundTop = null, Vec3? backgroundBottom = null, double exposure = 1.0) =>
         Render(scene, cameraPosition, basis, width, height, null, null, cancellationToken, out details,
-            backgroundTop: backgroundTop, backgroundBottom: backgroundBottom);
+            backgroundTop: backgroundTop, backgroundBottom: backgroundBottom, exposure: exposure);
 
     /// <summary>
     /// Renders with an optional editor-only transform. The preview updates one small
@@ -52,9 +52,9 @@ public static class VulkanRasterRenderer
     public static RenderImage Render(
         Scene scene, Vec3 cameraPosition, CameraBasis basis, int width, int height,
         VulkanRasterTransformPreview? preview, CancellationToken cancellationToken, out string details,
-        Vec3? backgroundTop = null, Vec3? backgroundBottom = null) =>
+        Vec3? backgroundTop = null, Vec3? backgroundBottom = null, double exposure = 1.0) =>
         Render(scene, cameraPosition, basis, width, height, preview, null, cancellationToken, out details,
-            backgroundTop: backgroundTop, backgroundBottom: backgroundBottom);
+            backgroundTop: backgroundTop, backgroundBottom: backgroundBottom, exposure: exposure);
 
     /// <summary>
     /// Renders with optional whole-object and mesh-component editor previews.
@@ -64,7 +64,7 @@ public static class VulkanRasterRenderer
         Scene scene, Vec3 cameraPosition, CameraBasis basis, int width, int height,
         VulkanRasterTransformPreview? preview, VulkanRasterMeshEditPreview? meshEditPreview,
         CancellationToken cancellationToken, out string details, bool wireframe = false,
-        Vec3? backgroundTop = null, Vec3? backgroundBottom = null) =>
+        Vec3? backgroundTop = null, Vec3? backgroundBottom = null, double exposure = 1.0) =>
         Engine.Render(new FrameRequest(scene, cameraPosition, basis, width, height, preview, meshEditPreview, cancellationToken, wireframe,
-            backgroundTop ?? RenderSettings.DefaultBackgroundTop, backgroundBottom ?? RenderSettings.DefaultBackgroundBottom), out details);
+            backgroundTop ?? RenderSettings.DefaultBackgroundTop, backgroundBottom ?? RenderSettings.DefaultBackgroundBottom, exposure), out details);
 }

@@ -16,7 +16,7 @@ public sealed class RenderRequest
     [
         "input", "output", "width", "height", "samples", "bounces",
         "camera-position", "camera-target", "camera-up", "fov", "zoom", "light",
-        "frames", "fps",
+        "frames", "fps", "view", "variant",
         "exposure", "ambient", "background-top", "background-bottom",
         "shadows", "no-shadows", "renderer", "help"
     ];
@@ -35,6 +35,8 @@ public sealed class RenderRequest
     public IReadOnlyList<LightRequest> Lights { get; set; } = Array.Empty<LightRequest>();
     public int Frames { get; set; } = 1;
     public int Fps { get; set; } = 12;
+    public string View { get; set; } = "auto";
+    public string? Variant { get; set; }
     public double Exposure { get; set; } = 1.0;
     public double AmbientStrength { get; set; } = 1.0;
     public string? BackgroundTop { get; set; }
@@ -70,6 +72,8 @@ public sealed class RenderRequest
             Lights = values.GetAll("light").Select((spec, index) => LightRequest.Parse(spec, index)).ToList(),
             Frames = values.GetInt("frames", 1, 1, 360),
             Fps = values.GetInt("fps", 12, 1, 50),
+            View = values.Get("view") ?? "auto",
+            Variant = values.Get("variant"),
             Exposure = values.GetDouble("exposure", 1.0, 0.01, 100.0),
             AmbientStrength = values.GetDouble("ambient", 1.0, 0.0, 100.0),
             BackgroundTop = values.Get("background-top"),
@@ -141,6 +145,8 @@ public sealed class RenderRequest
         if (Fps is < 1 or > 50) throw new ArgumentOutOfRangeException(nameof(Fps), "Fps must be between 1 and 50.");
         if (Frames > 1 && !string.IsNullOrWhiteSpace(Output) && !Output.EndsWith(".gif", StringComparison.OrdinalIgnoreCase))
             throw new ArgumentException("Turntable animation output must end with .gif.");
+        if (!CameraViews.IsKnownView(View))
+            throw new ArgumentException($"Unknown view '{View}'. Use auto, front, left, right, or top.");
         if (Exposure is < 0.01 or > 100.0) throw new ArgumentOutOfRangeException(nameof(Exposure), "Exposure must be between 0.01 and 100.");
         if (AmbientStrength is < 0.0 or > 100.0) throw new ArgumentOutOfRangeException(nameof(AmbientStrength), "Ambient strength must be between 0 and 100.");
         if (Backend is RenderBackend.VulkanDiagnostic) throw new ArgumentOutOfRangeException(nameof(Backend), "Vulkan diagnostic is not one of the four command-line renderers.");

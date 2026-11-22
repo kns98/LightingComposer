@@ -12,7 +12,7 @@ internal sealed class TriangleRasterizer
     /// <summary>Projects and shades one triangle into the pixel and depth buffers.</summary>
     public void Rasterize(
         uint[] pixels, double[] zBuffer, int width, int height, Triangle tri,
-        Vec3 cameraPosition, CameraBasis basis, IReadOnlyList<PreparedLight> lights, bool interactiveFast)
+        Vec3 cameraPosition, CameraBasis basis, IReadOnlyList<PreparedLight> lights, bool interactiveFast, double exposure)
     {
         if (!CameraProjector.TryProject(tri.A, cameraPosition, basis, width, height, out ProjectedVertex a) ||
             !CameraProjector.TryProject(tri.B, cameraPosition, basis, width, height, out ProjectedVertex b) ||
@@ -56,11 +56,20 @@ internal sealed class TriangleRasterizer
 
                 Vec3 world = tri.A * wa + tri.B * wb + tri.C * wc;
                 PixelSample sample = new(tri, wa, wb, wc, world, normal, cameraPosition, lights);
-                if (!shader.TryShade(in sample, out Vec3 shaded))
+                if (!shader.TryShade(in sample, out Vec3 shaded, out double alpha))
                     continue;
 
-                zBuffer[pixel] = depth;
-                pixels[row + x] = ColorMath.PackShaded(shaded);
+                if (alpha >= 0.999)
+                {
+                    zBuffer[pixel] = depth;
+                    pixels[row + x] = ColorMath.PackShaded(shaded, exposure);
+                }
+                else
+                {
+                    Vec3 dst = ColorMath.UnpackDisplay(pixels[row + x]);
+                    Vec3 src = ColorMath.ToDisplay(shaded, exposure);
+                    pixels[row + x] = ColorMath.PackDisplay(Vec3.Lerp(dst, src, Math.Clamp(alpha, 0.0, 1.0)));
+                }
             }
         }
     }

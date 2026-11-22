@@ -30,6 +30,9 @@ struct GpuTriangle
     vec4 uvC;           // xy=UV C, zw=normal C.yz
     vec4 textureInfo;   // x=base index, y=emissive index, z=alpha/double-sided flags, w=alpha cutoff
     vec4 textureInfo2;  // x=MR index, y=normal index, z=occlusion index, w=occlusion strength
+    vec4 opticalFactors;// x=ior, y=thickness, z=clearcoat, w=clearcoat roughness
+    vec4 attenuation;   // rgb=attenuation color, w=distance (0=infinite)
+    vec4 textureInfo3;  // x=transmission index, y=clearcoat uses transmission, zw=reserved
 // End GpuTriangle struct
 };
 
@@ -118,6 +121,8 @@ struct GpuTextureInfo
 // Begin GpuTextureInfo struct
 {
     vec4 data; // x=pixel offset, y=width, z=height, w=reserved
+    vec4 textureTransform; // xy=offset, zw=scale
+    vec4 textureAddress; // x=wrapU, y=wrapV, z=rotation, w=reserved
 // End GpuTextureInfo struct
 };
 
@@ -160,6 +165,16 @@ struct Hit
     float occlusion;
     // Hit texture coordinates
     vec2 uv;
+    // Hit clearcoat layer weight
+    float clearcoat;
+    // Hit clearcoat roughness
+    float clearcoatRoughness;
+    // Hit volume thickness
+    float thickness;
+    // Hit attenuation color
+    vec3 attenuationColor;
+    // Hit attenuation distance
+    float attenuationDistance;
 // End Hit struct
 };
 
@@ -248,20 +263,64 @@ bool intersectTriangle(vec3 ro, vec3 rd, vec3 v0, vec3 v1, vec3 v2, out float t,
 // End intersectTriangle function
 }
 
-// Wraps a coordinate for repeat addressing while keeping exact 1.0 on the edge.
-// Declare UV wrap function
-float wrap01PreserveEdge(float value)
-// Begin wrap function
+// Addresses one coordinate with the texture wrap mode (0 repeat, 1 clamp, 2 mirror).
+// Declare texture addressing function
+float addressTexture(float v, float mode)
+// Begin addressing function
 {
     // Sanitize invalid coordinates
-    if (isnan(value) || isinf(value)) return 0.0;
-    // Keep in-range values unchanged
-    if (value >= 0.0 && value <= 1.0) return value;
-    // Wrap to fractional part
-    value = fract(value);
+    if (isnan(v) || isinf(v)) return 0.0;
+    // Detect clamp addressing mode
+    if (mode > 0.5 && mode < 1.5)
+        // Clamp coordinate into range
+        return clamp(v, 0.0, 1.0);
+    // Detect mirrored repeat mode
+    if (mode > 1.5)
+    // Begin mirror addressing block
+    {
+        // Find integer repeat count
+        float floorValue = floor(v);
+        // Find fractional local coordinate
+        float local = v - floorValue;
+        // Mirror alternate repeats
+        return mod(floorValue, 2.0) == 0.0 ? local : 1.0 - local;
+    // End mirror addressing block
+    }
+    // Pass through in range coordinates
+    if (v >= 0.0 && v <= 1.0)
+        // Return already valid coordinate
+        return v;
+    // Wrap coordinate with fraction
+    float wrapped = fract(v);
     // Shift negatives into range
-    return value < 0.0 ? value + 1.0 : value;
-// End wrap function
+    return wrapped < 0.0 ? wrapped + 1.0 : wrapped;
+// End addressing function
+}
+
+// Applies the texture scale rotation offset transform to UV coordinates.
+// Declare UV transform function
+vec2 applyTextureTransform(vec2 uv, vec4 textureTransform, float rotation)
+// Begin UV transform function
+{
+    // Scale UV by transform factor
+    vec2 transformed = uv * textureTransform.zw;
+    // Skip rotation when nearly zero
+    if (abs(rotation) > 0.000001)
+    // Begin UV rotation block
+    {
+        // Compute rotation cosine factor
+        float c = cos(rotation);
+        // Compute rotation sine factor
+        float s = sin(rotation);
+        // Rotate scaled UV coordinates
+        transformed = vec2(transformed.x * c - transformed.y * s, transformed.x * s + transformed.y * c);
+    // End UV rotation block
+    }
+    // Add UV offset translation
+    transformed += textureTransform.xy;
+    // Return transformed coordinates
+    return transformed;
+// End UV transform function
 }
 
 // Unpacks a packed RGBA32 texel into linear float components.
@@ -296,10 +355,12 @@ vec4 sampleBaseTexture(uint textureIndex, vec2 uv)
     // Decode texture height
     uint texHeight = max(uint(info.data.z + 0.5), 1u);
 
+    // Apply texture transform
+    vec2 transformed = applyTextureTransform(uv, info.textureTransform, info.textureAddress.z);
     // Wrap horizontal coordinate
-    float u = wrap01PreserveEdge(uv.x);
+    float u = addressTexture(transformed.x, info.textureAddress.x);
     // Wrap vertical coordinate
-    float v = wrap01PreserveEdge(uv.y);
+    float v = addressTexture(transformed.y, info.textureAddress.y);
     // Scale u to texel space
     float fx = texWidth == 1u ? 0.0 : u * float(texWidth - 1u);
     // Scale v to texel space
@@ -758,6 +819,16 @@ Hit traceClosest(vec3 ro, vec3 rd, float maxT, uint ignoreIndex)
     h.occlusion = 1.0;
     // Initialize zero UVs
     h.uv = vec2(0.0);
+    // Initialize absent clearcoat layer
+    h.clearcoat = 0.0;
+    // Initialize default clearcoat roughness
+    h.clearcoatRoughness = 1.0;
+    // Initialize zero volume thickness
+    h.thickness = 0.0;
+    // Initialize white attenuation color
+    h.attenuationColor = vec3(1.0);
+    // Initialize infinite attenuation distance
+    h.attenuationDistance = 0.0;
 
     // Read BVH node count
     uint nodeCount = constants.bvhParams.x;
@@ -829,14 +900,19 @@ Hit traceClosest(vec3 ro, vec3 rd, float maxT, uint ignoreIndex)
                 if (intersectTriangle(ro, rd, tri.a.xyz, tri.b.xyz, tri.c.xyz, t, n, bary) && t < h.t)
                 // Begin closer-hit block
                 {
+                    // Decode alpha flags
+                    int alphaFlags = int(round(tri.textureInfo.z));
+                    // Cull single-sided backfaces
+                    vec3 faceNormal = normalize(cross(tri.b.xyz - tri.a.xyz, tri.c.xyz - tri.a.xyz));
+                    if (dot(faceNormal, rd) > 0.0 && (alphaFlags & 4) == 0)
+                        // Skip culled backface hit
+                        continue;
                     // Compute third barycentric weight
                     float w = 1.0 - bary.x - bary.y;
                     // Interpolate hit UVs
                     vec2 hitUv = tri.uvA.xy * w + tri.uvB.xy * bary.x + tri.uvC.xy * bary.y;
                     // Sample base color
                     vec4 sampledBase = triangleBaseColorAt(tri, hitUv);
-                    // Decode alpha flags
-                    int alphaFlags = int(round(tri.textureInfo.z));
                     // Extract alpha mode bits
                     int alphaMode = alphaFlags & 3;
                     // Test alpha cutoff discard
@@ -879,6 +955,26 @@ Hit traceClosest(vec3 ro, vec3 rd, float maxT, uint ignoreIndex)
                     h.roughness = mr.y;
                     // Record transmission factor
                     h.transmission = clamp(tri.materialParams.z, 0.0, 1.0);
+                    // Decode transmission texture index
+                    int transmissionIndex = textureIndex(tri.textureInfo3.x);
+                    // Check for transmission texture
+                    if (transmissionIndex >= 0)
+                        // Modulate transmission by mask
+                        h.transmission *= clamp(sampleBaseTexture(uint(transmissionIndex), hitUv).r, 0.0, 1.0);
+                    // Record clearcoat layer weight
+                    h.clearcoat = clamp(tri.opticalFactors.z, 0.0, 1.0);
+                    // Check for shared clearcoat mask
+                    if (tri.textureInfo3.y > 0.5 && transmissionIndex >= 0)
+                        // Reuse transmission mask for clearcoat
+                        h.clearcoat *= clamp(sampleBaseTexture(uint(transmissionIndex), hitUv).r, 0.0, 1.0);
+                    // Record clearcoat roughness
+                    h.clearcoatRoughness = clamp(tri.opticalFactors.w, 0.045, 1.0);
+                    // Record volume thickness
+                    h.thickness = max(tri.opticalFactors.y, 0.0);
+                    // Record attenuation color
+                    h.attenuationColor = tri.attenuation.rgb;
+                    // Record attenuation distance
+                    h.attenuationDistance = tri.attenuation.w;
                     // Record occlusion factor
                     h.occlusion = triangleOcclusionAt(tri, hitUv);
                     // Record hit UVs
@@ -964,7 +1060,7 @@ float shadowFactor(vec3 point, vec3 normal, vec3 lightDir, float maxDistance, ui
 
 // Computes diffuse plus specular PBR lighting from one light.
 // Declare single light PBR evaluator
-vec3 lightContribution(vec3 baseColor, vec3 normal, vec3 view, vec3 lightDir, vec3 lightColor, float strength, float metallic, float roughness)
+vec3 lightContribution(vec3 baseColor, vec3 normal, vec3 view, vec3 lightDir, vec3 lightColor, float strength, float metallic, float roughness, float clearcoat, float clearcoatRoughness)
 // Begin light contribution function
 {
     // Compute clamped light facing factor
@@ -994,10 +1090,31 @@ vec3 lightContribution(vec3 baseColor, vec3 normal, vec3 view, vec3 lightDir, ve
     vec3 specular = distribution * visibility * fresnel;
     // Compute metallic aware diffuse term
     vec3 diffuse = (vec3(1.0) - fresnel) * (1.0 - metallic) * baseColor / PI;
+    // Combine base BRDF terms
+    vec3 brdf = diffuse + specular;
+    // Test clearcoat layer presence
+    if (clearcoat > 0.001)
+    // Begin clearcoat direct block
+    {
+        // Square clearcoat roughness value
+        float clearcoatAlpha = clearcoatRoughness * clearcoatRoughness;
+        // Evaluate clearcoat GGX distribution
+        float clearcoatDistribution = distributionGgx(nDotH, clearcoatAlpha);
+        // Evaluate clearcoat geometry term
+        float clearcoatVisibility = visibilitySmithGgxCorrelated(nDotV, nDotL, clearcoatAlpha);
+        // Evaluate clearcoat Fresnel term
+        vec3 clearcoatFresnel = fresnelSchlick(vDotH, vec3(0.04));
+        // Evaluate clearcoat view fresnel
+        float clearcoatViewFresnel = 0.04 + 0.96 * pow(1.0 - nDotV, 5.0);
+        // Layer clearcoat over scaled base
+        brdf = brdf * (1.0 - clearcoat * clearcoatViewFresnel) +
+            clearcoatFresnel * (clearcoat * clearcoatDistribution * clearcoatVisibility);
+    // End clearcoat direct block
+    }
     // Scale light color by intensity
     vec3 radiance = lightColor * strength * 0.18;
     // Return shaded light contribution result
-    return (diffuse + specular) * radiance * nDotL;
+    return brdf * radiance * nDotL;
 // End light contribution function
 }
 
@@ -1080,8 +1197,28 @@ vec3 environmentLighting(Hit h, vec3 view)
     vec3 broadSpecular = diffuseEnvironment(h.normal);
     // Blend reflections by surface roughness
     vec3 specular = mix(sharpSpecular, broadSpecular, h.roughness * h.roughness) * fresnel;
+    // Combine indirect lighting
+    vec3 indirect = diffuse + specular;
+    // Test clearcoat layer presence
+    if (h.clearcoat > 0.001)
+    // Begin clearcoat indirect block
+    {
+        // Evaluate clearcoat view fresnel
+        float clearcoatViewFresnel = 0.04 + 0.96 * pow(1.0 - nDotV, 5.0);
+        // Blend clearcoat environment reflections
+        vec3 clearcoatIbl = mix(sharpSpecular, broadSpecular, h.clearcoatRoughness * h.clearcoatRoughness) * clearcoatViewFresnel * h.clearcoat;
+        // Scale indirect by clearcoat layer
+        indirect = indirect * (1.0 - h.clearcoat * clearcoatViewFresnel);
+        // Scale combined IBL output
+        indirect *= h.occlusion * 0.72 * max(constants.lightingOptions.x, 0.0);
+        // Add clearcoat indirect
+        indirect += clearcoatIbl;
+        // Return layered indirect lighting
+        return indirect;
+    // End clearcoat indirect block
+    }
     // Return occlusion scaled environment lighting
-    return (diffuse + specular) * h.occlusion * 0.72 * max(constants.lightingOptions.x, 0.0);
+    return indirect * h.occlusion * 0.72 * max(constants.lightingOptions.x, 0.0);
 // End environment lighting function
 }
 
@@ -1168,7 +1305,7 @@ vec3 directLighting(Hit h, vec3 incomingDirection)
             // Use full light without shadows
             : 1.0;
         // Accumulate shaded light contribution
-        color += lightContribution(h.baseColor, h.normal, view, lightDir, lightColor, strength * shadow, h.metallic, h.roughness);
+        color += lightContribution(h.baseColor, h.normal, view, lightDir, lightColor, strength * shadow, h.metallic, h.roughness, h.clearcoat, h.clearcoatRoughness);
     // End per-light loop
     }
 
@@ -1206,6 +1343,18 @@ vec3 cosineHemisphere(vec3 n)
 // End hemisphere sampler function
 }
 
+// Evaluates Beer-Lambert volume attenuation for transmitted light.
+// Declare volume attenuation function
+vec3 volumeAttenuation(vec3 attenuationColor, float thickness, float attenuationDistance, vec3 normal, vec3 viewDir)
+// Begin volume attenuation function
+{
+    // Compute view dependent path length
+    float pathLength = thickness / max(abs(dot(normal, viewDir)), 0.15);
+    // Apply Beer Lambert absorption
+    return pow(max(attenuationColor, vec3(0.0001)), vec3(pathLength / attenuationDistance));
+// End volume attenuation function
+}
+
 // Chooses the next path bounce direction with its throughput weight.
 // Declare path bounce chooser function
 vec3 nextBounceDirection(vec3 incoming, Hit h, out vec3 bounceWeight)
@@ -1222,6 +1371,10 @@ vec3 nextBounceDirection(vec3 incoming, Hit h, out vec3 bounceWeight)
     {
         // Weight transmissive bounce by tint
         bounceWeight = mix(vec3(1.0), h.baseColor, 0.45) / max(h.transmission, 0.05);
+        // Test volumetric absorption enabled
+        if (h.thickness > 0.0 && h.attenuationDistance > 0.0)
+            // Attenuate bounce by volume absorption
+            bounceWeight *= volumeAttenuation(h.attenuationColor, h.thickness, h.attenuationDistance, normal, normalize(-incoming));
         // Continue straight through transmissive surface
         return normalize(incoming);
     // End transmission bounce branch
@@ -1322,6 +1475,10 @@ vec3 traceDirectTransparent(vec3 ro, vec3 rd)
         float tintStrength = clamp(h.transmission * 0.55, 0.0, 0.75);
         // Attenuate throughput by layer transparency
         throughput *= (1.0 - visibleOpacity) * mix(vec3(1.0), h.baseColor, tintStrength);
+        // Test volumetric absorption enabled
+        if (h.transmission > 0.001 && h.thickness > 0.0 && h.attenuationDistance > 0.0)
+            // Attenuate throughput by volume absorption
+            throughput *= volumeAttenuation(h.attenuationColor, h.thickness, h.attenuationDistance, h.normal, normalize(-rd));
         // Sanitize accumulated throughput weights
         throughput = sanitizeColor(throughput);
 

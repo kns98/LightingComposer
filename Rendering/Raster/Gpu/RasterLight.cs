@@ -13,10 +13,10 @@ internal readonly struct RasterLight
     public readonly Vector4 PositionKind;   // xyz=position, w=0 point / 1 directional / 2 spot
     public readonly Vector4 DirectionRange; // xyz=direction light travels, w=range
     public readonly Vector4 ColorIntensity; // rgb=color, w=intensity
-    public readonly Vector4 ConeEnabled;    // x=cos inner, y=cos outer, z=castsShadow placeholder, w=enabled
+    public readonly Vector4 ConeEnabled;    // x=cos inner, y=cos outer, z=shadow layer (-1=none), w=enabled
 
     /// <summary>Packs a scene light into GPU position, direction, color, and cone constants.</summary>
-    public RasterLight(SceneLight light)
+    public RasterLight(SceneLight light, int shadowLayer = -1)
     {
         float kind = light.Kind switch
         {
@@ -31,7 +31,7 @@ internal readonly struct RasterLight
         ConeEnabled = new Vector4(
             (float)Math.Cos(Math.Min(light.InnerConeAngle, light.OuterConeAngle)),
             (float)Math.Cos(light.OuterConeAngle),
-            light.CastsShadow ? 1.0f : 0.0f,
+            (float)shadowLayer,
             light.Enabled ? 1.0f : 0.0f);
     }
 }

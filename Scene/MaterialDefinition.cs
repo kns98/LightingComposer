@@ -38,6 +38,23 @@ public sealed class MaterialDefinition
     public double ClearcoatRoughness { get; set; }
     public bool ClearcoatUsesTransmissionTexture { get; set; }
     public bool DoubleSided { get; set; }
+    public double Specular { get; set; } = 1.0;
+    public Vec3 SpecularColor { get; set; } = new(1, 1, 1);
+    public string? SpecularTextureId { get; set; }
+    public string? SpecularColorTextureId { get; set; }
+    public Vec3 SheenColor { get; set; } = new(0, 0, 0);
+    public double SheenRoughness { get; set; }
+    public string? SheenColorTextureId { get; set; }
+    public string? SheenRoughnessTextureId { get; set; }
+    public double Anisotropy { get; set; }
+    public double AnisotropyRotation { get; set; }
+    public string? AnisotropyTextureId { get; set; }
+    public double Iridescence { get; set; }
+    public double IridescenceIor { get; set; } = 1.3;
+    public double IridescenceThicknessMinimum { get; set; } = 100.0;
+    public double IridescenceThicknessMaximum { get; set; } = 400.0;
+    public string? IridescenceTextureId { get; set; }
+    public string? IridescenceThicknessTextureId { get; set; }
 
     /// <summary>Creates a material definition from the given renderer material.</summary>
     public static MaterialDefinition FromMaterial(Material material, string id, string name)
@@ -72,7 +89,24 @@ public sealed class MaterialDefinition
             Clearcoat = material.Clearcoat,
             ClearcoatRoughness = material.ClearcoatRoughness,
             ClearcoatUsesTransmissionTexture = material.ClearcoatUsesTransmissionTexture,
-            DoubleSided = material.DoubleSided
+            DoubleSided = material.DoubleSided,
+            Specular = material.Specular,
+            SpecularColor = material.SpecularColor,
+            SpecularTextureId = material.SpecularTexture?.Name,
+            SpecularColorTextureId = material.SpecularColorTexture?.Name,
+            SheenColor = material.SheenColor,
+            SheenRoughness = material.SheenRoughness,
+            SheenColorTextureId = material.SheenColorTexture?.Name,
+            SheenRoughnessTextureId = material.SheenRoughnessTexture?.Name,
+            Anisotropy = material.Anisotropy,
+            AnisotropyRotation = material.AnisotropyRotation,
+            AnisotropyTextureId = material.AnisotropyTexture?.Name,
+            Iridescence = material.Iridescence,
+            IridescenceIor = material.IridescenceIor,
+            IridescenceThicknessMinimum = material.IridescenceThicknessMinimum,
+            IridescenceThicknessMaximum = material.IridescenceThicknessMaximum,
+            IridescenceTextureId = material.IridescenceTexture?.Name,
+            IridescenceThicknessTextureId = material.IridescenceThicknessTexture?.Name
         };
     }
 
@@ -83,13 +117,25 @@ public sealed class MaterialDefinition
         TextureMap? metallicRoughnessTexture = null,
         TextureMap? normalTexture = null,
         TextureMap? occlusionTexture = null,
-        TextureMap? transmissionTexture = null)
+        TextureMap? transmissionTexture = null,
+        TextureMap? specularTexture = null,
+        TextureMap? specularColorTexture = null,
+        TextureMap? sheenColorTexture = null,
+        TextureMap? sheenRoughnessTexture = null,
+        TextureMap? anisotropyTexture = null,
+        TextureMap? iridescenceTexture = null,
+        TextureMap? iridescenceThicknessTexture = null)
     {
         return new Material(
             BaseColor, EmissiveStrength, null, baseColorTexture, EmissiveColor, emissiveTexture,
             Opacity, AlphaBlend, Metallic, Roughness, Transmission, metallicRoughnessTexture,
             normalTexture, occlusionTexture, NormalScale, OcclusionStrength, AlphaMode, AlphaCutoff, DoubleSided,
             transmissionTexture, Ior, Thickness, AttenuationColor, AttenuationDistance, Clearcoat,
-            ClearcoatRoughness, ClearcoatUsesTransmissionTexture);
+            ClearcoatRoughness, ClearcoatUsesTransmissionTexture,
+            Specular, SpecularColor, specularTexture, specularColorTexture,
+            SheenColor, SheenRoughness, sheenColorTexture, sheenRoughnessTexture,
+            Anisotropy, AnisotropyRotation, anisotropyTexture,
+            Iridescence, IridescenceIor, IridescenceThicknessMinimum, IridescenceThicknessMaximum,
+            iridescenceTexture, iridescenceThicknessTexture);
     }
 }

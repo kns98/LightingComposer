@@ -16,7 +16,7 @@ internal sealed class PreparedSceneBuilder
     }
 
     /// <summary>Builds a fresh prepared GPU scene without consulting the cache.</summary>
-    public PreparedRasterScene Build(GraphicsDevice gd, ResourceLayout layout, Scene scene, CancellationToken token, bool gpuTextureSamplingRequested)
+    public PreparedRasterScene Build(GraphicsDevice gd, ResourceLayout layout, RasterShadowResources shadow, Scene scene, CancellationToken token, bool gpuTextureSamplingRequested)
     {
         // Build only lightweight atlas placement metadata first. Pixel data is
         // transferred one texture at a time after the Vulkan texture exists, so
@@ -24,9 +24,11 @@ internal sealed class PreparedSceneBuilder
         TextureBuildResult textures = new TextureAtlasBuilder(log).Build(gd, scene, gpuTextureSamplingRequested);
         RasterGeometryBuildResult geometry = new GeometryMetadataBuilder(textures.TexturePlacements, textures.UsesGpuTextureSampling).Build(scene);
         IReadOnlyDictionary<int, PreviewRangeSet> groupRanges = new GroupRangeBuilder().Build(scene);
-        RasterLight[] lights = new LightBufferBuilder().Build(scene);
+        LightBufferBuilder lightBuilder = new();
+        RasterLight[] lights = lightBuilder.Build(scene);
+        IReadOnlyList<PreparedShadowLight> shadowLights = lightBuilder.SelectShadowLights(scene);
 
-        SceneGpuResources gpu = new SceneBufferFactory().Create(gd.ResourceFactory, layout, geometry, lights.Length, textures);
+        SceneGpuResources gpu = new SceneBufferFactory().Create(gd.ResourceFactory, layout, geometry, lights.Length, textures, shadow);
         new GeometryUploader(gd, log).Upload(gpu.Buffers, scene, geometry.MaterialIds, token);
         gd.UpdateBuffer(gpu.Buffers.Material, 0, geometry.Materials.Length == 0 ? new[] { default(RasterMaterial) } : geometry.Materials);
         geometry.Materials = Array.Empty<RasterMaterial>();
@@ -45,6 +47,7 @@ internal sealed class PreparedSceneBuilder
             Atlas = gpu.Atlas,
             Descriptors = gpu.Descriptors,
             GroupRanges = groupRanges,
+            ShadowLights = shadowLights,
             Stats = new PreparedSceneStats
             {
                 LightCount = lights.Length,

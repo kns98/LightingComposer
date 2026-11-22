@@ -18,4 +18,5 @@ internal sealed record FrameRequest(
     CancellationToken Token,
     bool Wireframe,
     Vec3 BackgroundTop,
-    Vec3 BackgroundBottom);
+    Vec3 BackgroundBottom,
+    double Exposure);

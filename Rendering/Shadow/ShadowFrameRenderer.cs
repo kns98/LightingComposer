@@ -16,12 +16,12 @@ internal sealed class ShadowFrameRenderer
     public RenderImage Render(
         ShadowRasterRenderer.PreviewCache cache, Vec3 cameraPosition, CameraBasis basis,
         int width, int height, CancellationToken cancellationToken, out string details,
-        bool interactiveFast, bool wireframe, Vec3 backgroundTop, Vec3 backgroundBottom)
+        bool interactiveFast, bool wireframe, Vec3 backgroundTop, Vec3 backgroundBottom, double exposure)
     {
         width = Math.Max(1, width);
         height = Math.Max(1, height);
         if (wireframe)
-            return new WireframeFrameRenderer().Render(cache.Scene, cameraPosition, basis, width, height, cancellationToken, out details, backgroundTop, backgroundBottom);
+            return new WireframeFrameRenderer().Render(cache.Scene, cameraPosition, basis, width, height, cancellationToken, out details, backgroundTop, backgroundBottom, exposure);
 
         Stopwatch stopwatch = Stopwatch.StartNew();
         Scene scene = cache.Scene;
@@ -32,13 +32,13 @@ internal sealed class ShadowFrameRenderer
         uint[] pixels = new uint[checked(width * height)];
         double[] zBuffer = new double[pixels.Length];
         Array.Fill(zBuffer, double.PositiveInfinity);
-        BackgroundPainter.Clear(pixels, width, height, backgroundTop, backgroundBottom);
+        BackgroundPainter.Clear(pixels, width, height, backgroundTop, backgroundBottom, exposure);
 
         TriangleRasterizer rasterizer = new();
         foreach (Triangle tri in scene.Triangles)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            rasterizer.Rasterize(pixels, zBuffer, width, height, tri, cameraPosition, basis, lights, interactiveFast);
+            rasterizer.Rasterize(pixels, zBuffer, width, height, tri, cameraPosition, basis, lights, interactiveFast, exposure);
         }
 
         stopwatch.Stop();

@@ -14,6 +14,7 @@ internal sealed class PreparedRasterScene : IDisposable
     public required SceneAtlas Atlas { get; init; }
     public required SceneDescriptorSets Descriptors { get; init; }
     public required IReadOnlyDictionary<int, PreviewRangeSet> GroupRanges { get; init; }
+    public required IReadOnlyList<PreparedShadowLight> ShadowLights { get; init; }
     public PreviewRangeCache PreviewCache { get; } = new();
     public MeshEditPatchState? ActiveMeshEdit { get; set; }
     public required PreparedSceneStats Stats { get; init; }

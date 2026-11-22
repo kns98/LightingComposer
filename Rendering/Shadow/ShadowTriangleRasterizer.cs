@@ -20,6 +20,8 @@ internal static class ShadowTriangleRasterizer
             return;
 
         RasterMath.ClampBounds(a, b, c, map.Size, map.Size, out int minX, out int maxX, out int minY, out int maxY);
+        Material material = tri.Material;
+        bool alphaTested = material.AlphaMode == MaterialAlphaMode.Mask;
 
         for (int y = minY; y <= maxY; y++)
         {
@@ -32,6 +34,14 @@ internal static class ShadowTriangleRasterizer
                 double wc = 1.0 - wa - wb;
                 if (wa < -1e-7 || wb < -1e-7 || wc < -1e-7)
                     continue;
+
+                if (alphaTested)
+                {
+                    double u = wa * tri.UvA.U + wb * tri.UvB.U + wc * tri.UvC.U;
+                    double v = wa * tri.UvA.V + wb * tri.UvB.V + wc * tri.UvC.V;
+                    if (material.SampleAlpha(u, v) < material.AlphaCutoff)
+                        continue;
+                }
 
                 double depth = wa * a.Z + wb * b.Z + wc * c.Z;
                 int index = y * map.Size + x;

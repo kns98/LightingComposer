@@ -18,4 +18,10 @@
     <ProjectReference Include="..\LightingShowcase.Composer.Avalonia\LightingShowcase.Composer.Avalonia.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Include="..\Rendering\Compute\Shaders\vulkan_scene_primary.comp"
+          Link="Shaders/vulkan_scene_primary.comp"
+          CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

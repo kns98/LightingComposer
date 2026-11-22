@@ -27,6 +27,13 @@ public sealed class AssetRegistry
             RegisterTexture(registry, textureByRef, triangle.Material.NormalTexture);
             RegisterTexture(registry, textureByRef, triangle.Material.OcclusionTexture);
             RegisterTexture(registry, textureByRef, triangle.Material.TransmissionTexture);
+            RegisterTexture(registry, textureByRef, triangle.Material.SpecularTexture);
+            RegisterTexture(registry, textureByRef, triangle.Material.SpecularColorTexture);
+            RegisterTexture(registry, textureByRef, triangle.Material.SheenColorTexture);
+            RegisterTexture(registry, textureByRef, triangle.Material.SheenRoughnessTexture);
+            RegisterTexture(registry, textureByRef, triangle.Material.AnisotropyTexture);
+            RegisterTexture(registry, textureByRef, triangle.Material.IridescenceTexture);
+            RegisterTexture(registry, textureByRef, triangle.Material.IridescenceThicknessTexture);
 
             string key = MaterialKey(triangle.Material);
             if (!materialByKey.ContainsKey(key))
@@ -60,7 +67,14 @@ public sealed class AssetRegistry
             material.Alpha, material.AlphaBlend, material.Metallic, material.Roughness, material.Transmission,
             material.Texture?.Name, material.EmissiveTexture?.Name, material.MetallicRoughnessTexture?.Name,
             material.NormalTexture?.Name, material.OcclusionTexture?.Name, material.TransmissionTexture?.Name,
+            material.SpecularTexture?.Name, material.SpecularColorTexture?.Name,
+            material.SheenColorTexture?.Name, material.SheenRoughnessTexture?.Name,
+            material.AnisotropyTexture?.Name, material.IridescenceTexture?.Name, material.IridescenceThicknessTexture?.Name,
             material.NormalScale, material.OcclusionStrength,
+            material.Specular, material.SpecularColor.X, material.SpecularColor.Y, material.SpecularColor.Z,
+            material.SheenColor.X, material.SheenColor.Y, material.SheenColor.Z, material.SheenRoughness,
+            material.Anisotropy, material.AnisotropyRotation,
+            material.Iridescence, material.IridescenceIor, material.IridescenceThicknessMinimum, material.IridescenceThicknessMaximum,
             material.AlphaMode, material.AlphaCutoff, material.DoubleSided,
             material.Ior, material.Thickness, material.AttenuationColor.X, material.AttenuationColor.Y, material.AttenuationColor.Z,
             material.AttenuationDistance, material.Clearcoat, material.ClearcoatRoughness, material.ClearcoatUsesTransmissionTexture);

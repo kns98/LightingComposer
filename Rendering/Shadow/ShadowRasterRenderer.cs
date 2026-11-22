@@ -60,22 +60,22 @@ public static class ShadowRasterRenderer
     public static RenderImage Render(
         Scene scene, Vec3 cameraPosition, CameraBasis cameraBasis, int width, int height,
         CancellationToken cancellationToken, out string details, bool wireframe = false,
-        Vec3? backgroundTop = null, Vec3? backgroundBottom = null)
+        Vec3? backgroundTop = null, Vec3? backgroundBottom = null, double exposure = 1.0)
     {
         PreviewCache cache = BuildCache(scene, cancellationToken);
         return Render(cache, cameraPosition, cameraBasis, width, height, cancellationToken, out details,
-            interactiveFast: false, wireframe: wireframe, backgroundTop: backgroundTop, backgroundBottom: backgroundBottom);
+            interactiveFast: false, wireframe: wireframe, backgroundTop: backgroundTop, backgroundBottom: backgroundBottom, exposure: exposure);
     }
 
     /// <summary>Renders one shaded raster preview frame using a reusable shadow-map cache.</summary>
     public static RenderImage Render(
         PreviewCache cache, Vec3 cameraPosition, CameraBasis cameraBasis, int width, int height,
         CancellationToken cancellationToken, out string details, bool interactiveFast = false, bool wireframe = false,
-        Vec3? backgroundTop = null, Vec3? backgroundBottom = null)
+        Vec3? backgroundTop = null, Vec3? backgroundBottom = null, double exposure = 1.0)
     {
         ArgumentNullException.ThrowIfNull(cache);
         return new ShadowFrameRenderer().Render(cache, cameraPosition, cameraBasis, width, height, cancellationToken, out details,
             interactiveFast, wireframe,
-            backgroundTop ?? RenderSettings.DefaultBackgroundTop, backgroundBottom ?? RenderSettings.DefaultBackgroundBottom);
+            backgroundTop ?? RenderSettings.DefaultBackgroundTop, backgroundBottom ?? RenderSettings.DefaultBackgroundBottom, exposure);
     }
 }

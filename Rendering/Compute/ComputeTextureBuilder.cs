@@ -19,6 +19,7 @@ internal sealed class ComputeTextureBuilder
             AddUnique(triangle.Material.MetallicRoughnessTexture);
             AddUnique(triangle.Material.NormalTexture);
             AddUnique(triangle.Material.OcclusionTexture);
+            AddUnique(triangle.Material.TransmissionTexture);
         }
 
         if (textures.Count == 0)
@@ -49,7 +50,7 @@ internal sealed class ComputeTextureBuilder
             int textureIndex = textureIds.Count;
             int offset = checked((int)pixelOffset);
             textureIds.Add(texture, textureIndex);
-            infos[textureIndex] = new GpuTextureInfo(offset, width, height);
+            infos[textureIndex] = new GpuTextureInfo(offset, width, height, texture);
             uploads.Add(new ComputeTextureUpload { Texture = texture, PixelOffset = offset });
             pixelOffset = checked(pixelOffset + pixelLength);
         }

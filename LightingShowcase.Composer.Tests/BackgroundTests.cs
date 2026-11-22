@@ -24,6 +24,23 @@ public sealed class BackgroundTests
     }
 
     [Fact]
+    public void ShadowRender_RespectsExposure()
+    {
+        Scene scene = new();
+        ShadowRasterRenderer.PreviewCache cache = ShadowRasterRenderer.BuildCache(scene, CancellationToken.None);
+        CameraBasis basis = new CameraDefinition { Position = new Vec3(0, 0, -4), Target = new Vec3(0, 0, 0) }.ToBasis();
+        RenderImage dim = ShadowRasterRenderer.Render(
+            cache, new Vec3(0, 0, -4), basis, 16, 16, CancellationToken.None, out _,
+            backgroundTop: new Vec3(0.25, 0, 0), backgroundBottom: new Vec3(0, 0, 0));
+        RenderImage bright = ShadowRasterRenderer.Render(
+            cache, new Vec3(0, 0, -4), basis, 16, 16, CancellationToken.None, out _,
+            backgroundTop: new Vec3(0.25, 0, 0), backgroundBottom: new Vec3(0, 0, 0), exposure: 2.0);
+
+        Assert.Equal(0xFF000088u, dim.PackedRgba32[0]);
+        Assert.Equal(0xFF0000BAu, bright.PackedRgba32[0]);
+    }
+
+    [Fact]
     public void CpuTracer_HonorsCustomBackground()
     {
         RayTracer tracer = new(new Scene(), new LightingState())

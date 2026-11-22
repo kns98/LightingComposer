@@ -24,6 +24,22 @@ internal static class ColorMath
     public static byte ToByte(double value) => (byte)Math.Clamp((int)Math.Round(value * 255.0), 0, 255);
 
     /// <summary>Gamma-corrects and packs a shaded color into one opaque pixel.</summary>
-    public static uint PackShaded(Vec3 shaded) =>
-        PackRgba(ToByte(Gamma(shaded.X)), ToByte(Gamma(shaded.Y)), ToByte(Gamma(shaded.Z)), 255);
+    public static uint PackShaded(Vec3 shaded, double exposure = 1.0) => PackDisplay(ToDisplay(shaded, exposure));
+
+    /// <summary>Applies exposure and gamma, returning display-space color.</summary>
+    public static Vec3 ToDisplay(Vec3 shaded, double exposure)
+    {
+        Vec3 exposed = shaded * Math.Max(0.0, exposure);
+        return new Vec3(Gamma(exposed.X), Gamma(exposed.Y), Gamma(exposed.Z));
+    }
+
+    /// <summary>Packs a display-space color into one opaque pixel.</summary>
+    public static uint PackDisplay(Vec3 display) =>
+        PackRgba(ToByte(display.X), ToByte(display.Y), ToByte(display.Z), 255);
+
+    /// <summary>Unpacks one pixel into display-space color.</summary>
+    public static Vec3 UnpackDisplay(uint pixel) => new(
+        (pixel & 0xFF) / 255.0,
+        ((pixel >> 8) & 0xFF) / 255.0,
+        ((pixel >> 16) & 0xFF) / 255.0);
 }

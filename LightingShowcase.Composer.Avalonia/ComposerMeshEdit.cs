@@ -1312,12 +1312,25 @@ internal sealed class ComposerMeshTopology
                Nearly(a.Clearcoat, b.Clearcoat) && Nearly(a.ClearcoatRoughness, b.ClearcoatRoughness) &&
                a.ClearcoatUsesTransmissionTexture == b.ClearcoatUsesTransmissionTexture &&
                Nearly(a.NormalScale, b.NormalScale) && Nearly(a.OcclusionStrength, b.OcclusionStrength) &&
+               Nearly(a.Specular, b.Specular) && SameVec(a.SpecularColor, b.SpecularColor) &&
+               SameVec(a.SheenColor, b.SheenColor) && Nearly(a.SheenRoughness, b.SheenRoughness) &&
+               Nearly(a.Anisotropy, b.Anisotropy) && Nearly(a.AnisotropyRotation, b.AnisotropyRotation) &&
+               Nearly(a.Iridescence, b.Iridescence) && Nearly(a.IridescenceIor, b.IridescenceIor) &&
+               Nearly(a.IridescenceThicknessMinimum, b.IridescenceThicknessMinimum) &&
+               Nearly(a.IridescenceThicknessMaximum, b.IridescenceThicknessMaximum) &&
                SameTexture(a.Texture, b.Texture) &&
                SameTexture(a.MetallicRoughnessTexture, b.MetallicRoughnessTexture) &&
                SameTexture(a.NormalTexture, b.NormalTexture) &&
                SameTexture(a.EmissiveTexture, b.EmissiveTexture) &&
                SameTexture(a.TransmissionTexture, b.TransmissionTexture) &&
-               SameTexture(a.OcclusionTexture, b.OcclusionTexture);
+               SameTexture(a.OcclusionTexture, b.OcclusionTexture) &&
+               SameTexture(a.SpecularTexture, b.SpecularTexture) &&
+               SameTexture(a.SpecularColorTexture, b.SpecularColorTexture) &&
+               SameTexture(a.SheenColorTexture, b.SheenColorTexture) &&
+               SameTexture(a.SheenRoughnessTexture, b.SheenRoughnessTexture) &&
+               SameTexture(a.AnisotropyTexture, b.AnisotropyTexture) &&
+               SameTexture(a.IridescenceTexture, b.IridescenceTexture) &&
+               SameTexture(a.IridescenceThicknessTexture, b.IridescenceThicknessTexture);
 
         /// <summary>Returns true when two values differ by at most 1e-9.</summary>
         static bool Nearly(double x, double y) => Math.Abs(x - y) <= 1e-9;

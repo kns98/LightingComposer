@@ -91,7 +91,7 @@ public sealed class Triangle
         if (shadingNormal.Dot(Normal) < 0.0)
             shadingNormal = -shadingNormal;
 
-        BuildTangentBasis(shadingNormal, out Vec3 tangent, out Vec3 bitangent);
+        GetTangentBasis(shadingNormal, out Vec3 tangent, out Vec3 bitangent);
         return new Hit(
             t,
             ray.Origin + ray.Direction * t,
@@ -106,7 +106,7 @@ public sealed class Triangle
     }
 
     /// <summary>Builds the tangent basis for the given shading normal.</summary>
-    private void BuildTangentBasis(Vec3 shadingNormal, out Vec3 tangent, out Vec3 bitangent)
+    public void GetTangentBasis(Vec3 shadingNormal, out Vec3 tangent, out Vec3 bitangent)
     {
         Vec2 deltaUv1 = new(UvB.U - UvA.U, UvB.V - UvA.V);
         Vec2 deltaUv2 = new(UvC.U - UvA.U, UvC.V - UvA.V);

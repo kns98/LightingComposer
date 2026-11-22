@@ -29,6 +29,14 @@ internal sealed class RasterShaderCompiler
     public Shader CreateBackgroundFragmentShader(ResourceFactory factory) =>
         CreateFromEmbedded(factory, ShaderStages.Fragment, "Raster.background.frag.glsl", "Vulkan raster background fragment shader");
 
+    /// <summary>Creates the shadow depth vertex shader from the embedded source.</summary>
+    public Shader CreateShadowVertexShader(ResourceFactory factory) =>
+        CreateFromEmbedded(factory, ShaderStages.Vertex, "Raster.shadow.vert.glsl", "Vulkan raster shadow vertex shader");
+
+    /// <summary>Creates the shadow depth fragment shader from the embedded source.</summary>
+    public Shader CreateShadowFragmentShader(ResourceFactory factory) =>
+        CreateFromEmbedded(factory, ShaderStages.Fragment, "Raster.shadow.frag.glsl", "Vulkan raster shadow fragment shader");
+
     private Shader CreateFromEmbedded(ResourceFactory factory, ShaderStages stage, string resource, string label)
     {
         ShaderDescription description = new(stage, Encoding.UTF8.GetBytes(LoadSource(resource)), "main");

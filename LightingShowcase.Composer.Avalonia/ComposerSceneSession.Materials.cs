@@ -27,7 +27,17 @@ internal sealed record ComposerMaterialProperties(
     double Clearcoat,
     double ClearcoatRoughness,
     double NormalScale,
-    double OcclusionStrength);
+    double OcclusionStrength,
+    double Specular,
+    Vec3 SpecularColor,
+    Vec3 SheenColor,
+    double SheenRoughness,
+    double Anisotropy,
+    double AnisotropyRotation,
+    double Iridescence,
+    double IridescenceIor,
+    double IridescenceThicknessMinimum,
+    double IridescenceThicknessMaximum);
 
 
 internal sealed record ComposerTextureSlotModel(
@@ -67,6 +77,16 @@ internal sealed record ComposerMaterialModel(
     double ClearcoatRoughness,
     double NormalScale,
     double OcclusionStrength,
+    double Specular,
+    Vec3 SpecularColor,
+    Vec3 SheenColor,
+    double SheenRoughness,
+    double Anisotropy,
+    double AnisotropyRotation,
+    double Iridescence,
+    double IridescenceIor,
+    double IridescenceThicknessMinimum,
+    double IridescenceThicknessMaximum,
     string? TextureName,
     string? TexturePath,
     bool HasStoredTextureProjection,
@@ -91,7 +111,17 @@ internal sealed record ComposerMaterialModel(
         Clearcoat,
         ClearcoatRoughness,
         NormalScale,
-        OcclusionStrength);
+        OcclusionStrength,
+        Specular,
+        SpecularColor,
+        SheenColor,
+        SheenRoughness,
+        Anisotropy,
+        AnisotropyRotation,
+        Iridescence,
+        IridescenceIor,
+        IridescenceThicknessMinimum,
+        IridescenceThicknessMaximum);
 
     /// <summary>Returns the model for the given texture slot.</summary>
     public ComposerTextureSlotModel TextureSlot(MaterialTextureSlot slot) =>
@@ -135,6 +165,16 @@ internal sealed partial class ComposerSceneSession
                 material.ClearcoatRoughness,
                 material.NormalScale,
                 material.OcclusionStrength,
+                material.Specular,
+                material.SpecularColor,
+                material.SheenColor,
+                material.SheenRoughness,
+                material.Anisotropy,
+                material.AnisotropyRotation,
+                material.Iridescence,
+                material.IridescenceIor,
+                material.IridescenceThicknessMinimum,
+                material.IridescenceThicknessMaximum,
                 material.Texture?.Name,
                 material.Texture?.SourcePath,
                 hasStoredProjection,
@@ -202,7 +242,24 @@ internal sealed partial class ComposerSceneSession
                 properties.AttenuationDistance,
                 properties.Clearcoat,
                 properties.ClearcoatRoughness,
-                material.ClearcoatUsesTransmissionTexture)));
+                material.ClearcoatUsesTransmissionTexture,
+                properties.Specular,
+                properties.SpecularColor,
+                material.SpecularTexture,
+                material.SpecularColorTexture,
+                properties.SheenColor,
+                properties.SheenRoughness,
+                material.SheenColorTexture,
+                material.SheenRoughnessTexture,
+                properties.Anisotropy,
+                properties.AnisotropyRotation,
+                material.AnisotropyTexture,
+                properties.Iridescence,
+                properties.IridescenceIor,
+                properties.IridescenceThicknessMinimum,
+                properties.IridescenceThicknessMaximum,
+                material.IridescenceTexture,
+                material.IridescenceThicknessTexture)));
     }
 
     /// <summary>Assigns the image at the given path to the base-color texture of the object with the given id.</summary>
@@ -400,6 +457,13 @@ internal sealed partial class ComposerSceneSession
         MaterialTextureSlot.Emissive => "Emissive",
         MaterialTextureSlot.Transmission => "Transmission",
         MaterialTextureSlot.Occlusion => "Occlusion",
+        MaterialTextureSlot.Specular => "Specular",
+        MaterialTextureSlot.SpecularColor => "Specular color",
+        MaterialTextureSlot.SheenColor => "Sheen color",
+        MaterialTextureSlot.SheenRoughness => "Sheen roughness",
+        MaterialTextureSlot.Anisotropy => "Anisotropy",
+        MaterialTextureSlot.Iridescence => "Iridescence",
+        MaterialTextureSlot.IridescenceThickness => "Iridescence thickness",
         _ => slot.ToString()
     };
 
@@ -460,6 +524,20 @@ internal sealed partial class ComposerSceneSession
         if (!double.IsFinite(properties.NormalScale) || properties.NormalScale < -8.0 || properties.NormalScale > 8.0)
             throw new ArgumentOutOfRangeException(nameof(properties.NormalScale), "Normal scale must be between -8 and 8.");
         ValidateUnit(properties.OcclusionStrength, nameof(properties.OcclusionStrength));
+        ValidateUnit(properties.Specular, nameof(properties.Specular));
+        ValidateColor(properties.SpecularColor);
+        ValidateColor(properties.SheenColor);
+        ValidateUnit(properties.SheenRoughness, nameof(properties.SheenRoughness));
+        ValidateUnit(properties.Anisotropy, nameof(properties.Anisotropy));
+        if (!double.IsFinite(properties.AnisotropyRotation))
+            throw new ArgumentOutOfRangeException(nameof(properties.AnisotropyRotation), "Anisotropy rotation must be finite radians.");
+        ValidateUnit(properties.Iridescence, nameof(properties.Iridescence));
+        if (!double.IsFinite(properties.IridescenceIor) || properties.IridescenceIor < 1.0)
+            throw new ArgumentOutOfRangeException(nameof(properties.IridescenceIor), "Iridescence IOR must be 1.0 or greater.");
+        if (!double.IsFinite(properties.IridescenceThicknessMinimum) || properties.IridescenceThicknessMinimum < 0.0)
+            throw new ArgumentOutOfRangeException(nameof(properties.IridescenceThicknessMinimum), "Iridescence minimum thickness must be zero or greater nanometers.");
+        if (!double.IsFinite(properties.IridescenceThicknessMaximum) || properties.IridescenceThicknessMaximum < 0.0)
+            throw new ArgumentOutOfRangeException(nameof(properties.IridescenceThicknessMaximum), "Iridescence maximum thickness must be zero or greater nanometers.");
     }
 
     /// <summary>Throws when the named value falls outside the 0 to 1 range.</summary>

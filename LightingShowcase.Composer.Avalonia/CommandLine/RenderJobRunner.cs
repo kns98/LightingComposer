@@ -59,7 +59,7 @@ public sealed class RenderJobRunner
         ResolvedSceneInput input = SceneInputResolver.Resolve(request.Input!);
         TextureMap.ConfigureAssetRoots([input.AssetDirectory]);
 
-        Scene scene = LoadScene(input.ScenePath);
+        Scene scene = LoadScene(input.ScenePath, request.Variant);
         if (scene.Triangles.Count == 0)
             throw new InvalidDataException("The scene contains no renderable triangles.");
 
@@ -127,7 +127,8 @@ public sealed class RenderJobRunner
                     cancellationToken,
                     out details,
                     backgroundTop: renderSettings.BackgroundTop,
-                    backgroundBottom: renderSettings.BackgroundBottom),
+                    backgroundBottom: renderSettings.BackgroundBottom,
+                    exposure: request.Exposure),
                 RenderBackend.VulkanRasterPreview => VulkanRasterRenderer.Render(
                     scene,
                     view.Position,
@@ -137,7 +138,8 @@ public sealed class RenderJobRunner
                     cancellationToken,
                     out details,
                     backgroundTop: renderSettings.BackgroundTop,
-                    backgroundBottom: renderSettings.BackgroundBottom),
+                    backgroundBottom: renderSettings.BackgroundBottom,
+                    exposure: request.Exposure),
                 _ => throw new ArgumentOutOfRangeException(
                     nameof(request.Backend), request.Backend, "Unsupported command-line renderer."),
             };
@@ -198,7 +200,7 @@ public sealed class RenderJobRunner
     }
 
     /// <summary>Loads a scene from a binary scene file or an importable model file.</summary>
-    private static Scene LoadScene(string scenePath)
+    private static Scene LoadScene(string scenePath, string? variant = null)
     {
         PluginBootstrap.EnsureLoaded();
         Scene scene = new();
@@ -213,7 +215,7 @@ public sealed class RenderJobRunner
         {
             if (progress.Percent % 10 == 0 || progress.Percent == 100)
                 Console.WriteLine($"Import {progress.Percent,3}%: {progress.Stage} ({progress.TriangleCount:N0} triangles)");
-        });
+        }, variant);
         return scene;
     }
 
@@ -227,7 +229,7 @@ public sealed class RenderJobRunner
 
         Vec3 target = RenderRequest.ParseVector(request.CameraTarget, nameof(request.CameraTarget)) ?? center;
         Vec3 position = RenderRequest.ParseVector(request.CameraPosition, nameof(request.CameraPosition))
-            ?? target + new Vec3(radius * 0.75, radius * 0.45, -radius * 2.25) / request.Zoom;
+            ?? target + CameraViews.ApplyView(new Vec3(radius * 0.75, radius * 0.45, -radius * 2.25), request.View) / request.Zoom;
         Vec3 up = RenderRequest.ParseVector(request.CameraUp, nameof(request.CameraUp)) ?? new Vec3(0, 1, 0);
 
         return new CameraDefinition

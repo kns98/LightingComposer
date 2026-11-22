@@ -39,6 +39,38 @@ public sealed class RayTracer
     // Dim color for dashed hidden wireframe lines
     private static readonly Vec3 WireframeHiddenColor = new Vec3(0.30, 0.38, 0.52);
 
+    /// <summary>Layered specular, sheen, anisotropy, and iridescence inputs for one surface hit.</summary>
+    // Declare layered shading inputs record
+    private sealed record SurfaceShading(
+        // Declare dielectric base reflectance field
+        Vec3 DielectricBaseF0,
+        // Declare specular weight field
+        double SpecularWeight,
+        // Declare default specular fast-path flag
+        bool IsDefaultSpecular,
+        // Declare sheen albedo field
+        Vec3 SheenColor,
+        // Declare sheen roughness field
+        double SheenRoughness,
+        // Declare sheen albedo maximum field
+        double SheenMax,
+        // Declare anisotropy strength field
+        double Anisotropy,
+        // Declare anisotropy tangent field
+        Vec3 AnisoTangent,
+        // Declare anisotropy bitangent field
+        Vec3 AnisoBitangent,
+        // Declare iridescence strength field
+        double Iridescence,
+        // Declare thin-film IOR field
+        double IridescenceIor,
+        // Declare thin-film thickness field
+        double IridescenceThickness,
+        // Declare clearcoat layer weight field
+        double Clearcoat,
+        // Declare clearcoat roughness field
+        double ClearcoatRoughness);
+
     /// <summary>Initializes a new ray tracer for the given scene.</summary>
     // Construct tracer for scene
     public RayTracer(Scene scene, LightingState lighting)
@@ -207,8 +239,8 @@ public sealed class RayTracer
         Vec3 surfaceColor = hit.Material.SampleLinear(hit.TextureU, hit.TextureV);
         // Sample surface alpha
         double alpha = hit.Material.SampleAlpha(hit.TextureU, hit.TextureV);
-        // Read transmission factor
-        double transmission = hit.Material.Transmission;
+        // Sample transmission factor
+        double transmission = hit.Material.SampleTransmission(hit.TextureU, hit.TextureV);
         // Combine alpha and transmission
         double visibleOpacity = Math.Clamp(alpha * (1.0 - transmission * 0.72), 0.0, 1.0);
 
@@ -231,6 +263,10 @@ public sealed class RayTracer
             double tintStrength = Math.Clamp(transmission * 0.55, 0.0, 0.75);
             // Tint transmitted color
             Vec3 tintedThrough = Vec3.Lerp(through, through.Multiply(surfaceColor), tintStrength);
+            // Check volumetric absorption
+            if (transmission > 0.001 && hit.Material.Thickness > 0.0 && hit.Material.AttenuationDistance > 0.0)
+                // Attenuate transmitted color by volume
+                tintedThrough = tintedThrough.Multiply(VolumeAttenuation(hit, ray.Direction));
             // Blend behind and shaded colors
             return Vec3.Lerp(tintedThrough, shaded, visibleOpacity);
         // End transparency branch
@@ -424,6 +460,8 @@ public sealed class RayTracer
 
         // Sample metalness and roughness
         (double metallic, double roughness) = hit.Material.SampleMetallicRoughness(hit.TextureU, hit.TextureV);
+        // Build layered shading inputs
+        SurfaceShading shading = BuildSurfaceShading(hit, normal);
         // Initialize direct lighting
         Vec3 direct = Vec3.Zero;
         // Loop over scene lights
@@ -433,14 +471,14 @@ public sealed class RayTracer
             // Check light enabled
             if (light.Enabled)
                 // Accumulate direct light
-                direct += DirectLight(hit, light, surfaceColor, normal, view, metallic, roughness);
+                direct += DirectLight(hit, light, surfaceColor, normal, view, metallic, roughness, shading);
         // End light loop
         }
 
         // Sample ambient occlusion
         double occlusion = hit.Material.SampleOcclusion(hit.TextureU, hit.TextureV);
         // Compute occluded environment light
-        Vec3 indirect = EnvironmentLighting(surfaceColor, normal, view, metallic, roughness) * occlusion;
+        Vec3 indirect = EnvironmentLighting(surfaceColor, normal, view, metallic, roughness, shading) * occlusion;
         // Sample surface emission
         Vec3 emission = hit.Material.SampleEmissionLinear(hit.TextureU, hit.TextureV);
         // Combine lighting terms
@@ -466,20 +504,8 @@ public sealed class RayTracer
         Vec3 bitangent = hit.Bitangent.Normalize();
         // Check degenerate tangents
         if (tangent.Length() < 1e-8 || bitangent.Length() < 1e-8)
-        // Begin fallback branch
-        {
-            // Pick stable fallback axis
-            Vec3 axis = Math.Abs(normal.Z) < 0.999
-                // Use Z axis fallback
-                ? new Vec3(0.0, 0.0, 1.0)
-                // Use Y axis fallback
-                : new Vec3(0.0, 1.0, 0.0);
-            // Rebuild tangent from axis
-            tangent = axis.Cross(normal).Normalize();
-            // Rebuild bitangent from tangent
-            bitangent = normal.Cross(tangent).Normalize();
-        // End fallback branch
-        }
+            // Rebuild tangents from fallback axis
+            FallbackTangentFrame(normal, out tangent, out bitangent);
 
         // Sample normal map texel
         Vec3 sample = hit.Material.SampleNormalMap(hit.TextureU, hit.TextureV);
@@ -506,9 +532,111 @@ public sealed class RayTracer
     // End ApplyNormalMap
     }
 
+    /// <summary>Builds a stable tangent frame from a fallback axis.</summary>
+    // Rebuild tangents from fallback axis
+    private static void FallbackTangentFrame(Vec3 normal, out Vec3 tangent, out Vec3 bitangent)
+    // Begin FallbackTangentFrame
+    {
+        // Pick stable fallback axis
+        Vec3 axis = Math.Abs(normal.Z) < 0.999
+            // Use Z axis fallback
+            ? new Vec3(0.0, 0.0, 1.0)
+            // Use Y axis fallback
+            : new Vec3(0.0, 1.0, 0.0);
+        // Rebuild tangent from axis
+        tangent = axis.Cross(normal).Normalize();
+        // Rebuild bitangent from tangent
+        bitangent = normal.Cross(tangent).Normalize();
+    // End FallbackTangentFrame
+    }
+
+    /// <summary>Builds the layered shading inputs for one surface hit.</summary>
+    // Build layered shading inputs
+    private static SurfaceShading BuildSurfaceShading(Hit hit, Vec3 normal)
+    // Begin BuildSurfaceShading
+    {
+        // Fetch hit material
+        Material material = hit.Material;
+        // Sample specular weight and color
+        (double specularWeight, Vec3 specularColor) = material.SampleSpecular(hit.TextureU, hit.TextureV);
+        // Compute dielectric base reflectance
+        double iorF0 = material.Ior == 1.5 ? 0.04 : IorToF0(material.Ior);
+        // Clamp tinted base reflectance
+        Vec3 dielectricBase = new(
+            // Clamp red base channel
+            Math.Min(iorF0 * specularColor.X, 1.0),
+            // Clamp green base channel
+            Math.Min(iorF0 * specularColor.Y, 1.0),
+            // Clamp blue base channel
+            Math.Min(iorF0 * specularColor.Z, 1.0));
+        // Detect default specular fast path
+        bool isDefaultSpecular = specularWeight == 1.0 &&
+            // Check white specular color
+            specularColor.X == 1.0 && specularColor.Y == 1.0 && specularColor.Z == 1.0 &&
+            // Check default IOR
+            material.Ior == 1.5;
+        // Sample sheen albedo and roughness
+        (Vec3 sheenColor, double sheenRoughness) = material.SampleSheen(hit.TextureU, hit.TextureV);
+        // Measure sheen albedo maximum
+        double sheenMax = Math.Max(sheenColor.X, Math.Max(sheenColor.Y, sheenColor.Z));
+        // Sample anisotropy strength and direction
+        (double anisotropy, Vec2 anisotropyDirection) = material.SampleAnisotropy(hit.TextureU, hit.TextureV);
+        // Normalize hit tangent
+        Vec3 tangent = hit.Tangent.Normalize();
+        // Normalize hit bitangent
+        Vec3 bitangent = hit.Bitangent.Normalize();
+        // Check degenerate tangents
+        if (tangent.Length() < 1e-8 || bitangent.Length() < 1e-8)
+            // Rebuild tangents from fallback axis
+            FallbackTangentFrame(normal, out tangent, out bitangent);
+        // Rotate tangent frame by anisotropy direction
+        Vec3 anisoTangent = (tangent * anisotropyDirection.U + bitangent * anisotropyDirection.V).Normalize();
+        // Rebuild bitangent from shading normal
+        Vec3 anisoBitangent = normal.Cross(anisoTangent).Normalize();
+        // Sample iridescence strength and thickness
+        (double iridescence, double iridescenceThickness) = material.SampleIridescence(hit.TextureU, hit.TextureV);
+        // Read clearcoat layer weight
+        double clearcoat = material.Clearcoat;
+        // Reuse transmission mask for shared clearcoat
+        if (material.ClearcoatUsesTransmissionTexture && material.TransmissionTexture != null)
+            // Scale clearcoat by mask red channel
+            clearcoat *= Math.Clamp(material.TransmissionTexture.Sample(hit.TextureU, hit.TextureV).X, 0.0, 1.0);
+        // Return layered shading inputs
+        return new SurfaceShading(
+            // Pass dielectric base reflectance
+            dielectricBase,
+            // Pass specular weight
+            specularWeight,
+            // Pass default specular flag
+            isDefaultSpecular,
+            // Pass sheen albedo
+            sheenColor,
+            // Pass sheen roughness
+            sheenRoughness,
+            // Pass sheen albedo maximum
+            sheenMax,
+            // Pass anisotropy strength
+            anisotropy,
+            // Pass anisotropy tangent
+            anisoTangent,
+            // Pass anisotropy bitangent
+            anisoBitangent,
+            // Pass iridescence strength
+            iridescence,
+            // Pass thin-film IOR
+            material.IridescenceIor,
+            // Pass thin-film thickness
+            iridescenceThickness,
+            // Pass clearcoat layer weight
+            Math.Clamp(clearcoat, 0.0, 1.0),
+            // Pass clearcoat roughness
+            Math.Clamp(material.ClearcoatRoughness, 0.045, 1.0));
+    // End BuildSurfaceShading
+    }
+
     /// <summary>Computes direct lighting from one light using its point, spot, or directional model.</summary>
     // Dispatch light by kind
-    private Vec3 DirectLight(Hit hit, SceneLight light, Vec3 surfaceColor, Vec3 normal, Vec3 viewDirection, double metallic, double roughness)
+    private Vec3 DirectLight(Hit hit, SceneLight light, Vec3 surfaceColor, Vec3 normal, Vec3 viewDirection, double metallic, double roughness, SurfaceShading shading)
     // Begin DirectLight
     {
         // Switch on light kind
@@ -516,11 +644,11 @@ public sealed class RayTracer
         // Begin light switch
         {
             // Shade directional light
-            SceneLightKind.Directional => DirectDirectionalLight(hit, light, surfaceColor, normal, viewDirection, metallic, roughness),
+            SceneLightKind.Directional => DirectDirectionalLight(hit, light, surfaceColor, normal, viewDirection, metallic, roughness, shading),
             // Shade spot light
-            SceneLightKind.Spot => DirectSpotLight(hit, light, surfaceColor, normal, viewDirection, metallic, roughness),
+            SceneLightKind.Spot => DirectSpotLight(hit, light, surfaceColor, normal, viewDirection, metallic, roughness, shading),
             // Shade point light
-            _ => DirectPointLight(hit, light, surfaceColor, normal, viewDirection, metallic, roughness)
+            _ => DirectPointLight(hit, light, surfaceColor, normal, viewDirection, metallic, roughness, shading)
         // End light switch
         };
     // End DirectLight
@@ -528,7 +656,7 @@ public sealed class RayTracer
 
     /// <summary>Computes direct lighting from one point light.</summary>
     // Shade one point light
-    private Vec3 DirectPointLight(Hit hit, SceneLight light, Vec3 surfaceColor, Vec3 normal, Vec3 viewDirection, double metallic, double roughness)
+    private Vec3 DirectPointLight(Hit hit, SceneLight light, Vec3 surfaceColor, Vec3 normal, Vec3 viewDirection, double metallic, double roughness, SurfaceShading shading)
     // Begin DirectPointLight
     {
         // Compute vector toward light
@@ -547,13 +675,13 @@ public sealed class RayTracer
         // Evaluate distance attenuation
         double attenuation = DistanceAttenuation(distance, light.Range);
         // Compute shaded contribution
-        return LightContribution(surfaceColor, normal, viewDirection, lightDir, light.Color, light.Intensity * attenuation * shadow, metallic, roughness);
+        return LightContribution(surfaceColor, normal, viewDirection, lightDir, light.Color, light.Intensity * attenuation * shadow, metallic, roughness, shading);
     // End DirectPointLight
     }
 
     /// <summary>Computes direct lighting from one directional light.</summary>
     // Shade one directional light
-    private Vec3 DirectDirectionalLight(Hit hit, SceneLight light, Vec3 surfaceColor, Vec3 normal, Vec3 viewDirection, double metallic, double roughness)
+    private Vec3 DirectDirectionalLight(Hit hit, SceneLight light, Vec3 surfaceColor, Vec3 normal, Vec3 viewDirection, double metallic, double roughness, SurfaceShading shading)
     // Begin DirectDirectionalLight
     {
         // glTF directional lights shine along local -Z. SceneLight.Direction is
@@ -563,13 +691,13 @@ public sealed class RayTracer
         // Evaluate shadow factor
         double shadow = light.CastsShadow ? ShadowFactor(hit, lightDir, double.PositiveInfinity) : 1.0;
         // Compute shaded contribution
-        return LightContribution(surfaceColor, normal, viewDirection, lightDir, light.Color, light.Intensity * shadow, metallic, roughness);
+        return LightContribution(surfaceColor, normal, viewDirection, lightDir, light.Color, light.Intensity * shadow, metallic, roughness, shading);
     // End DirectDirectionalLight
     }
 
     /// <summary>Computes direct lighting from one spot light.</summary>
     // Shade one spot light
-    private Vec3 DirectSpotLight(Hit hit, SceneLight light, Vec3 surfaceColor, Vec3 normal, Vec3 viewDirection, double metallic, double roughness)
+    private Vec3 DirectSpotLight(Hit hit, SceneLight light, Vec3 surfaceColor, Vec3 normal, Vec3 viewDirection, double metallic, double roughness, SurfaceShading shading)
     // Begin DirectSpotLight
     {
         // Compute vector toward light
@@ -597,13 +725,13 @@ public sealed class RayTracer
         // Evaluate distance attenuation
         double attenuation = DistanceAttenuation(distance, light.Range);
         // Compute shaded contribution
-        return LightContribution(surfaceColor, normal, viewDirection, lightDir, light.Color, light.Intensity * attenuation * cone * shadow, metallic, roughness);
+        return LightContribution(surfaceColor, normal, viewDirection, lightDir, light.Color, light.Intensity * attenuation * cone * shadow, metallic, roughness, shading);
     // End DirectSpotLight
     }
 
     /// <summary>Computes the diffuse and specular contribution of one light.</summary>
     // Compute PBR light contribution
-    private static Vec3 LightContribution(Vec3 surfaceColor, Vec3 normal, Vec3 view, Vec3 lightDir, Vec3 lightColor, double strength, double metallic, double roughness)
+    private static Vec3 LightContribution(Vec3 surfaceColor, Vec3 normal, Vec3 view, Vec3 lightDir, Vec3 lightColor, double strength, double metallic, double roughness, SurfaceShading shading)
     // Begin LightContribution
     {
         // Clamp normal light alignment
@@ -623,44 +751,168 @@ public sealed class RayTracer
         double vDotH = Math.Max(0.0, view.Dot(halfVector));
         // Square perceptual roughness
         double alphaRoughness = roughness * roughness;
-        // Evaluate GGX distribution
-        double distribution = DistributionGgx(nDotH, alphaRoughness);
-        // Evaluate Smith visibility
-        double visibility = VisibilitySmithGgxCorrelated(nDotV, nDotL, alphaRoughness);
-        // Interpolate base reflectance
-        Vec3 f0 = Vec3.Lerp(new Vec3(0.04, 0.04, 0.04), surfaceColor, metallic);
-        // Evaluate Schlick fresnel
-        Vec3 fresnel = FresnelSchlick(vDotH, f0);
-        // Combine specular BRDF terms
-        Vec3 specular = fresnel * (distribution * visibility);
-        // Compute diffuse BRDF term
-        Vec3 diffuse = (new Vec3(1.0, 1.0, 1.0) - fresnel).Multiply(surfaceColor) * ((1.0 - metallic) / Pi);
+        // Declare distribution term
+        double distribution;
+        // Declare visibility term
+        double visibility;
+        // Check anisotropic lobe
+        if (shading.Anisotropy > 0.0)
+        // Begin anisotropic branch
+        {
+            // Project halfway on tangent
+            double tDotH = shading.AnisoTangent.Dot(halfVector);
+            // Project halfway on bitangent
+            double bDotH = shading.AnisoBitangent.Dot(halfVector);
+            // Stretch tangent roughness by anisotropy
+            double alphaT = alphaRoughness + (1.0 - alphaRoughness) * shading.Anisotropy * shading.Anisotropy;
+            // Evaluate anisotropic distribution
+            distribution = DistributionGgxAnisotropic(nDotH, tDotH, bDotH, alphaT, alphaRoughness);
+            // Evaluate anisotropic visibility
+            visibility = VisibilitySmithGgxAnisotropic(
+                // Pass light view alignment
+                nDotL, nDotV,
+                // Pass bitangent view alignment
+                shading.AnisoBitangent.Dot(view),
+                // Pass tangent view alignment
+                shading.AnisoTangent.Dot(view),
+                // Pass tangent light alignment
+                shading.AnisoTangent.Dot(lightDir),
+                // Pass bitangent light alignment
+                shading.AnisoBitangent.Dot(lightDir),
+                // Pass tangent bitangent roughness
+                alphaT, alphaRoughness);
+        // End anisotropic branch
+        }
+        else
+        // Begin isotropic branch
+        {
+            // Evaluate GGX distribution
+            distribution = DistributionGgx(nDotH, alphaRoughness);
+            // Evaluate Smith visibility
+            visibility = VisibilitySmithGgxCorrelated(nDotV, nDotL, alphaRoughness);
+        // End isotropic branch
+        }
+
+        // Declare specular BRDF term
+        Vec3 specular;
+        // Declare diffuse BRDF term
+        Vec3 diffuse;
+        // Check default specular fast path
+        if (shading.IsDefaultSpecular && shading.Iridescence <= 0.0)
+        // Begin default specular branch
+        {
+            // Interpolate base reflectance
+            Vec3 f0 = Vec3.Lerp(new Vec3(0.04, 0.04, 0.04), surfaceColor, metallic);
+            // Evaluate Schlick fresnel
+            Vec3 fresnel = FresnelSchlick(vDotH, f0);
+            // Combine specular BRDF terms
+            specular = fresnel * (distribution * visibility);
+            // Compute diffuse BRDF term
+            diffuse = (new Vec3(1.0, 1.0, 1.0) - fresnel).Multiply(surfaceColor) * ((1.0 - metallic) / Pi);
+        // End default specular branch
+        }
+        else
+        // Begin layered specular branch
+        {
+            // Evaluate fresnel blend weight
+            double fresnelWeight = Math.Pow(1.0 - vDotH, 5.0);
+            // Evaluate dielectric fresnel color
+            Vec3 dielectricFresnel = shading.DielectricBaseF0 + (new Vec3(1.0, 1.0, 1.0) - shading.DielectricBaseF0) * fresnelWeight;
+            // Weight dielectric fresnel by specular
+            dielectricFresnel *= shading.SpecularWeight;
+            // Evaluate metal fresnel color
+            Vec3 metalFresnel = FresnelSchlick(vDotH, surfaceColor);
+            // Check thin-film layer
+            if (shading.Iridescence > 0.0)
+            // Begin iridescence branch
+            {
+                // Evaluate dielectric film color
+                Vec3 dielectricFilm = IridescentFresnel(1.0, shading.IridescenceIor, shading.DielectricBaseF0 * shading.SpecularWeight, shading.IridescenceThickness, vDotH);
+                // Blend dielectric fresnel toward film
+                dielectricFresnel = Vec3.Lerp(dielectricFresnel, dielectricFilm, shading.Iridescence);
+                // Evaluate conductor film color
+                Vec3 conductorFilm = IridescentFresnel(1.0, shading.IridescenceIor, surfaceColor, shading.IridescenceThickness, vDotH);
+                // Blend metal fresnel toward film
+                metalFresnel = Vec3.Lerp(metalFresnel, conductorFilm, shading.Iridescence);
+            // End iridescence branch
+            }
+            // Blend specular weight by metalness
+            Vec3 specWeight = Vec3.Lerp(dielectricFresnel, metalFresnel, metallic);
+            // Combine layered specular terms
+            specular = specWeight * (distribution * visibility);
+            // Measure dielectric energy remainder
+            double dielectricRemainder = 1.0 - Math.Max(dielectricFresnel.X, Math.Max(dielectricFresnel.Y, dielectricFresnel.Z));
+            // Compute layered diffuse term
+            diffuse = surfaceColor * (dielectricRemainder * (1.0 - metallic) / Pi);
+        // End layered specular branch
+        }
+
+        // Combine base BRDF terms
+        Vec3 brdf = diffuse + specular;
+        // Check sheen layer
+        if (shading.SheenMax > 0.0)
+        // Begin sheen branch
+        {
+            // Evaluate Charlie sheen distribution
+            double sheenDistribution = DistributionCharlie(nDotH, shading.SheenRoughness);
+            // Evaluate Charlie sheen visibility
+            double sheenVisibility = VisibilitySheen(nDotV, nDotL, shading.SheenRoughness);
+            // Scale base layer by sheen albedo
+            brdf = brdf * Math.Clamp(1.0 - shading.SheenMax, 0.0, 1.0) + shading.SheenColor * (sheenDistribution * sheenVisibility);
+        // End sheen branch
+        }
+        // Check clearcoat layer
+        if (shading.Clearcoat > 0.001)
+        // Begin clearcoat branch
+        {
+            // Square clearcoat roughness
+            double clearcoatAlpha = shading.ClearcoatRoughness * shading.ClearcoatRoughness;
+            // Evaluate clearcoat distribution
+            double clearcoatDistribution = DistributionGgx(nDotH, clearcoatAlpha);
+            // Evaluate clearcoat visibility
+            double clearcoatVisibility = VisibilitySmithGgxCorrelated(nDotV, nDotL, clearcoatAlpha);
+            // Evaluate clearcoat fresnel
+            Vec3 clearcoatFresnel = FresnelSchlick(vDotH, new Vec3(0.04, 0.04, 0.04));
+            // Evaluate clearcoat view fresnel
+            double clearcoatViewFresnel = 0.04 + 0.96 * Math.Pow(1.0 - nDotV, 5.0);
+            // Layer clearcoat over scaled base
+            brdf = brdf * (1.0 - shading.Clearcoat * clearcoatViewFresnel) +
+                clearcoatFresnel * (shading.Clearcoat * clearcoatDistribution * clearcoatVisibility);
+        // End clearcoat branch
+        }
+
         // Scale light by strength
         Vec3 radiance = lightColor * (strength * 0.18);
         // Modulate BRDF by radiance
-        return (diffuse + specular).Multiply(radiance) * nDotL;
+        return brdf.Multiply(radiance) * nDotL;
     // End LightContribution
     }
 
     /// <summary>Computes diffuse and specular environment lighting for a surface.</summary>
     // Compute IBL for surface
-    private static Vec3 EnvironmentLighting(Vec3 baseColor, Vec3 normal, Vec3 view, double metallic, double roughness)
+    private static Vec3 EnvironmentLighting(Vec3 baseColor, Vec3 normal, Vec3 view, double metallic, double roughness, SurfaceShading shading)
     // Begin EnvironmentLighting
     {
         // Clamp normal view alignment
         double nDotV = Math.Max(0.0001, normal.Dot(view));
-        // Interpolate base reflectance
-        Vec3 f0 = Vec3.Lerp(new Vec3(0.04, 0.04, 0.04), baseColor, metallic);
+        // Interpolate layered base reflectance
+        Vec3 f0 = Vec3.Lerp(shading.DielectricBaseF0 * shading.SpecularWeight, baseColor, metallic);
+        // Check thin-film layer
+        if (shading.Iridescence > 0.0)
+            // Blend reflectance toward film color
+            f0 = Vec3.Lerp(f0, IridescentFresnel(1.0, shading.IridescenceIor, f0, shading.IridescenceThickness, nDotV), shading.Iridescence);
         // Compute grazing angle factor
         double grazing = Math.Pow(1.0 - nDotV, 5.0);
+        // Scale grazing cap by specular weight
+        double grazingCap = (1.0 - roughness) * shading.SpecularWeight;
         // Begin roughness reflectance cap
         Vec3 maximum = new(
             // Cap red reflectance channel
-            Math.Max(1.0 - roughness, f0.X),
+            Math.Max(grazingCap, f0.X),
             // Cap green reflectance channel
-            Math.Max(1.0 - roughness, f0.Y),
+            Math.Max(grazingCap, f0.Y),
             // Cap blue reflectance channel
-            Math.Max(1.0 - roughness, f0.Z));
+            Math.Max(grazingCap, f0.Z));
         // Interpolate grazing fresnel
         Vec3 fresnel = f0 + (maximum - f0) * grazing;
         // Compute diffuse energy remainder
@@ -675,8 +927,28 @@ public sealed class RayTracer
         Vec3 broadSpecular = DiffuseEnvironment(normal);
         // Blend specular by roughness
         Vec3 specular = Vec3.Lerp(sharpSpecular, broadSpecular, roughness * roughness).Multiply(fresnel);
+        // Combine indirect lighting
+        Vec3 indirect = diffuse + specular;
+        // Check clearcoat layer
+        if (shading.Clearcoat > 0.001)
+        // Begin clearcoat branch
+        {
+            // Evaluate clearcoat view fresnel
+            double clearcoatViewFresnel = 0.04 + 0.96 * Math.Pow(1.0 - nDotV, 5.0);
+            // Blend clearcoat environment reflections
+            Vec3 clearcoatIbl = Vec3.Lerp(sharpSpecular, broadSpecular, shading.ClearcoatRoughness * shading.ClearcoatRoughness) * (clearcoatViewFresnel * shading.Clearcoat);
+            // Scale indirect by clearcoat layer
+            indirect = indirect * (1.0 - shading.Clearcoat * clearcoatViewFresnel);
+            // Scale combined IBL output
+            indirect *= 0.72;
+            // Add clearcoat indirect
+            indirect += clearcoatIbl;
+            // Return layered indirect lighting
+            return indirect;
+        // End clearcoat branch
+        }
         // Scale combined IBL output
-        return (diffuse + specular) * 0.72;
+        return indirect * 0.72;
     // End EnvironmentLighting
     }
 
@@ -720,6 +992,278 @@ public sealed class RayTracer
         // Blend base to white
         return f0 + (new Vec3(1.0, 1.0, 1.0) - f0) * factor;
     // End FresnelSchlick
+    }
+
+    /// <summary>Converts an IOR pair to normal-incidence Fresnel reflectance.</summary>
+    // Convert IOR pair to F0
+    private static double Fresnel0FromIor(double transmittedIor, double incidentIor)
+    // Begin Fresnel0FromIor
+    {
+        // Evaluate IOR ratio
+        double ratio = (transmittedIor - incidentIor) / (transmittedIor + incidentIor);
+        // Return squared ratio
+        return ratio * ratio;
+    // End Fresnel0FromIor
+    }
+
+    /// <summary>Converts a single IOR against air to normal-incidence Fresnel reflectance.</summary>
+    // Convert IOR to F0
+    private static double IorToF0(double ior) => Fresnel0FromIor(ior, 1.0);
+
+    /// <summary>Evaluates the anisotropic GGX normal distribution term.</summary>
+    // Evaluate anisotropic GGX distribution
+    private static double DistributionGgxAnisotropic(double nDotH, double tDotH, double bDotH, double at, double ab)
+    // Begin DistributionGgxAnisotropic
+    {
+        // Multiply tangent bitangent roughness
+        double a2 = at * ab;
+        // Build scaled halfway vector
+        double fx = ab * tDotH;
+        // Scale bitangent component
+        double fy = at * bDotH;
+        // Scale normal component
+        double fz = a2 * nDotH;
+        // Measure guarded squared length
+        double lengthSquared = Math.Max(fx * fx + fy * fy + fz * fz, 1e-12);
+        // Evaluate slope weight
+        double w2 = a2 / lengthSquared;
+        // Return normalized distribution
+        return a2 * w2 * w2 / Pi;
+    // End DistributionGgxAnisotropic
+    }
+
+    /// <summary>Evaluates the anisotropic Smith GGX visibility term.</summary>
+    // Evaluate anisotropic visibility term
+    private static double VisibilitySmithGgxAnisotropic(double nDotL, double nDotV, double bDotV, double tDotV, double tDotL, double bDotL, double at, double ab)
+    // Begin VisibilitySmithGgxAnisotropic
+    {
+        // Compute view direction length
+        double viewLength = Math.Sqrt(Math.Max(at * at * tDotV * tDotV + ab * ab * bDotV * bDotV + nDotV * nDotV, 0.0));
+        // Compute light direction length
+        double lightLength = Math.Sqrt(Math.Max(at * at * tDotL * tDotL + ab * ab * bDotL * bDotL + nDotL * nDotL, 0.0));
+        // Compute view geometry term
+        double ggxV = nDotL * viewLength;
+        // Compute light geometry term
+        double ggxL = nDotV * lightLength;
+        // Return clamped correlated visibility
+        return Math.Clamp(0.5 / Math.Max(ggxV + ggxL, 1e-8), 0.0, 1.0);
+    // End VisibilitySmithGgxAnisotropic
+    }
+
+    /// <summary>Evaluates the Charlie sheen normal distribution term.</summary>
+    // Evaluate Charlie sheen distribution
+    private static double DistributionCharlie(double nDotH, double sheenRoughness)
+    // Begin DistributionCharlie
+    {
+        // Square sheen roughness with floor
+        double alphaG = Math.Max(sheenRoughness * sheenRoughness, 1e-4);
+        // Invert roughness parameter
+        double invR = 1.0 / alphaG;
+        // Compute sine squared term
+        double sin2H = Math.Max(1.0 - nDotH * nDotH, 0.0);
+        // Return normalized distribution
+        return (2.0 + invR) * Math.Pow(sin2H, invR * 0.5) / (2.0 * Pi);
+    // End DistributionCharlie
+    }
+
+    /// <summary>Evaluates the Charlie sheen lambda term for one direction.</summary>
+    // Evaluate sheen lambda term
+    private static double SheenLambda(double cosTheta, double alphaG)
+    // Begin SheenLambda
+    {
+        // Square roughness complement
+        double oneMinusAlphaSq = (1.0 - alphaG) * (1.0 - alphaG);
+        // Blend fit coefficient a
+        double a = 21.5473 + (25.3245 - 21.5473) * oneMinusAlphaSq;
+        // Blend fit coefficient b
+        double b = 3.82987 + (3.32435 - 3.82987) * oneMinusAlphaSq;
+        // Blend fit coefficient c
+        double c = 0.19823 + (0.16801 - 0.19823) * oneMinusAlphaSq;
+        // Blend fit coefficient d
+        double d = -1.97760 + (-1.27393 + 1.97760) * oneMinusAlphaSq;
+        // Blend fit coefficient e
+        double e = -4.32054 + (-4.85967 + 4.32054) * oneMinusAlphaSq;
+        // Evaluate fit for grazing angles
+        double fit(double x) => a / (1.0 + b * Math.Pow(Math.Max(x, 0.0), c)) + d * x + e;
+        // Mirror fit past halfway
+        return Math.Abs(cosTheta) < 0.5 ? Math.Exp(fit(cosTheta)) : Math.Exp(2.0 * fit(0.5) - fit(1.0 - cosTheta));
+    // End SheenLambda
+    }
+
+    /// <summary>Evaluates the Charlie sheen visibility term.</summary>
+    // Evaluate sheen visibility term
+    private static double VisibilitySheen(double nDotV, double nDotL, double sheenRoughness)
+    // Begin VisibilitySheen
+    {
+        // Square sheen roughness with floor
+        double alphaG = Math.Max(sheenRoughness * sheenRoughness, 1e-4);
+        // Evaluate view lambda term
+        double lambdaV = SheenLambda(nDotV, alphaG);
+        // Evaluate light lambda term
+        double lambdaL = SheenLambda(nDotL, alphaG);
+        // Return normalized visibility
+        return 1.0 / ((1.0 + lambdaV + lambdaL) * (4.0 * nDotV * nDotL));
+    // End VisibilitySheen
+    }
+
+    /// <summary>Evaluates thin-film iridescence Fresnel reflectance at one angle.</summary>
+    // Evaluate iridescent fresnel color
+    private static Vec3 IridescentFresnel(double outsideIor, double iridescenceIor, Vec3 baseF0, double thicknessNm, double cosTheta1)
+    // Begin IridescentFresnel
+    {
+        // Clamp incident cosine
+        cosTheta1 = Math.Clamp(cosTheta1, 0.0, 1.0);
+        // Clamp film base reflectance
+        Vec3 filmBase = new(
+            // Clamp red film channel
+            Math.Clamp(baseF0.X, 0.0, 1.0),
+            // Clamp green film channel
+            Math.Clamp(baseF0.Y, 0.0, 1.0),
+            // Clamp blue film channel
+            Math.Clamp(baseF0.Z, 0.0, 1.0));
+        // Refract into thin film
+        double eta = outsideIor / iridescenceIor;
+        // Compute squared refracted sine
+        double sinTheta2Sq = eta * eta * (1.0 - cosTheta1 * cosTheta1);
+        // Compute squared refracted cosine
+        double cosTheta2Sq = 1.0 - sinTheta2Sq;
+        // Handle total internal reflection
+        if (cosTheta2Sq < 0.0)
+            // Return full reflectance
+            return new Vec3(1.0, 1.0, 1.0);
+        // Compute refracted cosine
+        double cosTheta2 = Math.Sqrt(cosTheta2Sq);
+        // Evaluate first interface reflectance
+        double r0 = Fresnel0FromIor(iridescenceIor, outsideIor);
+        // Evaluate first interface fresnel
+        double r12 = r0 + (1.0 - r0) * Math.Pow(1.0 - cosTheta1, 5.0);
+        // Evaluate first interface transmittance
+        double t121 = 1.0 - r12;
+        // Convert guarded base reflectance to IOR
+        Vec3 baseIor = new(
+            // Convert red channel
+            Fresnel0ToIor(filmBase.X),
+            // Convert green channel
+            Fresnel0ToIor(filmBase.Y),
+            // Convert blue channel
+            Fresnel0ToIor(filmBase.Z));
+        // Evaluate second interface reflectance
+        Vec3 r1 = new(
+            // Convert red interface
+            Fresnel0FromIor(baseIor.X, iridescenceIor),
+            // Convert green interface
+            Fresnel0FromIor(baseIor.Y, iridescenceIor),
+            // Convert blue interface
+            Fresnel0FromIor(baseIor.Z, iridescenceIor));
+        // Evaluate second interface fresnel
+        double fresnel2Weight = Math.Pow(1.0 - cosTheta2, 5.0);
+        // Blend second interface reflectance
+        Vec3 r23 = r1 + (new Vec3(1.0, 1.0, 1.0) - r1) * fresnel2Weight;
+        // Evaluate first interface phase
+        double phi12 = iridescenceIor < outsideIor ? Pi : 0.0;
+        // Evaluate return phase
+        double phi21 = Pi - phi12;
+        // Evaluate second interface phases
+        Vec3 phi23 = new(
+            // Evaluate red phase
+            baseIor.X < iridescenceIor ? Pi : 0.0,
+            // Evaluate green phase
+            baseIor.Y < iridescenceIor ? Pi : 0.0,
+            // Evaluate blue phase
+            baseIor.Z < iridescenceIor ? Pi : 0.0);
+        // Combine interface phases
+        Vec3 phi = new(phi21 + phi23.X, phi21 + phi23.Y, phi21 + phi23.Z);
+        // Evaluate optical path difference
+        double opd = 2.0 * iridescenceIor * thicknessNm * cosTheta2;
+        // Clamp compound reflectance
+        Vec3 r123 = new(
+            // Clamp red compound channel
+            Math.Clamp(r12 * r23.X, 1e-5, 0.9999),
+            // Clamp green compound channel
+            Math.Clamp(r12 * r23.Y, 1e-5, 0.9999),
+            // Clamp blue compound channel
+            Math.Clamp(r12 * r23.Z, 1e-5, 0.9999));
+        // Root compound reflectance
+        Vec3 sqrtR123 = new(Math.Sqrt(r123.X), Math.Sqrt(r123.Y), Math.Sqrt(r123.Z));
+        // Evaluate multiple scattering term
+        double t121Sq = t121 * t121;
+        // Scale scattered reflectance
+        Vec3 rs = new(
+            // Scale red scattered channel
+            t121Sq * r23.X / (1.0 - r123.X),
+            // Scale green scattered channel
+            t121Sq * r23.Y / (1.0 - r123.Y),
+            // Scale blue scattered channel
+            t121Sq * r23.Z / (1.0 - r123.Z));
+        // Evaluate DC reflectance term
+        Vec3 intensity = new(r12 + rs.X, r12 + rs.Y, r12 + rs.Z);
+        // Initialize series coefficient
+        Vec3 cm = rs - new Vec3(t121, t121, t121);
+        // Accumulate interference orders
+        for (int m = 1; m <= 2; m++)
+        // Begin interference loop
+        {
+            // Decay series coefficient
+            cm = cm.Multiply(sqrtR123);
+            // Evaluate spectral sensitivity
+            Vec3 sm = EvalIridescenceSensitivity(m * opd, new Vec3(m * phi.X, m * phi.Y, m * phi.Z)) * 2.0;
+            // Accumulate interference term
+            intensity += cm.Multiply(sm);
+        // End interference loop
+        }
+        // Clamp reflectance to unit range
+        return new Vec3(
+            // Clamp red reflectance
+            Math.Clamp(intensity.X, 0.0, 1.0),
+            // Clamp green reflectance
+            Math.Clamp(intensity.Y, 0.0, 1.0),
+            // Clamp blue reflectance
+            Math.Clamp(intensity.Z, 0.0, 1.0));
+    // End IridescentFresnel
+    }
+
+    /// <summary>Converts normal-incidence Fresnel reflectance back to IOR.</summary>
+    // Convert F0 back to IOR
+    private static double Fresnel0ToIor(double f0)
+    // Begin Fresnel0ToIor
+    {
+        // Root guarded reflectance below one
+        double sqrtF0 = Math.Min(Math.Sqrt(Math.Max(f0, 0.0) + 0.0001), 1.0 - 1e-7);
+        // Return inverted fresnel ratio
+        return (1.0 + sqrtF0) / (1.0 - sqrtF0);
+    // End Fresnel0ToIor
+    }
+
+    /// <summary>Evaluates the thin-film spectral sensitivity for one order.</summary>
+    // Evaluate spectral sensitivity
+    private static Vec3 EvalIridescenceSensitivity(double opd, Vec3 shift)
+    // Begin EvalIridescenceSensitivity
+    {
+        // Scale optical path to phase
+        double phase = 2.0 * Pi * opd * 1.0e-9;
+        // Evaluate red tristimulus term
+        double x = 5.4856e-13 * Math.Sqrt(2.0 * Pi * 4.3278e09) * Math.Cos(1.6810e06 * phase + shift.X) * Math.Exp(-phase * phase * 4.3278e09);
+        // Evaluate green tristimulus term
+        double y = 4.4201e-13 * Math.Sqrt(2.0 * Pi * 9.3046e09) * Math.Cos(1.7953e06 * phase + shift.Y) * Math.Exp(-phase * phase * 9.3046e09);
+        // Evaluate blue tristimulus term
+        double z = 5.2481e-13 * Math.Sqrt(2.0 * Pi * 6.6121e09) * Math.Cos(2.2084e06 * phase + shift.Z) * Math.Exp(-phase * phase * 6.6121e09);
+        // Add red side lobe term
+        x += 9.7470e-14 * Math.Sqrt(2.0 * Pi * 4.5282e09) * Math.Cos(2.2399e06 * phase + shift.X) * Math.Exp(-4.5282e09 * phase * phase);
+        // Normalize by illuminant energy
+        x /= 1.0685e-7;
+        // Normalize green tristimulus
+        y /= 1.0685e-7;
+        // Normalize blue tristimulus
+        z /= 1.0685e-7;
+        // Convert XYZ tristimulus to linear RGB
+        return new Vec3(
+            // Convert red channel
+            3.2404542 * x - 1.5371385 * y - 0.4985314 * z,
+            // Convert green channel
+            -0.9692660 * x + 1.8760108 * y + 0.0415560 * z,
+            // Convert blue channel
+            0.0556434 * x - 0.2040259 * y + 1.0572252 * z);
+    // End EvalIridescenceSensitivity
     }
 
     /// <summary>Samples the analytic studio environment in the given direction.</summary>
@@ -789,6 +1333,28 @@ public sealed class RayTracer
         // Apply squared edge fade
         return attenuation * edgeFade * edgeFade;
     // End DistanceAttenuation
+    }
+
+    /// <summary>Evaluates Beer-Lambert volume attenuation for transmitted light.</summary>
+    // Evaluate volume attenuation
+    private static Vec3 VolumeAttenuation(Hit hit, Vec3 rayDirection)
+    // Begin VolumeAttenuation
+    {
+        // Measure view alignment magnitude
+        double alignment = Math.Abs(hit.Normal.Normalize().Dot(rayDirection * -1.0));
+        // Compute view dependent path length
+        double pathLength = hit.Material.Thickness / Math.Max(alignment, 0.15);
+        // Normalize path by attenuation distance
+        double density = pathLength / hit.Material.AttenuationDistance;
+        // Apply Beer Lambert absorption
+        return new Vec3(
+            // Attenuate red channel
+            Math.Pow(Math.Max(hit.Material.AttenuationColor.X, 0.0001), density),
+            // Attenuate green channel
+            Math.Pow(Math.Max(hit.Material.AttenuationColor.Y, 0.0001), density),
+            // Attenuate blue channel
+            Math.Pow(Math.Max(hit.Material.AttenuationColor.Z, 0.0001), density));
+    // End VolumeAttenuation
     }
 
     /// <summary>Computes the inner-to-outer cone falloff for a spot light.</summary>

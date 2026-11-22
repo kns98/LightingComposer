@@ -167,6 +167,8 @@ Common render options:
   --zoom <factor> (0.2-10, tighter auto-framing)
   --light "kind=point;position=3,4,-2;color=1,1,1;intensity=5" (repeatable, replaces scene lights)
   --frames <count> --fps <rate> (360-degree turntable GIF, any backend)
+  --view auto|front|left|right|top (named auto-framing angle)
+  --variant <name> (glTF material variant)
 
 Portable export package:
   LightingShowcase.Composer export <scene> --format <id> --output-dir <folder>

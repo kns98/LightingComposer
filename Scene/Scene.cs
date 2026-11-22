@@ -52,7 +52,7 @@ public sealed class Scene
 
 
     /// <summary>Opens any supported static model file as a replacement scene through a format plugin.</summary>
-    public ObjLoadResult OpenModelFile(string filePath, Action<ObjLoadProgress>? progress = null)
+    public ObjLoadResult OpenModelFile(string filePath, Action<ObjLoadProgress>? progress = null, string? variant = null)
     {
         ISceneFormatPlugin plugin = SceneFormatRegistry.FindImporter(filePath);
         Clear();
@@ -66,7 +66,8 @@ public sealed class Scene
             TargetCenter = new Vec3(0.0, 0.0, 3.55),
             FloorY = -1.45,
             ReplaceScene = true,
-            Progress = progress
+            Progress = progress,
+            Variant = variant
         });
 
         Description = $"{plugin.DisplayName}: {Path.GetFileName(filePath)} ({result.TriangleCount} triangles)";

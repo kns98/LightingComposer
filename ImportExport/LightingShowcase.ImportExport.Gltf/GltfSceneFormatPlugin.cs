@@ -22,7 +22,7 @@ public sealed class GltfSceneFormatPlugin : ISceneFormatPlugin
 
     /// <summary>Imports a glTF or GLB file into the scene with the given load options.</summary>
     public ObjLoadResult Import(Scene scene, string filePath, SceneLoadOptions options) =>
-        GltfSceneIO.LoadIntoScene(scene, filePath, options.FallbackMaterial, options.TargetSize, options.TargetCenter, options.FloorY, options.Progress, options.SimplifyKeepFraction);
+        GltfSceneIO.LoadIntoScene(scene, filePath, options.FallbackMaterial, options.TargetSize, options.TargetCenter, options.FloorY, options.Progress, options.SimplifyKeepFraction, options.Variant);
 
     /// <summary>Exports the scene to glTF or GLB based on the file extension or variant.</summary>
     public void Export(Scene scene, string filePath, SceneSaveOptions options) =>

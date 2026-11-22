@@ -34,7 +34,10 @@ internal sealed class RasterPipelineFactory
                 new ResourceLayoutElementDescription("LightBuffer", ResourceKind.StructuredBufferReadOnly, ShaderStages.Fragment),
                 new ResourceLayoutElementDescription("MaterialBuffer", ResourceKind.StructuredBufferReadOnly, ShaderStages.Fragment),
                 new ResourceLayoutElementDescription("AtlasTexture", ResourceKind.TextureReadOnly, ShaderStages.Fragment),
-                new ResourceLayoutElementDescription("AtlasSampler", ResourceKind.Sampler, ShaderStages.Fragment))));
+                new ResourceLayoutElementDescription("AtlasSampler", ResourceKind.Sampler, ShaderStages.Fragment),
+                new ResourceLayoutElementDescription("ShadowMatrices", ResourceKind.StructuredBufferReadOnly, ShaderStages.Fragment),
+                new ResourceLayoutElementDescription("ShadowMaps", ResourceKind.TextureReadOnly, ShaderStages.Fragment),
+                new ResourceLayoutElementDescription("ShadowSampler", ResourceKind.Sampler, ShaderStages.Fragment))));
 
             RasterShaderCompiler shaders = new(log);
             Shader vertex = scope.Track(shaders.CreateVertexShader(factory));

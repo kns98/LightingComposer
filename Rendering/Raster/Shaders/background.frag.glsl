@@ -4,6 +4,7 @@ layout(std140, set = 0, binding = 0) uniform BackgroundConstants
 {
     vec4 Top;
     vec4 Bottom;
+    vec4 Exposure;
 } Background;
 
 layout(location = 0) in vec2 vUv;
@@ -49,5 +50,5 @@ void main()
     // NDC y=-1 lands on the image top with this backend's clip convention,
     // so uv.y 0 is the top color and uv.y 1 (clamped) is the bottom color.
     vec3 linear = mix(Background.Top.rgb, Background.Bottom.rgb, clamp(vUv.y, 0.0, 1.0));
-    outColor = vec4(linearToSrgb(pbrNeutralToneMap(linear)), 1.0);
+    outColor = vec4(linearToSrgb(pbrNeutralToneMap(linear * max(Background.Exposure.x, 0.0))), 1.0);
 }

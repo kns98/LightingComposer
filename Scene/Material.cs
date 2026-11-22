@@ -26,7 +26,14 @@ public enum MaterialTextureSlot
     Normal,
     Emissive,
     Transmission,
-    Occlusion
+    Occlusion,
+    Specular,
+    SpecularColor,
+    SheenColor,
+    SheenRoughness,
+    Anisotropy,
+    Iridescence,
+    IridescenceThickness
 }
 
 /// <summary>Surface material definition used by shading and texture lookup.</summary>
@@ -59,6 +66,23 @@ public sealed class Material
     public double Clearcoat { get; }
     public double ClearcoatRoughness { get; }
     public bool ClearcoatUsesTransmissionTexture { get; }
+    public double Specular { get; }
+    public Vec3 SpecularColor { get; }
+    public TextureMap? SpecularTexture { get; }
+    public TextureMap? SpecularColorTexture { get; }
+    public Vec3 SheenColor { get; }
+    public double SheenRoughness { get; }
+    public TextureMap? SheenColorTexture { get; }
+    public TextureMap? SheenRoughnessTexture { get; }
+    public double Anisotropy { get; }
+    public double AnisotropyRotation { get; }
+    public TextureMap? AnisotropyTexture { get; }
+    public double Iridescence { get; }
+    public double IridescenceIor { get; }
+    public double IridescenceThicknessMinimum { get; }
+    public double IridescenceThicknessMaximum { get; }
+    public TextureMap? IridescenceTexture { get; }
+    public TextureMap? IridescenceThicknessTexture { get; }
 
     /// <summary>Initializes a new PBR material with optional texture maps.</summary>
     public Material(
@@ -88,7 +112,24 @@ public sealed class Material
         double attenuationDistance = 0.0,
         double clearcoat = 0.0,
         double clearcoatRoughness = 0.0,
-        bool clearcoatUsesTransmissionTexture = false)
+        bool clearcoatUsesTransmissionTexture = false,
+        double specular = 1.0,
+        Vec3? specularColor = null,
+        TextureMap? specularTexture = null,
+        TextureMap? specularColorTexture = null,
+        Vec3? sheenColor = null,
+        double sheenRoughness = 0.0,
+        TextureMap? sheenColorTexture = null,
+        TextureMap? sheenRoughnessTexture = null,
+        double anisotropy = 0.0,
+        double anisotropyRotation = 0.0,
+        TextureMap? anisotropyTexture = null,
+        double iridescence = 0.0,
+        double iridescenceIor = 1.3,
+        double iridescenceThicknessMinimum = 100.0,
+        double iridescenceThicknessMaximum = 400.0,
+        TextureMap? iridescenceTexture = null,
+        TextureMap? iridescenceThicknessTexture = null)
     {
         Color = color;
         Emission = emission;
@@ -123,6 +164,23 @@ public sealed class Material
         Clearcoat = double.IsFinite(clearcoat) ? Math.Clamp(clearcoat, 0.0, 1.0) : 0.0;
         ClearcoatRoughness = double.IsFinite(clearcoatRoughness) ? Math.Clamp(clearcoatRoughness, 0.0, 1.0) : 0.0;
         ClearcoatUsesTransmissionTexture = clearcoatUsesTransmissionTexture;
+        Specular = double.IsFinite(specular) ? Math.Clamp(specular, 0.0, 1.0) : 1.0;
+        SpecularColor = specularColor ?? new Vec3(1.0, 1.0, 1.0);
+        SpecularTexture = specularTexture;
+        SpecularColorTexture = specularColorTexture;
+        SheenColor = sheenColor ?? Vec3.Zero;
+        SheenRoughness = double.IsFinite(sheenRoughness) ? Math.Clamp(sheenRoughness, 0.0, 1.0) : 0.0;
+        SheenColorTexture = sheenColorTexture;
+        SheenRoughnessTexture = sheenRoughnessTexture;
+        Anisotropy = double.IsFinite(anisotropy) ? Math.Clamp(anisotropy, 0.0, 1.0) : 0.0;
+        AnisotropyRotation = double.IsFinite(anisotropyRotation) ? anisotropyRotation : 0.0;
+        AnisotropyTexture = anisotropyTexture;
+        Iridescence = double.IsFinite(iridescence) ? Math.Clamp(iridescence, 0.0, 1.0) : 0.0;
+        IridescenceIor = double.IsFinite(iridescenceIor) ? Math.Max(1.0, iridescenceIor) : 1.3;
+        IridescenceThicknessMinimum = double.IsFinite(iridescenceThicknessMinimum) ? Math.Max(0.0, iridescenceThicknessMinimum) : 100.0;
+        IridescenceThicknessMaximum = double.IsFinite(iridescenceThicknessMaximum) ? Math.Max(0.0, iridescenceThicknessMaximum) : 400.0;
+        IridescenceTexture = iridescenceTexture;
+        IridescenceThicknessTexture = iridescenceThicknessTexture;
     }
 
     /// <summary>Samples the base color/albedo texture in its stored color space.</summary>
@@ -194,6 +252,15 @@ public sealed class Material
         return emissionSource.Multiply(EmissionColor) * Emission;
     }
 
+    /// <summary>Samples transmission from the factor and the red channel, per KHR_materials_transmission.</summary>
+    public double SampleTransmission(double u, double v)
+    {
+        double transmission = Transmission;
+        if (TransmissionTexture != null)
+            transmission *= Math.Clamp(TransmissionTexture.Sample(u, v).X, 0.0, 1.0);
+        return Math.Clamp(transmission, 0.0, 1.0);
+    }
+
     /// <summary>Samples glTF occlusion, where the red channel attenuates indirect lighting.</summary>
     public double SampleOcclusion(double u, double v)
     {
@@ -202,6 +269,68 @@ public sealed class Material
 
         double sampled = Math.Clamp(OcclusionTexture.Sample(u, v).X, 0.0, 1.0);
         return 1.0 + (sampled - 1.0) * OcclusionStrength;
+    }
+
+    /// <summary>Samples specular strength from alpha and F0 color from sRGB, per KHR_materials_specular.</summary>
+    public (double Specular, Vec3 SpecularColor) SampleSpecular(double u, double v)
+    {
+        double specular = Specular;
+        Vec3 color = SpecularColor;
+        if (SpecularTexture != null)
+            specular *= SpecularTexture.SampleAlpha(u, v);
+        if (SpecularColorTexture != null)
+            color = SrgbToLinear(SpecularColorTexture.Sample(u, v)).Multiply(color);
+        return (Math.Clamp(specular, 0.0, 1.0), color);
+    }
+
+    /// <summary>Samples sheen color from sRGB and roughness from alpha, per KHR_materials_sheen.</summary>
+    public (Vec3 SheenColor, double SheenRoughness) SampleSheen(double u, double v)
+    {
+        Vec3 color = SheenColor;
+        double roughness = SheenRoughness;
+        if (SheenColorTexture != null)
+            color = SrgbToLinear(SheenColorTexture.Sample(u, v)).Multiply(color);
+        if (SheenRoughnessTexture != null)
+            roughness *= SheenRoughnessTexture.SampleAlpha(u, v);
+        return (color, Math.Clamp(roughness, 0.0, 1.0));
+    }
+
+    /// <summary>Samples anisotropy strength and direction, per KHR_materials_anisotropy.</summary>
+    public (double Strength, Vec2 Direction) SampleAnisotropy(double u, double v)
+    {
+        double strength = Anisotropy;
+        double rotateCos = Math.Cos(AnisotropyRotation);
+        double rotateSin = Math.Sin(AnisotropyRotation);
+        Vec2 direction = new(rotateCos, rotateSin);
+        if (AnisotropyTexture != null)
+        {
+            Vec3 texel = AnisotropyTexture.Sample(u, v);
+            Vec2 raw = new(texel.X * 2.0 - 1.0, texel.Y * 2.0 - 1.0);
+            if (raw.U * raw.U + raw.V * raw.V > 1e-12)
+            {
+                double length = Math.Sqrt(raw.U * raw.U + raw.V * raw.V);
+                double dx = raw.U / length;
+                double dy = raw.V / length;
+                direction = new Vec2(rotateCos * dx - rotateSin * dy, rotateSin * dx + rotateCos * dy);
+            }
+            strength *= Math.Clamp(texel.Z, 0.0, 1.0);
+        }
+        return (Math.Clamp(strength, 0.0, 1.0), direction);
+    }
+
+    /// <summary>Samples iridescence factor from red and thickness from green, per KHR_materials_iridescence.</summary>
+    public (double Factor, double Thickness) SampleIridescence(double u, double v)
+    {
+        double factor = Iridescence;
+        double thickness = IridescenceThicknessMaximum;
+        if (IridescenceTexture != null)
+            factor *= Math.Clamp(IridescenceTexture.Sample(u, v).X, 0.0, 1.0);
+        if (IridescenceThicknessTexture != null)
+        {
+            double t = Math.Clamp(IridescenceThicknessTexture.Sample(u, v).Y, 0.0, 1.0);
+            thickness = IridescenceThicknessMinimum + (IridescenceThicknessMaximum - IridescenceThicknessMinimum) * t;
+        }
+        return (Math.Clamp(factor, 0.0, 1.0), Math.Max(0.0, thickness));
     }
 
     /// <summary>Converts an sRGB color to linear-light space.</summary>
@@ -220,10 +349,6 @@ public sealed class Material
     }
 
 
-    /// <summary>True when at least one renderer-backed image map is assigned.</summary>
-    public bool HasAnyTexture => Texture != null || MetallicRoughnessTexture != null || NormalTexture != null ||
-                                 EmissiveTexture != null || TransmissionTexture != null || OcclusionTexture != null;
-
     /// <summary>Returns the image map assigned to one PBR texture input.</summary>
     public TextureMap? GetTexture(MaterialTextureSlot slot) => slot switch
     {
@@ -233,6 +358,13 @@ public sealed class Material
         MaterialTextureSlot.Emissive => EmissiveTexture,
         MaterialTextureSlot.Transmission => TransmissionTexture,
         MaterialTextureSlot.Occlusion => OcclusionTexture,
+        MaterialTextureSlot.Specular => SpecularTexture,
+        MaterialTextureSlot.SpecularColor => SpecularColorTexture,
+        MaterialTextureSlot.SheenColor => SheenColorTexture,
+        MaterialTextureSlot.SheenRoughness => SheenRoughnessTexture,
+        MaterialTextureSlot.Anisotropy => AnisotropyTexture,
+        MaterialTextureSlot.Iridescence => IridescenceTexture,
+        MaterialTextureSlot.IridescenceThickness => IridescenceThicknessTexture,
         _ => null
     };
 
@@ -245,6 +377,13 @@ public sealed class Material
         TextureMap? emissive = EmissiveTexture;
         TextureMap? transmission = TransmissionTexture;
         TextureMap? occlusion = OcclusionTexture;
+        TextureMap? specular = SpecularTexture;
+        TextureMap? specularColor = SpecularColorTexture;
+        TextureMap? sheenColor = SheenColorTexture;
+        TextureMap? sheenRoughness = SheenRoughnessTexture;
+        TextureMap? anisotropy = AnisotropyTexture;
+        TextureMap? iridescence = IridescenceTexture;
+        TextureMap? iridescenceThickness = IridescenceThicknessTexture;
 
         switch (slot)
         {
@@ -254,6 +393,13 @@ public sealed class Material
             case MaterialTextureSlot.Emissive: emissive = texture; break;
             case MaterialTextureSlot.Transmission: transmission = texture; break;
             case MaterialTextureSlot.Occlusion: occlusion = texture; break;
+            case MaterialTextureSlot.Specular: specular = texture; break;
+            case MaterialTextureSlot.SpecularColor: specularColor = texture; break;
+            case MaterialTextureSlot.SheenColor: sheenColor = texture; break;
+            case MaterialTextureSlot.SheenRoughness: sheenRoughness = texture; break;
+            case MaterialTextureSlot.Anisotropy: anisotropy = texture; break;
+            case MaterialTextureSlot.Iridescence: iridescence = texture; break;
+            case MaterialTextureSlot.IridescenceThickness: iridescenceThickness = texture; break;
             default: throw new ArgumentOutOfRangeException(nameof(slot));
         }
 
@@ -263,7 +409,12 @@ public sealed class Material
             metallicRoughness, normal, occlusion,
             NormalScale, OcclusionStrength, AlphaMode, AlphaCutoff, DoubleSided,
             transmission, Ior, Thickness, AttenuationColor, AttenuationDistance,
-            Clearcoat, ClearcoatRoughness, ClearcoatUsesTransmissionTexture);
+            Clearcoat, ClearcoatRoughness, ClearcoatUsesTransmissionTexture,
+            Specular, SpecularColor, specular, specularColor,
+            SheenColor, SheenRoughness, sheenColor, sheenRoughness,
+            Anisotropy, AnisotropyRotation, anisotropy,
+            Iridescence, IridescenceIor, IridescenceThicknessMinimum, IridescenceThicknessMaximum,
+            iridescence, iridescenceThickness);
     }
 
     /// <summary>Returns a copy with a different base texture while preserving emission data.</summary>
@@ -278,7 +429,12 @@ public sealed class Material
             MetallicRoughnessTexture, NormalTexture, OcclusionTexture,
             NormalScale, OcclusionStrength, AlphaMode, AlphaCutoff, DoubleSided,
             TransmissionTexture, Ior, Thickness, AttenuationColor, AttenuationDistance,
-            Clearcoat, ClearcoatRoughness, ClearcoatUsesTransmissionTexture);
+            Clearcoat, ClearcoatRoughness, ClearcoatUsesTransmissionTexture,
+            Specular, SpecularColor, SpecularTexture, SpecularColorTexture,
+            SheenColor, SheenRoughness, SheenColorTexture, SheenRoughnessTexture,
+            Anisotropy, AnisotropyRotation, AnisotropyTexture,
+            Iridescence, IridescenceIor, IridescenceThicknessMinimum, IridescenceThicknessMaximum,
+            IridescenceTexture, IridescenceThicknessTexture);
     }
 
     /// <summary>
@@ -317,6 +473,30 @@ public sealed class Material
             preset.AttenuationDistance,
             preset.Clearcoat,
             preset.ClearcoatRoughness,
-            preset.ClearcoatUsesTransmissionTexture);
+            preset.ClearcoatUsesTransmissionTexture,
+            preset.Specular,
+            preset.SpecularColor,
+            SpecularTexture,
+            SpecularColorTexture,
+            preset.SheenColor,
+            preset.SheenRoughness,
+            SheenColorTexture,
+            SheenRoughnessTexture,
+            preset.Anisotropy,
+            preset.AnisotropyRotation,
+            AnisotropyTexture,
+            preset.Iridescence,
+            preset.IridescenceIor,
+            preset.IridescenceThicknessMinimum,
+            preset.IridescenceThicknessMaximum,
+            IridescenceTexture,
+            IridescenceThicknessTexture);
     }
+
+    /// <summary>True when at least one renderer-backed image map is assigned.</summary>
+    public bool HasAnyTexture => Texture != null || MetallicRoughnessTexture != null || NormalTexture != null ||
+                                 EmissiveTexture != null || TransmissionTexture != null || OcclusionTexture != null ||
+                                 SpecularTexture != null || SpecularColorTexture != null ||
+                                 SheenColorTexture != null || SheenRoughnessTexture != null ||
+                                 AnisotropyTexture != null || IridescenceTexture != null || IridescenceThicknessTexture != null;
 }

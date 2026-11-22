@@ -110,10 +110,10 @@ internal static class CpuCommandLineRenderer
                 // End per-sample loop
                 }
 
-                // Average and expose pixel color
-                Vec3 linear = accumulated * sampleWeight * request.Exposure;
-                // Pack pixel into output buffer
-                pixels[y * request.Width + x] = PackDisplayColor(linear);
+                // Average sample color
+                Vec3 linear = accumulated * sampleWeight;
+                // Tone map, expose, and pack pixel into output buffer
+                pixels[y * request.Width + x] = PackDisplayColor(RayTracer.ToDisplayColor(linear, request.Exposure));
             // End per-pixel loop
             }
         // End parallel row loop
@@ -128,34 +128,28 @@ internal static class CpuCommandLineRenderer
 
     /// <summary>Packs a linear color into a display-ready packed pixel value.</summary>
     // Declare linear to display packer
-    private static uint PackDisplayColor(Vec3 linear)
+    private static uint PackDisplayColor(Vec3 display)
     // Begin PackDisplayColor body
     {
         // Convert red channel byte
-        byte red = ToDisplayByte(linear.X);
+        byte red = ToByte(display.X);
         // Convert green channel byte
-        byte green = ToDisplayByte(linear.Y);
+        byte green = ToByte(display.Y);
         // Convert blue channel byte
-        byte blue = ToDisplayByte(linear.Z);
+        byte blue = ToByte(display.Z);
         // Pack RGBA bytes into pixel
         return red | ((uint)green << 8) | ((uint)blue << 16) | 0xff000000u;
     // End PackDisplayColor method
     }
 
-    /// <summary>Converts one linear channel value into a tone-mapped display byte.</summary>
-    // Declare tone-mapping channel converter
-    private static byte ToDisplayByte(double value)
-    // Begin ToDisplayByte body
+    /// <summary>Converts one display channel value into a byte.</summary>
+    // Declare channel byte converter
+    private static byte ToByte(double value)
+    // Begin ToByte body
     {
-        // Clamp invalid or dark values
-        if (!double.IsFinite(value) || value <= 0.0) return 0;
-        // Apply Reinhard tone mapping
-        double mapped = value / (1.0 + value);
-        // Apply gamma 2.2 correction
-        double gamma = Math.Pow(Math.Clamp(mapped, 0.0, 1.0), 1.0 / 2.2);
         // Scale to 0-255 byte
-        return (byte)Math.Clamp((int)Math.Round(gamma * 255.0), 0, 255);
-    // End ToDisplayByte method
+        return (byte)Math.Clamp((int)Math.Round(value * 255.0), 0, 255);
+    // End ToByte method
     }
 
     /// <summary>Returns a deterministic pseudo-random value in [0,1) for pixel sample jitter.</summary>

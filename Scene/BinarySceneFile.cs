@@ -28,7 +28,7 @@ public sealed class BinarySceneSaveOptions
 public static class BinarySceneFile
 {
     private const string Magic = "LSCN";
-    private const int Version = 12;
+    private const int Version = 13;
 
     private enum GeometryKind : byte
     {
@@ -702,6 +702,26 @@ public static class BinarySceneFile
         writer.Write(material.Clearcoat);
         writer.Write(material.ClearcoatRoughness);
         writer.Write(material.ClearcoatUsesTransmissionTexture);
+
+        // Version 13 preserves the specular, sheen, anisotropy, and
+        // iridescence extension parameters.
+        writer.Write(material.Specular);
+        WriteVec3(writer, material.SpecularColor);
+        writer.Write(textureTable.IdFor(material.SpecularTexture));
+        writer.Write(textureTable.IdFor(material.SpecularColorTexture));
+        WriteVec3(writer, material.SheenColor);
+        writer.Write(material.SheenRoughness);
+        writer.Write(textureTable.IdFor(material.SheenColorTexture));
+        writer.Write(textureTable.IdFor(material.SheenRoughnessTexture));
+        writer.Write(material.Anisotropy);
+        writer.Write(material.AnisotropyRotation);
+        writer.Write(textureTable.IdFor(material.AnisotropyTexture));
+        writer.Write(material.Iridescence);
+        writer.Write(material.IridescenceIor);
+        writer.Write(material.IridescenceThicknessMinimum);
+        writer.Write(material.IridescenceThicknessMaximum);
+        writer.Write(textureTable.IdFor(material.IridescenceTexture));
+        writer.Write(textureTable.IdFor(material.IridescenceThicknessTexture));
     }
 
     /// <summary>Reads a material with version-appropriate defaults for newer fields.</summary>
@@ -742,6 +762,23 @@ public static class BinarySceneFile
         double clearcoat = version >= 9 ? reader.ReadDouble() : 0.0;
         double clearcoatRoughness = version >= 9 ? reader.ReadDouble() : 0.0;
         bool clearcoatUsesTransmissionTexture = version >= 9 && reader.ReadBoolean();
+        double specular = version >= 13 ? reader.ReadDouble() : 1.0;
+        Vec3 specularColor = version >= 13 ? ReadVec3(reader) : new Vec3(1.0, 1.0, 1.0);
+        TextureMap? specularTexture = version >= 13 ? textureTable?.ById(reader.ReadInt32()) : null;
+        TextureMap? specularColorTexture = version >= 13 ? textureTable?.ById(reader.ReadInt32()) : null;
+        Vec3 sheenColor = version >= 13 ? ReadVec3(reader) : Vec3.Zero;
+        double sheenRoughness = version >= 13 ? reader.ReadDouble() : 0.0;
+        TextureMap? sheenColorTexture = version >= 13 ? textureTable?.ById(reader.ReadInt32()) : null;
+        TextureMap? sheenRoughnessTexture = version >= 13 ? textureTable?.ById(reader.ReadInt32()) : null;
+        double anisotropy = version >= 13 ? reader.ReadDouble() : 0.0;
+        double anisotropyRotation = version >= 13 ? reader.ReadDouble() : 0.0;
+        TextureMap? anisotropyTexture = version >= 13 ? textureTable?.ById(reader.ReadInt32()) : null;
+        double iridescence = version >= 13 ? reader.ReadDouble() : 0.0;
+        double iridescenceIor = version >= 13 ? reader.ReadDouble() : 1.3;
+        double iridescenceThicknessMinimum = version >= 13 ? reader.ReadDouble() : 100.0;
+        double iridescenceThicknessMaximum = version >= 13 ? reader.ReadDouble() : 400.0;
+        TextureMap? iridescenceTexture = version >= 13 ? textureTable?.ById(reader.ReadInt32()) : null;
+        TextureMap? iridescenceThicknessTexture = version >= 13 ? textureTable?.ById(reader.ReadInt32()) : null;
 
         return new Material(
             color,
@@ -770,7 +807,24 @@ public static class BinarySceneFile
             attenuationDistance,
             clearcoat,
             clearcoatRoughness,
-            clearcoatUsesTransmissionTexture);
+            clearcoatUsesTransmissionTexture,
+            specular,
+            specularColor,
+            specularTexture,
+            specularColorTexture,
+            sheenColor,
+            sheenRoughness,
+            sheenColorTexture,
+            sheenRoughnessTexture,
+            anisotropy,
+            anisotropyRotation,
+            anisotropyTexture,
+            iridescence,
+            iridescenceIor,
+            iridescenceThicknessMinimum,
+            iridescenceThicknessMaximum,
+            iridescenceTexture,
+            iridescenceThicknessTexture);
     }
 
     /// <summary>Writes the texture table records to the binary writer.</summary>
@@ -1081,6 +1135,13 @@ public static class BinarySceneFile
             IdFor(material.NormalTexture);
             IdFor(material.OcclusionTexture);
             IdFor(material.TransmissionTexture);
+            IdFor(material.SpecularTexture);
+            IdFor(material.SpecularColorTexture);
+            IdFor(material.SheenColorTexture);
+            IdFor(material.SheenRoughnessTexture);
+            IdFor(material.AnisotropyTexture);
+            IdFor(material.IridescenceTexture);
+            IdFor(material.IridescenceThicknessTexture);
         }
 
     }
@@ -1329,12 +1390,29 @@ public static class BinarySceneFile
         NearlyEqual(a.Transmission, b.Transmission) &&
         NearlyEqual(a.NormalScale, b.NormalScale) &&
         NearlyEqual(a.OcclusionStrength, b.OcclusionStrength) &&
+        NearlyEqual(a.Specular, b.Specular) &&
+        SameVec(a.SpecularColor, b.SpecularColor) &&
+        SameVec(a.SheenColor, b.SheenColor) &&
+        NearlyEqual(a.SheenRoughness, b.SheenRoughness) &&
+        NearlyEqual(a.Anisotropy, b.Anisotropy) &&
+        NearlyEqual(a.AnisotropyRotation, b.AnisotropyRotation) &&
+        NearlyEqual(a.Iridescence, b.Iridescence) &&
+        NearlyEqual(a.IridescenceIor, b.IridescenceIor) &&
+        NearlyEqual(a.IridescenceThicknessMinimum, b.IridescenceThicknessMinimum) &&
+        NearlyEqual(a.IridescenceThicknessMaximum, b.IridescenceThicknessMaximum) &&
         string.Equals(a.LightId ?? string.Empty, b.LightId ?? string.Empty, StringComparison.Ordinal) &&
         SameTexture(a.Texture, b.Texture) &&
         SameTexture(a.EmissiveTexture, b.EmissiveTexture) &&
         SameTexture(a.MetallicRoughnessTexture, b.MetallicRoughnessTexture) &&
         SameTexture(a.NormalTexture, b.NormalTexture) &&
-        SameTexture(a.OcclusionTexture, b.OcclusionTexture);
+        SameTexture(a.OcclusionTexture, b.OcclusionTexture) &&
+        SameTexture(a.SpecularTexture, b.SpecularTexture) &&
+        SameTexture(a.SpecularColorTexture, b.SpecularColorTexture) &&
+        SameTexture(a.SheenColorTexture, b.SheenColorTexture) &&
+        SameTexture(a.SheenRoughnessTexture, b.SheenRoughnessTexture) &&
+        SameTexture(a.AnisotropyTexture, b.AnisotropyTexture) &&
+        SameTexture(a.IridescenceTexture, b.IridescenceTexture) &&
+        SameTexture(a.IridescenceThicknessTexture, b.IridescenceThicknessTexture);
 
     /// <summary>Returns true when two textures match on name, source, and transform values.</summary>
     private static bool SameTexture(TextureMap? a, TextureMap? b) =>

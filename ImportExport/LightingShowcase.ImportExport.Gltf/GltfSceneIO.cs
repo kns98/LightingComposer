@@ -37,7 +37,8 @@ public static class GltfSceneIO
         Vec3? targetCenter = null,
         double floorY = -1.48,
         Action<ObjLoadProgress>? progress = null,
-        double? simplifyKeepFraction = null)
+        double? simplifyKeepFraction = null,
+        string? variant = null)
     {
         Stopwatch totalTimer = Stopwatch.StartNew();
         Stopwatch phaseTimer = Stopwatch.StartNew();
@@ -51,6 +52,7 @@ public static class GltfSceneIO
         progress?.Invoke(new ObjLoadProgress("Loading glTF buffers and materials", 12, 0, 0, 0));
         List<byte[]> buffers = LoadBuffers(root, doc, filePath);
         List<GltfMaterial> materials = ReadMaterials(root, buffers, filePath, fallbackMaterial);
+        int selectedVariant = ResolveVariantIndex(root, variant);
         List<ImportedLight> lights = ReadLights(root);
         long resourceMilliseconds = phaseTimer.ElapsedMilliseconds;
 
@@ -318,6 +320,7 @@ public static class GltfSceneIO
                     ? ReadNormalAccessor(root, buffers, normalAccessorEl.GetInt32(), world)
                     : new List<Vec3>(0);
                 int materialIndex = primitive.TryGetProperty("material", out JsonElement materialEl) ? materialEl.GetInt32() : -1;
+                materialIndex = ApplyVariantMapping(primitive, materialIndex, selectedVariant);
                 GltfMaterial? gltfMaterial = materialIndex >= 0 && materialIndex < materials.Count ? materials[materialIndex] : null;
                 string uvAttributeName = $"TEXCOORD_{Math.Max(0, gltfMaterial?.BaseColorTexCoord ?? 0)}";
                 bool hasUv = attributes.TryGetProperty(uvAttributeName, out JsonElement uvEl) ||
@@ -359,7 +362,12 @@ public static class GltfSceneIO
                             material.NormalTexture, material.OcclusionTexture, material.NormalScale, material.OcclusionStrength,
                             material.AlphaMode, material.AlphaCutoff, material.DoubleSided, material.TransmissionTexture,
                             material.Ior, material.Thickness, material.AttenuationColor, material.AttenuationDistance,
-                            material.Clearcoat, material.ClearcoatRoughness, material.ClearcoatUsesTransmissionTexture);
+                            material.Clearcoat, material.ClearcoatRoughness, material.ClearcoatUsesTransmissionTexture,
+                            material.Specular, material.SpecularColor, material.SpecularTexture, material.SpecularColorTexture,
+                            material.SheenColor, material.SheenRoughness, material.SheenColorTexture, material.SheenRoughnessTexture,
+                            material.Anisotropy, material.AnisotropyRotation, material.AnisotropyTexture,
+                            material.Iridescence, material.IridescenceIor, material.IridescenceThicknessMinimum, material.IridescenceThicknessMaximum,
+                            material.IridescenceTexture, material.IridescenceThicknessTexture);
                     }
                     if (ia < normals.Count && ib < normals.Count && ic < normals.Count)
                     {
@@ -555,6 +563,72 @@ public static class GltfSceneIO
                     clearcoat["clearcoatTexture"] = new Dictionary<string, object?> { ["index"] = transmissionTexture };
                 materialExtensions["KHR_materials_clearcoat"] = clearcoat;
                 materialExtensionsUsed.Add("KHR_materials_clearcoat");
+            }
+            int specularTexture = TextureIndex(material.SpecularTexture);
+            int specularColorTexture = TextureIndex(material.SpecularColorTexture);
+            if (Math.Abs(material.Specular - 1.0) > 1e-9 || !IsWhite(material.SpecularColor) || specularTexture >= 0 || specularColorTexture >= 0)
+            {
+                Dictionary<string, object?> specular = new()
+                {
+                    ["specularFactor"] = Clamp01(material.Specular),
+                    ["specularColorFactor"] = new[] { material.SpecularColor.X, material.SpecularColor.Y, material.SpecularColor.Z }
+                };
+                if (specularTexture >= 0)
+                    specular["specularTexture"] = new Dictionary<string, object?> { ["index"] = specularTexture };
+                if (specularColorTexture >= 0)
+                    specular["specularColorTexture"] = new Dictionary<string, object?> { ["index"] = specularColorTexture };
+                materialExtensions["KHR_materials_specular"] = specular;
+                materialExtensionsUsed.Add("KHR_materials_specular");
+            }
+            int sheenColorTexture = TextureIndex(material.SheenColorTexture);
+            int sheenRoughnessTexture = TextureIndex(material.SheenRoughnessTexture);
+            if (Math.Max(material.SheenColor.X, Math.Max(material.SheenColor.Y, material.SheenColor.Z)) > 0.0 ||
+                material.SheenRoughness > 0.0 || sheenColorTexture >= 0 || sheenRoughnessTexture >= 0)
+            {
+                Dictionary<string, object?> sheen = new()
+                {
+                    ["sheenColorFactor"] = new[] { material.SheenColor.X, material.SheenColor.Y, material.SheenColor.Z },
+                    ["sheenRoughnessFactor"] = Clamp01(material.SheenRoughness)
+                };
+                if (sheenColorTexture >= 0)
+                    sheen["sheenColorTexture"] = new Dictionary<string, object?> { ["index"] = sheenColorTexture };
+                if (sheenRoughnessTexture >= 0)
+                    sheen["sheenRoughnessTexture"] = new Dictionary<string, object?> { ["index"] = sheenRoughnessTexture };
+                materialExtensions["KHR_materials_sheen"] = sheen;
+                materialExtensionsUsed.Add("KHR_materials_sheen");
+            }
+            int anisotropyTexture = TextureIndex(material.AnisotropyTexture);
+            if (material.Anisotropy > 0.0 || material.AnisotropyRotation != 0.0 || anisotropyTexture >= 0)
+            {
+                Dictionary<string, object?> anisotropy = new()
+                {
+                    ["anisotropyStrength"] = Clamp01(material.Anisotropy),
+                    ["anisotropyRotation"] = material.AnisotropyRotation
+                };
+                if (anisotropyTexture >= 0)
+                    anisotropy["anisotropyTexture"] = new Dictionary<string, object?> { ["index"] = anisotropyTexture };
+                materialExtensions["KHR_materials_anisotropy"] = anisotropy;
+                materialExtensionsUsed.Add("KHR_materials_anisotropy");
+            }
+            int iridescenceTexture = TextureIndex(material.IridescenceTexture);
+            int iridescenceThicknessTexture = TextureIndex(material.IridescenceThicknessTexture);
+            if (material.Iridescence > 0.0 || Math.Abs(material.IridescenceIor - 1.3) > 1e-9 ||
+                material.IridescenceThicknessMinimum != 100.0 || material.IridescenceThicknessMaximum != 400.0 ||
+                iridescenceTexture >= 0 || iridescenceThicknessTexture >= 0)
+            {
+                Dictionary<string, object?> iridescence = new()
+                {
+                    ["iridescenceFactor"] = Clamp01(material.Iridescence),
+                    ["iridescenceIor"] = material.IridescenceIor,
+                    ["iridescenceThicknessMinimum"] = material.IridescenceThicknessMinimum,
+                    ["iridescenceThicknessMaximum"] = material.IridescenceThicknessMaximum
+                };
+                if (iridescenceTexture >= 0)
+                    iridescence["iridescenceTexture"] = new Dictionary<string, object?> { ["index"] = iridescenceTexture };
+                if (iridescenceThicknessTexture >= 0)
+                    iridescence["iridescenceThicknessTexture"] = new Dictionary<string, object?> { ["index"] = iridescenceThicknessTexture };
+                materialExtensions["KHR_materials_iridescence"] = iridescence;
+                materialExtensionsUsed.Add("KHR_materials_iridescence");
             }
             if (materialExtensions.Count > 0)
                 materialDef["extensions"] = materialExtensions;
@@ -914,6 +988,23 @@ public static class GltfSceneIO
             bool clearcoatUsesTransmissionTexture = false;
             int transmissionTextureIndex = -1;
             int clearcoatTextureIndex = -1;
+            double specular = 1.0;
+            Vec3 specularColor = new(1.0, 1.0, 1.0);
+            TextureMap? specularTexture = null;
+            TextureMap? specularColorTexture = null;
+            Vec3 sheenColor = Vec3.Zero;
+            double sheenRoughness = 0.0;
+            TextureMap? sheenColorTexture = null;
+            TextureMap? sheenRoughnessTexture = null;
+            double anisotropy = 0.0;
+            double anisotropyRotation = 0.0;
+            TextureMap? anisotropyTexture = null;
+            double iridescence = 0.0;
+            double iridescenceIor = 1.3;
+            double iridescenceThicknessMinimum = 100.0;
+            double iridescenceThicknessMaximum = 400.0;
+            TextureMap? iridescenceTexture = null;
+            TextureMap? iridescenceThicknessTexture = null;
             TextureMap? texture = null;
             TextureMap? emissiveTexture = null;
             TextureMap? metallicRoughnessTexture = null;
@@ -1089,6 +1180,74 @@ public static class GltfSceneIO
 
                 clearcoatUsesTransmissionTexture =
                     transmissionTextureIndex >= 0 && clearcoatTextureIndex == transmissionTextureIndex;
+
+                if (matExt.TryGetProperty("KHR_materials_emissive_strength", out JsonElement emissiveStrengthExt) &&
+                    emissiveStrengthExt.TryGetProperty("emissiveStrength", out JsonElement emissiveStrengthEl))
+                {
+                    emission *= Math.Max(0.0, emissiveStrengthEl.GetDouble());
+                }
+
+                if (matExt.TryGetProperty("KHR_materials_specular", out JsonElement specularExt))
+                {
+                    if (specularExt.TryGetProperty("specularFactor", out JsonElement specularFactorEl))
+                        specular = specularFactorEl.GetDouble();
+                    if (specularExt.TryGetProperty("specularColorFactor", out JsonElement specularColorFactorEl) &&
+                        specularColorFactorEl.ValueKind == JsonValueKind.Array && specularColorFactorEl.GetArrayLength() >= 3)
+                    {
+                        specularColor = new Vec3(
+                            specularColorFactorEl[0].GetDouble(),
+                            specularColorFactorEl[1].GetDouble(),
+                            specularColorFactorEl[2].GetDouble());
+                    }
+                    if (specularExt.TryGetProperty("specularTexture", out JsonElement specularTextureEl))
+                        specularTexture = ReadMaterialTexture(root, buffers, sceneFilePath, textureCache, specularTextureEl);
+                    if (specularExt.TryGetProperty("specularColorTexture", out JsonElement specularColorTextureEl))
+                        specularColorTexture = ReadMaterialTexture(root, buffers, sceneFilePath, textureCache, specularColorTextureEl);
+                }
+
+                if (matExt.TryGetProperty("KHR_materials_sheen", out JsonElement sheenExt))
+                {
+                    if (sheenExt.TryGetProperty("sheenColorFactor", out JsonElement sheenColorFactorEl) &&
+                        sheenColorFactorEl.ValueKind == JsonValueKind.Array && sheenColorFactorEl.GetArrayLength() >= 3)
+                    {
+                        sheenColor = new Vec3(
+                            sheenColorFactorEl[0].GetDouble(),
+                            sheenColorFactorEl[1].GetDouble(),
+                            sheenColorFactorEl[2].GetDouble());
+                    }
+                    if (sheenExt.TryGetProperty("sheenRoughnessFactor", out JsonElement sheenRoughnessEl))
+                        sheenRoughness = sheenRoughnessEl.GetDouble();
+                    if (sheenExt.TryGetProperty("sheenColorTexture", out JsonElement sheenColorTextureEl))
+                        sheenColorTexture = ReadMaterialTexture(root, buffers, sceneFilePath, textureCache, sheenColorTextureEl);
+                    if (sheenExt.TryGetProperty("sheenRoughnessTexture", out JsonElement sheenRoughnessTextureEl))
+                        sheenRoughnessTexture = ReadMaterialTexture(root, buffers, sceneFilePath, textureCache, sheenRoughnessTextureEl);
+                }
+
+                if (matExt.TryGetProperty("KHR_materials_anisotropy", out JsonElement anisotropyExt))
+                {
+                    if (anisotropyExt.TryGetProperty("anisotropyStrength", out JsonElement anisotropyStrengthEl))
+                        anisotropy = anisotropyStrengthEl.GetDouble();
+                    if (anisotropyExt.TryGetProperty("anisotropyRotation", out JsonElement anisotropyRotationEl))
+                        anisotropyRotation = anisotropyRotationEl.GetDouble();
+                    if (anisotropyExt.TryGetProperty("anisotropyTexture", out JsonElement anisotropyTextureEl))
+                        anisotropyTexture = ReadMaterialTexture(root, buffers, sceneFilePath, textureCache, anisotropyTextureEl);
+                }
+
+                if (matExt.TryGetProperty("KHR_materials_iridescence", out JsonElement iridescenceExt))
+                {
+                    if (iridescenceExt.TryGetProperty("iridescenceFactor", out JsonElement iridescenceFactorEl))
+                        iridescence = iridescenceFactorEl.GetDouble();
+                    if (iridescenceExt.TryGetProperty("iridescenceIor", out JsonElement iridescenceIorEl))
+                        iridescenceIor = iridescenceIorEl.GetDouble();
+                    if (iridescenceExt.TryGetProperty("iridescenceThicknessMinimum", out JsonElement iridescenceThicknessMinEl))
+                        iridescenceThicknessMinimum = iridescenceThicknessMinEl.GetDouble();
+                    if (iridescenceExt.TryGetProperty("iridescenceThicknessMaximum", out JsonElement iridescenceThicknessMaxEl))
+                        iridescenceThicknessMaximum = iridescenceThicknessMaxEl.GetDouble();
+                    if (iridescenceExt.TryGetProperty("iridescenceTexture", out JsonElement iridescenceTextureEl))
+                        iridescenceTexture = ReadMaterialTexture(root, buffers, sceneFilePath, textureCache, iridescenceTextureEl);
+                    if (iridescenceExt.TryGetProperty("iridescenceThicknessTexture", out JsonElement iridescenceThicknessTextureEl))
+                        iridescenceThicknessTexture = ReadMaterialTexture(root, buffers, sceneFilePath, textureCache, iridescenceThicknessTextureEl);
+                }
             }
 
             result.Add(new GltfMaterial(new Material(
@@ -1100,9 +1259,57 @@ public static class GltfSceneIO
                 transmissionTexture: transmissionTexture, ior: ior, thickness: thickness,
                 attenuationColor: attenuationColor, attenuationDistance: attenuationDistance,
                 clearcoat: clearcoat, clearcoatRoughness: clearcoatRoughness,
-                clearcoatUsesTransmissionTexture: clearcoatUsesTransmissionTexture), baseColorTexCoord));
+                clearcoatUsesTransmissionTexture: clearcoatUsesTransmissionTexture,
+                specular: specular, specularColor: specularColor,
+                specularTexture: specularTexture, specularColorTexture: specularColorTexture,
+                sheenColor: sheenColor, sheenRoughness: sheenRoughness,
+                sheenColorTexture: sheenColorTexture, sheenRoughnessTexture: sheenRoughnessTexture,
+                anisotropy: anisotropy, anisotropyRotation: anisotropyRotation, anisotropyTexture: anisotropyTexture,
+                iridescence: iridescence, iridescenceIor: iridescenceIor,
+                iridescenceThicknessMinimum: iridescenceThicknessMinimum, iridescenceThicknessMaximum: iridescenceThicknessMaximum,
+                iridescenceTexture: iridescenceTexture, iridescenceThicknessTexture: iridescenceThicknessTexture), baseColorTexCoord));
         }
         return result;
+    }
+
+    /// <summary>Resolves a requested material variant name to its file index.</summary>
+    private static int ResolveVariantIndex(JsonElement root, string? variant)
+    {
+        if (string.IsNullOrWhiteSpace(variant))
+            return -1;
+        if (!root.TryGetProperty("extensions", out JsonElement ext) ||
+            !ext.TryGetProperty("KHR_materials_variants", out JsonElement variantsExt) ||
+            !variantsExt.TryGetProperty("variants", out JsonElement variants))
+            throw new InvalidDataException($"Material variant '{variant}' was requested, but the file defines no material variants.");
+        for (int i = 0; i < variants.GetArrayLength(); i++)
+        {
+            if (variants[i].TryGetProperty("name", out JsonElement nameEl) &&
+                string.Equals(nameEl.GetString(), variant, StringComparison.OrdinalIgnoreCase))
+                return i;
+        }
+        throw new InvalidDataException($"Material variant '{variant}' was not found in the file.");
+    }
+
+    /// <summary>Applies a primitive material-variant mapping for the selected variant.</summary>
+    private static int ApplyVariantMapping(JsonElement primitive, int materialIndex, int selectedVariant)
+    {
+        if (selectedVariant < 0 ||
+            !primitive.TryGetProperty("extensions", out JsonElement primExt) ||
+            !primExt.TryGetProperty("KHR_materials_variants", out JsonElement primVariants) ||
+            !primVariants.TryGetProperty("mappings", out JsonElement mappings))
+            return materialIndex;
+        foreach (JsonElement mapping in mappings.EnumerateArray())
+        {
+            if (!mapping.TryGetProperty("material", out JsonElement mappedEl) ||
+                !mapping.TryGetProperty("variants", out JsonElement mappingVariants))
+                continue;
+            foreach (JsonElement mapped in mappingVariants.EnumerateArray())
+            {
+                if (mapped.GetInt32() == selectedVariant)
+                    return mappedEl.GetInt32();
+            }
+        }
+        return materialIndex;
     }
 
     /// <summary>Reads one texture by index, returning null when it is missing or unreadable.</summary>
@@ -1166,6 +1373,20 @@ public static class GltfSceneIO
             // Keep loading the mesh if one texture is unsupported or corrupt.
         }
         return null;
+    }
+
+    /// <summary>Reads one material texture by index with its KHR_texture_transform applied.</summary>
+    private static TextureMap? ReadMaterialTexture(JsonElement root, List<byte[]> buffers, string sceneFilePath, Dictionary<int, TextureMap?> textureCache, JsonElement textureInfoEl)
+    {
+        if (!textureInfoEl.TryGetProperty("index", out JsonElement textureIndexEl))
+            return null;
+        int textureIndex = textureIndexEl.GetInt32();
+        if (!textureCache.TryGetValue(textureIndex, out TextureMap? texture))
+        {
+            texture = TryReadTexture(root, buffers, sceneFilePath, textureIndex);
+            textureCache[textureIndex] = texture;
+        }
+        return ApplyTextureTransform(texture, textureInfoEl);
     }
 
     /// <summary>Applies a KHR_texture_transform offset, scale, and rotation to a texture.</summary>
@@ -1326,14 +1547,20 @@ public static class GltfSceneIO
     /// <summary>Reads every value from a VEC3 float accessor with the given transform applied.</summary>
     private static List<Vec3> ReadVec3Accessor(JsonElement root, List<byte[]> buffers, int accessorIndex, Matrix4x4 transform)
     {
-        AccessorInfo info = GetAccessorInfo(root, accessorIndex);
+        AccessorInfo info = GetAccessorInfo(root, buffers, accessorIndex);
         List<Vec3> values = new(info.Count);
         for (int i = 0; i < info.Count; i++)
         {
             int offset = info.Offset + i * info.Stride;
-            float x = ReadFloat(buffers[info.Buffer], offset);
-            float y = ReadFloat(buffers[info.Buffer], offset + 4);
-            float z = ReadFloat(buffers[info.Buffer], offset + 8);
+            float x = info.ZeroBase ? 0f : ReadFloat(buffers[info.Buffer], offset);
+            float y = info.ZeroBase ? 0f : ReadFloat(buffers[info.Buffer], offset + 4);
+            float z = info.ZeroBase ? 0f : ReadFloat(buffers[info.Buffer], offset + 8);
+            if (info.Sparse?.TryGetValue(i, out double[]? sparse) == true)
+            {
+                x = (float)sparse[0];
+                y = (float)sparse[1];
+                z = (float)sparse[2];
+            }
             Vector3 v = Vector3.Transform(new Vector3(x, y, z), transform);
             values.Add(new Vec3(v.X, v.Y, v.Z));
         }
@@ -1350,7 +1577,7 @@ public static class GltfSceneIO
         double importScale,
         Vec3 importOffset)
     {
-        AccessorInfo info = GetAccessorInfo(root, accessorIndex);
+        AccessorInfo info = GetAccessorInfo(root, buffers, accessorIndex);
         if (info.Type != "VEC3" || info.ComponentType != 5126)
             throw new NotSupportedException($"Expected float VEC3 glTF positions, got component {info.ComponentType} and type {info.Type}.");
 
@@ -1359,9 +1586,16 @@ public static class GltfSceneIO
         for (int i = 0; i < info.Count; i++)
         {
             int offset = info.Offset + i * info.Stride;
-            Vector3 transformed = Vector3.Transform(
-                new Vector3(ReadFloat(data, offset), ReadFloat(data, offset + 4), ReadFloat(data, offset + 8)),
-                transform);
+            float x = info.ZeroBase ? 0f : ReadFloat(data, offset);
+            float y = info.ZeroBase ? 0f : ReadFloat(data, offset + 4);
+            float z = info.ZeroBase ? 0f : ReadFloat(data, offset + 8);
+            if (info.Sparse?.TryGetValue(i, out double[]? sparse) == true)
+            {
+                x = (float)sparse[0];
+                y = (float)sparse[1];
+                z = (float)sparse[2];
+            }
+            Vector3 transformed = Vector3.Transform(new Vector3(x, y, z), transform);
             Vec3 position = new Vec3(transformed.X, transformed.Y, transformed.Z);
             values.Add((position - sourceCenter) * importScale + importOffset);
         }
@@ -1371,7 +1605,7 @@ public static class GltfSceneIO
     /// <summary>Reads normals with the inverse-transpose normal transform applied.</summary>
     private static List<Vec3> ReadNormalAccessor(JsonElement root, List<byte[]> buffers, int accessorIndex, Matrix4x4 transform)
     {
-        AccessorInfo info = GetAccessorInfo(root, accessorIndex);
+        AccessorInfo info = GetAccessorInfo(root, buffers, accessorIndex);
         if (info.Type != "VEC3")
             throw new NotSupportedException($"Expected VEC3 glTF normals, got {info.Type}.");
 
@@ -1384,10 +1618,16 @@ public static class GltfSceneIO
         for (int i = 0; i < info.Count; i++)
         {
             int offset = info.Offset + i * info.Stride;
-            float x = (float)ReadAccessorComponent(buffers[info.Buffer], offset, info.ComponentType, normalized: true);
-            float y = (float)ReadAccessorComponent(buffers[info.Buffer], offset + componentSize, info.ComponentType, normalized: true);
-            float z = (float)ReadAccessorComponent(buffers[info.Buffer], offset + componentSize * 2, info.ComponentType, normalized: true);
-            Vector3 transformed = Vector3.TransformNormal(new Vector3(x, y, z), normalTransform);
+            double rx = info.ZeroBase ? 0.0 : ReadAccessorComponent(buffers[info.Buffer], offset, info.ComponentType, normalized: true);
+            double ry = info.ZeroBase ? 0.0 : ReadAccessorComponent(buffers[info.Buffer], offset + componentSize, info.ComponentType, normalized: true);
+            double rz = info.ZeroBase ? 0.0 : ReadAccessorComponent(buffers[info.Buffer], offset + componentSize * 2, info.ComponentType, normalized: true);
+            if (info.Sparse?.TryGetValue(i, out double[]? sparse) == true)
+            {
+                rx = NormalizeComponent(sparse[0], info.ComponentType);
+                ry = NormalizeComponent(sparse[1], info.ComponentType);
+                rz = NormalizeComponent(sparse[2], info.ComponentType);
+            }
+            Vector3 transformed = Vector3.TransformNormal(new Vector3((float)rx, (float)ry, (float)rz), normalTransform);
             if (transformed.LengthSquared() > 1e-20f)
                 transformed = Vector3.Normalize(transformed);
             values.Add(new Vec3(transformed.X, transformed.Y, transformed.Z));
@@ -1398,7 +1638,7 @@ public static class GltfSceneIO
     /// <summary>Reads every value from a VEC2 accessor.</summary>
     private static List<Vec2> ReadVec2Accessor(JsonElement root, List<byte[]> buffers, int accessorIndex)
     {
-        AccessorInfo info = GetAccessorInfo(root, accessorIndex);
+        AccessorInfo info = GetAccessorInfo(root, buffers, accessorIndex);
         if (info.Type != "VEC2")
             throw new NotSupportedException($"Expected VEC2 glTF texture coordinates, got {info.Type}.");
 
@@ -1407,8 +1647,13 @@ public static class GltfSceneIO
         for (int i = 0; i < info.Count; i++)
         {
             int offset = info.Offset + i * info.Stride;
-            double u = ReadAccessorComponent(buffers[info.Buffer], offset, info.ComponentType, normalized: true);
-            double v = ReadAccessorComponent(buffers[info.Buffer], offset + componentSize, info.ComponentType, normalized: true);
+            double u = info.ZeroBase ? 0.0 : ReadAccessorComponent(buffers[info.Buffer], offset, info.ComponentType, normalized: true);
+            double v = info.ZeroBase ? 0.0 : ReadAccessorComponent(buffers[info.Buffer], offset + componentSize, info.ComponentType, normalized: true);
+            if (info.Sparse?.TryGetValue(i, out double[]? sparse) == true)
+            {
+                u = NormalizeComponent(sparse[0], info.ComponentType);
+                v = NormalizeComponent(sparse[1], info.ComponentType);
+            }
             values.Add(new Vec2(u, v));
         }
         return values;
@@ -1417,14 +1662,20 @@ public static class GltfSceneIO
     /// <summary>Reads RGB values from a vertex color accessor.</summary>
     private static List<Vec3> ReadColorAccessor(JsonElement root, List<byte[]> buffers, int accessorIndex)
     {
-        AccessorInfo info = GetAccessorInfo(root, accessorIndex);
+        AccessorInfo info = GetAccessorInfo(root, buffers, accessorIndex);
         List<Vec3> values = new(info.Count);
         for (int i = 0; i < info.Count; i++)
         {
             int offset = info.Offset + i * info.Stride;
-            double r = ReadAccessorComponent(buffers[info.Buffer], offset, info.ComponentType, normalized: true);
-            double g = ReadAccessorComponent(buffers[info.Buffer], offset + ComponentByteSize(info.ComponentType), info.ComponentType, normalized: true);
-            double b = ReadAccessorComponent(buffers[info.Buffer], offset + ComponentByteSize(info.ComponentType) * 2, info.ComponentType, normalized: true);
+            double r = info.ZeroBase ? 0.0 : ReadAccessorComponent(buffers[info.Buffer], offset, info.ComponentType, normalized: true);
+            double g = info.ZeroBase ? 0.0 : ReadAccessorComponent(buffers[info.Buffer], offset + ComponentByteSize(info.ComponentType), info.ComponentType, normalized: true);
+            double b = info.ZeroBase ? 0.0 : ReadAccessorComponent(buffers[info.Buffer], offset + ComponentByteSize(info.ComponentType) * 2, info.ComponentType, normalized: true);
+            if (info.Sparse?.TryGetValue(i, out double[]? sparse) == true)
+            {
+                r = NormalizeComponent(sparse[0], info.ComponentType);
+                g = NormalizeComponent(sparse[1], info.ComponentType);
+                b = NormalizeComponent(sparse[2], info.ComponentType);
+            }
             values.Add(new Vec3(r, g, b));
         }
         return values;
@@ -1433,40 +1684,110 @@ public static class GltfSceneIO
     /// <summary>Reads triangle indices from an index accessor.</summary>
     private static List<int> ReadIndexAccessor(JsonElement root, List<byte[]> buffers, int accessorIndex)
     {
-        AccessorInfo info = GetAccessorInfo(root, accessorIndex);
+        AccessorInfo info = GetAccessorInfo(root, buffers, accessorIndex);
         List<int> values = new(info.Count);
         for (int i = 0; i < info.Count; i++)
         {
             int offset = info.Offset + i * info.Stride;
-            int value = info.ComponentType switch
+            int value = info.ZeroBase ? 0 : info.ComponentType switch
             {
                 5121 => buffers[info.Buffer][offset],
                 5123 => BitConverter.ToUInt16(buffers[info.Buffer], offset),
                 5125 => checked((int)BitConverter.ToUInt32(buffers[info.Buffer], offset)),
                 _ => throw new NotSupportedException($"Unsupported glTF index component type {info.ComponentType}.")
             };
+            if (info.Sparse?.TryGetValue(i, out double[]? sparse) == true)
+                value = checked((int)sparse[0]);
             values.Add(value);
         }
         return values;
     }
 
     /// <summary>Resolves buffer layout details for one accessor.</summary>
-    private static AccessorInfo GetAccessorInfo(JsonElement root, int accessorIndex)
+    private static AccessorInfo GetAccessorInfo(JsonElement root, List<byte[]> buffers, int accessorIndex)
     {
         JsonElement accessors = GetArray(root, "accessors");
         JsonElement bufferViews = GetArray(root, "bufferViews");
         JsonElement accessor = accessors[accessorIndex];
-        int bufferViewIndex = accessor.GetProperty("bufferView").GetInt32();
-        JsonElement view = bufferViews[bufferViewIndex];
         int componentType = accessor.GetProperty("componentType").GetInt32();
         string type = accessor.TryGetProperty("type", out JsonElement typeEl) ? typeEl.GetString() ?? "SCALAR" : "SCALAR";
         int componentCount = type switch { "VEC2" => 2, "VEC3" => 3, "VEC4" => 4, _ => 1 };
         int componentSize = componentType switch { 5120 or 5121 => 1, 5122 or 5123 => 2, 5125 or 5126 => 4, _ => throw new NotSupportedException($"Unsupported glTF component type {componentType}.") };
+        int count = accessor.GetProperty("count").GetInt32();
+        Dictionary<int, double[]>? sparse = accessor.TryGetProperty("sparse", out _)
+            ? ReadSparseOverlay(root, buffers, accessor, componentType, componentCount, count)
+            : null;
+        if (!accessor.TryGetProperty("bufferView", out JsonElement bufferViewEl))
+        {
+            if (sparse == null)
+                throw new InvalidDataException("glTF accessor has neither a bufferView nor sparse data.");
+            return new AccessorInfo(0, 0, componentSize * componentCount, count, componentType, type, true, sparse);
+        }
+        JsonElement view = bufferViews[bufferViewEl.GetInt32()];
         int stride = view.TryGetProperty("byteStride", out JsonElement strideEl) ? strideEl.GetInt32() : componentSize * componentCount;
         int offset = (view.TryGetProperty("byteOffset", out JsonElement viewOffset) ? viewOffset.GetInt32() : 0) + (accessor.TryGetProperty("byteOffset", out JsonElement accessorOffset) ? accessorOffset.GetInt32() : 0);
         int buffer = view.TryGetProperty("buffer", out JsonElement bufferEl) ? bufferEl.GetInt32() : 0;
-        return new AccessorInfo(buffer, offset, stride, accessor.GetProperty("count").GetInt32(), componentType, type);
+        return new AccessorInfo(buffer, offset, stride, count, componentType, type, false, sparse);
     }
+
+    /// <summary>Decodes sparse accessor overrides into raw per-element component values.</summary>
+    private static Dictionary<int, double[]> ReadSparseOverlay(JsonElement root, List<byte[]> buffers, JsonElement accessor, int componentType, int componentCount, int accessorCount)
+    {
+        JsonElement sparse = accessor.GetProperty("sparse");
+        int sparseCount = sparse.GetProperty("count").GetInt32();
+        JsonElement indices = sparse.GetProperty("indices");
+        JsonElement values = sparse.GetProperty("values");
+        byte[] indexData = GetBufferViewData(root, buffers, indices.GetProperty("bufferView").GetInt32(), out int indexBase);
+        indexBase += indices.TryGetProperty("byteOffset", out JsonElement indexOffsetEl) ? indexOffsetEl.GetInt32() : 0;
+        int indexComponentType = indices.GetProperty("componentType").GetInt32();
+        int indexSize = indexComponentType switch { 5121 => 1, 5123 => 2, 5125 => 4, _ => throw new NotSupportedException($"Unsupported glTF sparse index component type {indexComponentType}.") };
+        byte[] valueData = GetBufferViewData(root, buffers, values.GetProperty("bufferView").GetInt32(), out int valueBase);
+        valueBase += values.TryGetProperty("byteOffset", out JsonElement valueOffsetEl) ? valueOffsetEl.GetInt32() : 0;
+        int componentSize = ComponentByteSize(componentType);
+        Dictionary<int, double[]> overlay = new(sparseCount);
+        for (int k = 0; k < sparseCount; k++)
+        {
+            int element = indexComponentType switch
+            {
+                5121 => indexData[indexBase + k],
+                5123 => BitConverter.ToUInt16(indexData, indexBase + k * indexSize),
+                _ => checked((int)BitConverter.ToUInt32(indexData, indexBase + k * indexSize))
+            };
+            if (!IsValidIndex(element, accessorCount))
+                throw new InvalidDataException($"glTF sparse index {element} is out of range for accessor count {accessorCount}.");
+            double[] entry = new double[4];
+            for (int c = 0; c < componentCount; c++)
+                entry[c] = ReadAccessorComponent(valueData, valueBase + (k * componentCount + c) * componentSize, componentType, normalized: false);
+            overlay[element] = entry;
+        }
+        return overlay;
+    }
+
+    /// <summary>Returns the backing bytes and base offset for one buffer view.</summary>
+    private static byte[] GetBufferViewData(JsonElement root, List<byte[]> buffers, int bufferViewIndex, out int baseOffset)
+    {
+        JsonElement bufferViews = GetArray(root, "bufferViews");
+        if (!IsValidIndex(bufferViewIndex, bufferViews.GetArrayLength()))
+            throw new InvalidDataException("Invalid glTF sparse bufferView index.");
+        JsonElement view = bufferViews[bufferViewIndex];
+        int buffer = view.TryGetProperty("buffer", out JsonElement bufferEl) ? bufferEl.GetInt32() : 0;
+        if (!IsValidIndex(buffer, buffers.Count))
+            throw new InvalidDataException("Invalid glTF sparse buffer index.");
+        baseOffset = view.TryGetProperty("byteOffset", out JsonElement viewOffset) ? viewOffset.GetInt32() : 0;
+        return buffers[buffer];
+    }
+
+    /// <summary>Normalizes one raw accessor component value.</summary>
+    private static double NormalizeComponent(double raw, int componentType) => componentType switch
+    {
+        5120 => Math.Max(-1.0, raw / 127.0),
+        5121 => raw / 255.0,
+        5122 => Math.Max(-1.0, raw / 32767.0),
+        5123 => raw / 65535.0,
+        5125 => raw / 4294967295.0,
+        5126 => raw,
+        _ => throw new NotSupportedException($"Unsupported glTF accessor component type {componentType}.")
+    };
 
     /// <summary>Builds the local transform matrix for one node.</summary>
     private static Matrix4x4 GetNodeTransform(JsonElement node)
@@ -1595,6 +1916,8 @@ public static class GltfSceneIO
     private static string SanitizeName(string? value, string fallback) => string.IsNullOrWhiteSpace(value) ? fallback : value.Trim();
     /// <summary>Clamps a value to the 0 to 1 range.</summary>
     private static double Clamp01(double value) => Math.Max(0.0, Math.Min(1.0, value));
+    /// <summary>Returns true when a color is exactly white.</summary>
+    private static bool IsWhite(Vec3 value) => value.X == 1.0 && value.Y == 1.0 && value.Z == 1.0;
     /// <summary>Builds a cache key from a material color, emission, and light id.</summary>
     private static string MaterialKey(Material m) => string.Create(CultureInfo.InvariantCulture, $"{m.Color.X:F6},{m.Color.Y:F6},{m.Color.Z:F6},{m.Emission:F6},{m.LightId}");
     /// <summary>Returns the component-wise minimum of two vectors.</summary>
@@ -1640,7 +1963,7 @@ public static class GltfSceneIO
     private sealed record GltfDocument(byte[] JsonUtf8, byte[]? BinaryChunk);
     private sealed record GltfMaterial(Material Material, int BaseColorTexCoord);
     private sealed record ImportedLight(string Id, SceneLightKind Kind, Vec3 Position, Vec3 Direction, Vec3 Color, double Intensity, double Range, double InnerConeAngle, double OuterConeAngle, bool Enabled);
-    private sealed record AccessorInfo(int Buffer, int Offset, int Stride, int Count, int ComponentType, string Type);
+    private sealed record AccessorInfo(int Buffer, int Offset, int Stride, int Count, int ComponentType, string Type, bool ZeroBase, Dictionary<int, double[]>? Sparse);
     private readonly record struct ExportVertex(
         float Px, float Py, float Pz,
         float Nx, float Ny, float Nz,
