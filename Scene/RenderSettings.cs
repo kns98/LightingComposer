@@ -10,13 +10,18 @@ namespace LightingShowcase.SceneGraph;
 /// <summary>Neutral render options consumed by preview and final render adapters.</summary>
 public sealed class RenderSettings
 {
+    /// <summary>Canonical default background gradient shared by all renderers.</summary>
+    public static readonly Vec3 DefaultBackgroundTop = new(0.055, 0.060, 0.072);
+    /// <summary>Canonical default background gradient shared by all renderers.</summary>
+    public static readonly Vec3 DefaultBackgroundBottom = new(0.010, 0.012, 0.016);
+
     public RenderMode Mode { get; set; } = RenderMode.Lit;
     public int Width { get; set; } = 1280;
     public int Height { get; set; } = 720;
     public double Exposure { get; set; } = 1.0;
     public double AmbientStrength { get; set; } = 1.0;
-    public Vec3 BackgroundTop { get; set; } = new(0.055, 0.060, 0.072);
-    public Vec3 BackgroundBottom { get; set; } = new(0.010, 0.012, 0.016);
+    public Vec3 BackgroundTop { get; set; } = DefaultBackgroundTop;
+    public Vec3 BackgroundBottom { get; set; } = DefaultBackgroundBottom;
     public bool ShowGrid { get; set; } = true;
     public bool ShowLightIcons { get; set; } = true;
     public bool ShowCameraIcon { get; set; } = true;

@@ -16,4 +16,6 @@ internal sealed record FrameRequest(
     VulkanRasterTransformPreview? TransformPreview,
     VulkanRasterMeshEditPreview? MeshEditPreview,
     CancellationToken Token,
-    bool Wireframe);
+    bool Wireframe,
+    Vec3 BackgroundTop,
+    Vec3 BackgroundBottom);

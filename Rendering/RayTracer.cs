@@ -31,6 +31,9 @@ public sealed class RayTracer
     private readonly Scene scene;
     // World units per pixel at unit distance for wireframe lines
     public double WireframePixelWorld { get; set; } = 0.002;
+    // Background gradient endpoints for missed rays
+    public Vec3 BackgroundTop { get; set; } = RenderSettings.DefaultBackgroundTop;
+    public Vec3 BackgroundBottom { get; set; } = RenderSettings.DefaultBackgroundBottom;
     // Bright color for visible wireframe lines
     private static readonly Vec3 WireframeLineColor = new Vec3(0.85, 0.92, 1.0);
     // Dim color for dashed hidden wireframe lines
@@ -824,13 +827,13 @@ public sealed class RayTracer
 
     /// <summary>Returns the vertical-gradient background color for a missed ray.</summary>
     // Compute background gradient color
-    private static Vec3 Background(Ray ray)
+    private Vec3 Background(Ray ray)
     // Begin Background
     {
         // Map direction to blend
         double t = Math.Clamp(ray.Direction.Y * 0.5 + 0.5, 0.0, 1.0);
         // Blend horizon gradient
-        return Vec3.Lerp(new Vec3(0.01, 0.012, 0.016), new Vec3(0.055, 0.06, 0.072), t);
+        return Vec3.Lerp(BackgroundBottom, BackgroundTop, t);
     // End Background
     }
 

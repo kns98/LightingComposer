@@ -121,7 +121,9 @@ public sealed class RenderJobRunner
                     request.Width,
                     request.Height,
                     cancellationToken,
-                    out details);
+                    out details,
+                    backgroundTop: renderSettings.BackgroundTop,
+                    backgroundBottom: renderSettings.BackgroundBottom);
                 image.SavePng(outputPath);
                 break;
             }
@@ -139,7 +141,9 @@ public sealed class RenderJobRunner
                     request.Width,
                     request.Height,
                     cancellationToken,
-                    out details);
+                    out details,
+                    backgroundTop: renderSettings.BackgroundTop,
+                    backgroundBottom: renderSettings.BackgroundBottom);
                 image.SavePng(outputPath);
                 break;
             }
@@ -176,6 +180,7 @@ public sealed class RenderJobRunner
         IReadOnlyList<Vec3> positions = TurntableCamera.Orbit(camera, request.Frames);
         List<RenderImage> frames = new(positions.Count);
         List<double> frameTimes = new(positions.Count);
+        RenderSettings frameSettings = request.ToRenderSettings();
         string lastDetails = string.Empty;
         for (int i = 0; i < positions.Count; i++)
         {
@@ -195,7 +200,9 @@ public sealed class RenderJobRunner
                 request.Width,
                 request.Height,
                 cancellationToken,
-                out lastDetails);
+                out lastDetails,
+                backgroundTop: frameSettings.BackgroundTop,
+                backgroundBottom: frameSettings.BackgroundBottom);
             frame.Stop();
             frameTimes.Add(frame.Elapsed.TotalMilliseconds);
             frames.Add(image);

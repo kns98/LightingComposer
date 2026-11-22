@@ -17,11 +17,13 @@ internal sealed class FramePassRecorder
         commandList.SetFramebuffer(targets.Framebuffer);
         commandList.ClearColorTarget(0, ClearColor);
         commandList.ClearDepthStencil(1.0f);
+        DrawBackground(commandList, resources);
         if (wireframe)
         {
             Draw(commandList, resources.DepthPrepassPipeline, prepared.Buffers.Opaque, prepared.Stats.OpaqueVertexCount, preview?.Opaque, prepared);
             Draw(commandList, resources.DepthPrepassPipeline, prepared.Buffers.Transparent, prepared.Stats.TransparentVertexCount, preview?.Transparent, prepared);
             commandList.ClearColorTarget(0, ClearColor);
+            DrawBackground(commandList, resources);
             Draw(commandList, resources.WireframePipeline, prepared.Buffers.Opaque, prepared.Stats.OpaqueVertexCount, preview?.Opaque, prepared);
             Draw(commandList, resources.WireframePipeline, prepared.Buffers.Transparent, prepared.Stats.TransparentVertexCount, preview?.Transparent, prepared);
             Draw(commandList, resources.WireframeDashedPipeline, prepared.Buffers.Opaque, prepared.Stats.OpaqueVertexCount, preview?.Opaque, prepared);
@@ -35,6 +37,14 @@ internal sealed class FramePassRecorder
         commandList.CopyTexture(targets.ColorTexture, 0, 0, 0, 0, 0,
             targets.StagingTexture, 0, 0, 0, 0, 0, (uint)width, (uint)height, 1, 1);
         commandList.End();
+    }
+
+    private static void DrawBackground(CommandList commandList, SharedRasterResources resources)
+    {
+        commandList.SetPipeline(resources.BackgroundPipeline);
+        commandList.SetVertexBuffer(0, resources.BackgroundVertices);
+        commandList.SetGraphicsResourceSet(0, resources.BackgroundSet);
+        commandList.Draw(3);
     }
 
     private static void Draw(

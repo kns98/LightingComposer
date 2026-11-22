@@ -18,19 +18,30 @@ internal sealed class RasterShaderCompiler
     }
 
     /// <summary>Creates the shared raster vertex shader from the embedded source.</summary>
-    public Shader CreateVertexShader(ResourceFactory factory)
+    public Shader CreateVertexShader(ResourceFactory factory) =>
+        CreateFromEmbedded(factory, ShaderStages.Vertex, "Raster.raster.vert.glsl", "Vulkan raster vertex shader");
+
+    /// <summary>Creates the background pass vertex shader from the embedded source.</summary>
+    public Shader CreateBackgroundVertexShader(ResourceFactory factory) =>
+        CreateFromEmbedded(factory, ShaderStages.Vertex, "Raster.background.vert.glsl", "Vulkan raster background vertex shader");
+
+    /// <summary>Creates the background pass fragment shader from the embedded source.</summary>
+    public Shader CreateBackgroundFragmentShader(ResourceFactory factory) =>
+        CreateFromEmbedded(factory, ShaderStages.Fragment, "Raster.background.frag.glsl", "Vulkan raster background fragment shader");
+
+    private Shader CreateFromEmbedded(ResourceFactory factory, ShaderStages stage, string resource, string label)
     {
-        ShaderDescription vertex = new(ShaderStages.Vertex, Encoding.UTF8.GetBytes(LoadSource("Raster.raster.vert.glsl")), "main");
+        ShaderDescription description = new(stage, Encoding.UTF8.GetBytes(LoadSource(resource)), "main");
         try
         {
-            log.Stage("Compile/create Vulkan raster vertex shader");
-            return factory.CreateFromSpirv(vertex);
+            log.Stage("Compile/create " + label);
+            return factory.CreateFromSpirv(description);
         }
         catch (Exception ex)
         {
-            log.Stage("Vulkan raster vertex shader compile/create failed");
+            log.Stage(label + " compile/create failed");
             log.Stage(ex.ToString());
-            throw new InvalidOperationException("Vulkan raster vertex shader compilation failed. See " + RasterStageLog.LogPath + ".", ex);
+            throw new InvalidOperationException(label + " compilation failed. See " + RasterStageLog.LogPath + ".", ex);
         }
     }
 

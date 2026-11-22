@@ -6,6 +6,7 @@
 // -----------------------------------------------------------------------------
 
 using LightingShowcase.Math3D;
+using LightingShowcase.SceneGraph;
 
 namespace LightingShowcase.Composer;
 
@@ -28,8 +29,8 @@ internal sealed record ComposerRenderOptions(
     Vec3 BackgroundBottom,
     bool Wireframe)
 {
-    public static readonly Vec3 DefaultBackgroundTop = new(0.055, 0.060, 0.072);
-    public static readonly Vec3 DefaultBackgroundBottom = new(0.010, 0.012, 0.016);
+    public static readonly Vec3 DefaultBackgroundTop = RenderSettings.DefaultBackgroundTop;
+    public static readonly Vec3 DefaultBackgroundBottom = RenderSettings.DefaultBackgroundBottom;
 
     /// <summary>Returns the default composer render options for the given renderer kind.</summary>
     public static ComposerRenderOptions DefaultsFor(ComposerRendererKind kind) => kind switch

@@ -40,8 +40,10 @@ public static class VulkanRasterRenderer
     /// <summary>Renders one hardware-rasterized preview frame into a cross-platform RGBA image.</summary>
     public static RenderImage Render(
         Scene scene, Vec3 cameraPosition, CameraBasis basis, int width, int height,
-        CancellationToken cancellationToken, out string details) =>
-        Render(scene, cameraPosition, basis, width, height, null, null, cancellationToken, out details);
+        CancellationToken cancellationToken, out string details,
+        Vec3? backgroundTop = null, Vec3? backgroundBottom = null) =>
+        Render(scene, cameraPosition, basis, width, height, null, null, cancellationToken, out details,
+            backgroundTop: backgroundTop, backgroundBottom: backgroundBottom);
 
     /// <summary>
     /// Renders with an optional editor-only transform. The preview updates one small
@@ -49,8 +51,10 @@ public static class VulkanRasterRenderer
     /// </summary>
     public static RenderImage Render(
         Scene scene, Vec3 cameraPosition, CameraBasis basis, int width, int height,
-        VulkanRasterTransformPreview? preview, CancellationToken cancellationToken, out string details) =>
-        Render(scene, cameraPosition, basis, width, height, preview, null, cancellationToken, out details);
+        VulkanRasterTransformPreview? preview, CancellationToken cancellationToken, out string details,
+        Vec3? backgroundTop = null, Vec3? backgroundBottom = null) =>
+        Render(scene, cameraPosition, basis, width, height, preview, null, cancellationToken, out details,
+            backgroundTop: backgroundTop, backgroundBottom: backgroundBottom);
 
     /// <summary>
     /// Renders with optional whole-object and mesh-component editor previews.
@@ -59,6 +63,8 @@ public static class VulkanRasterRenderer
     public static RenderImage Render(
         Scene scene, Vec3 cameraPosition, CameraBasis basis, int width, int height,
         VulkanRasterTransformPreview? preview, VulkanRasterMeshEditPreview? meshEditPreview,
-        CancellationToken cancellationToken, out string details, bool wireframe = false) =>
-        Engine.Render(new FrameRequest(scene, cameraPosition, basis, width, height, preview, meshEditPreview, cancellationToken, wireframe), out details);
+        CancellationToken cancellationToken, out string details, bool wireframe = false,
+        Vec3? backgroundTop = null, Vec3? backgroundBottom = null) =>
+        Engine.Render(new FrameRequest(scene, cameraPosition, basis, width, height, preview, meshEditPreview, cancellationToken, wireframe,
+            backgroundTop ?? RenderSettings.DefaultBackgroundTop, backgroundBottom ?? RenderSettings.DefaultBackgroundBottom), out details);
 }

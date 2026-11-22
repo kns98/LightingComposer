@@ -14,16 +14,22 @@ internal sealed class SharedRasterResources : IDisposable
     public required Pipeline DepthPrepassPipeline { get; init; }
     public required Pipeline WireframePipeline { get; init; }
     public required Pipeline WireframeDashedPipeline { get; init; }
+    public required ResourceLayout BackgroundLayout { get; init; }
+    public required Pipeline BackgroundPipeline { get; init; }
+    public required DeviceBuffer BackgroundConstants { get; init; }
+    public required DeviceBuffer BackgroundVertices { get; init; }
+    public required ResourceSet BackgroundSet { get; init; }
 
     /// <summary>Disposes the shared raster pipelines, shaders, and resource layout.</summary>
     public void Dispose()
     {
-        GpuDisposal.Dispose(OpaquePipeline, TransparentPipeline, DepthPrepassPipeline, WireframePipeline, WireframeDashedPipeline);
+        GpuDisposal.Dispose(OpaquePipeline, TransparentPipeline, DepthPrepassPipeline, WireframePipeline, WireframeDashedPipeline, BackgroundPipeline);
         if (Shaders != null)
         {
             foreach (Shader shader in Shaders)
                 GpuDisposal.Dispose(shader);
         }
-        GpuDisposal.Dispose(Layout);
+        GpuDisposal.Dispose(BackgroundSet, BackgroundConstants, BackgroundVertices);
+        GpuDisposal.Dispose(Layout, BackgroundLayout);
     }
 }

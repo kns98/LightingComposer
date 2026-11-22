@@ -49,15 +49,22 @@ internal sealed class RasterPipelineFactory
             Pipeline wireframe = scope.Track(factory.CreateGraphicsPipeline(set.Wireframe));
             Pipeline dashed = scope.Track(factory.CreateGraphicsPipeline(set.Dashed));
 
+            BackgroundResources background = new RasterBackgroundFactory(log).Create(gd, outputs, scope);
+
             cached = new SharedRasterResources
             {
                 Layout = layout,
-                Shaders = [vertex, fragment, wireframeFragment, dashedFragment],
+                Shaders = [vertex, fragment, wireframeFragment, dashedFragment, background.Vertex, background.Fragment],
                 OpaquePipeline = opaque,
                 TransparentPipeline = transparent,
                 DepthPrepassPipeline = prepass,
                 WireframePipeline = wireframe,
-                WireframeDashedPipeline = dashed
+                WireframeDashedPipeline = dashed,
+                BackgroundLayout = background.Layout,
+                BackgroundPipeline = background.Pipeline,
+                BackgroundConstants = background.Constants,
+                BackgroundVertices = background.Vertices,
+                BackgroundSet = background.Set
             };
             scope.Commit();
             log.Stage("Vulkan raster graphics pipelines created: CPU-raster parity opaque z-buffer path");

@@ -59,18 +59,23 @@ public static class ShadowRasterRenderer
     /// <summary>Renders one shaded raster preview frame into a cross-platform RGBA image.</summary>
     public static RenderImage Render(
         Scene scene, Vec3 cameraPosition, CameraBasis cameraBasis, int width, int height,
-        CancellationToken cancellationToken, out string details, bool wireframe = false)
+        CancellationToken cancellationToken, out string details, bool wireframe = false,
+        Vec3? backgroundTop = null, Vec3? backgroundBottom = null)
     {
         PreviewCache cache = BuildCache(scene, cancellationToken);
-        return Render(cache, cameraPosition, cameraBasis, width, height, cancellationToken, out details, interactiveFast: false, wireframe: wireframe);
+        return Render(cache, cameraPosition, cameraBasis, width, height, cancellationToken, out details,
+            interactiveFast: false, wireframe: wireframe, backgroundTop: backgroundTop, backgroundBottom: backgroundBottom);
     }
 
     /// <summary>Renders one shaded raster preview frame using a reusable shadow-map cache.</summary>
     public static RenderImage Render(
         PreviewCache cache, Vec3 cameraPosition, CameraBasis cameraBasis, int width, int height,
-        CancellationToken cancellationToken, out string details, bool interactiveFast = false, bool wireframe = false)
+        CancellationToken cancellationToken, out string details, bool interactiveFast = false, bool wireframe = false,
+        Vec3? backgroundTop = null, Vec3? backgroundBottom = null)
     {
         ArgumentNullException.ThrowIfNull(cache);
-        return new ShadowFrameRenderer().Render(cache, cameraPosition, cameraBasis, width, height, cancellationToken, out details, interactiveFast, wireframe);
+        return new ShadowFrameRenderer().Render(cache, cameraPosition, cameraBasis, width, height, cancellationToken, out details,
+            interactiveFast, wireframe,
+            backgroundTop ?? RenderSettings.DefaultBackgroundTop, backgroundBottom ?? RenderSettings.DefaultBackgroundBottom);
     }
 }

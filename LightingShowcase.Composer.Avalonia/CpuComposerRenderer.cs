@@ -53,6 +53,9 @@ internal static class CpuComposerRenderer
 
         // Create ray tracer with fresh lighting
         RayTracer tracer = new(scene, new LightingState());
+        // Apply configured background gradient
+        tracer.BackgroundTop = options.BackgroundTop;
+        tracer.BackgroundBottom = options.BackgroundBottom;
         // Build camera basis vectors
         CameraBasis basis = camera.ToBasis();
         // Precompute world units per pixel for wireframe width

@@ -64,6 +64,7 @@ internal sealed class FrameRenderer
             gd.UpdateBuffer(prepared.Buffers.PreviewTransform, 0, new RasterTransformConstants(request.TransformPreview));
             previewRanges = prepared.PreviewCache.GetOrCreate(request.TransformPreview, prepared.GroupRanges);
         }
+        gd.UpdateBuffer(resources.BackgroundConstants, 0, new RasterBackgroundConstants(request.BackgroundTop, request.BackgroundBottom));
         long uniformMs = phase.ElapsedMilliseconds;
 
         log.ThrowIfCancellationRequested(request.Token, "record Vulkan raster command list");

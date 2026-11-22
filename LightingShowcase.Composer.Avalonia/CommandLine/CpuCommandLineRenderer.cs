@@ -48,6 +48,10 @@ internal static class CpuCommandLineRenderer
 
         // Create ray tracer with fresh lighting
         RayTracer tracer = new(scene, new LightingState());
+        // Apply requested background gradient
+        RenderSettings headlessSettings = request.ToRenderSettings();
+        tracer.BackgroundTop = headlessSettings.BackgroundTop;
+        tracer.BackgroundBottom = headlessSettings.BackgroundBottom;
         // Build camera basis vectors
         CameraBasis basis = camera.ToBasis();
         // Allocate output pixel buffer

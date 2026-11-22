@@ -38,9 +38,9 @@ AMD Ryzen 3 7320U (8 threads), AMD Radeon integrated graphics, 8 GB RAM, Windows
 
 | Model | Frames | Steady/frame | First frame | Total |
 |---|---|---|---|---|
-| Duck | 36 | 3.6 ms | 1.4 s | 9.0 s |
-| CesiumMan | 36 | 3.1 ms | 1.4 s | 8.7 s |
-| DamagedHelmet | 36 | 8.8 ms | 2.9 s | 13.1 s |
+| Duck | 36 | 4.3 ms | 1.8 s | 10.1 s |
+| CesiumMan | 36 | 4.0 ms | 2.0 s | 9.6 s |
+| DamagedHelmet | 36 | 10.4 ms | 3.5 s | 14.1 s |
 
 ```bash
 ./run.sh render ./models/DamagedHelmet.glb --renderer raster-vulkan \

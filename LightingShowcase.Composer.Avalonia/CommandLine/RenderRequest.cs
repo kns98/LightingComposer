@@ -88,8 +88,8 @@ public sealed class RenderRequest
         Height = Height,
         Exposure = Exposure,
         AmbientStrength = AmbientStrength,
-        BackgroundTop = ParseColor(BackgroundTop, nameof(BackgroundTop)) ?? new Vec3(0.055, 0.060, 0.072),
-        BackgroundBottom = ParseColor(BackgroundBottom, nameof(BackgroundBottom)) ?? new Vec3(0.010, 0.012, 0.016),
+        BackgroundTop = ParseColor(BackgroundTop, nameof(BackgroundTop)) ?? RenderSettings.DefaultBackgroundTop,
+        BackgroundBottom = ParseColor(BackgroundBottom, nameof(BackgroundBottom)) ?? RenderSettings.DefaultBackgroundBottom,
         UseShadows = UseShadows,
         PathBounceCount = Bounces,
         Backend = Backend
