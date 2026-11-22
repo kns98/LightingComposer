@@ -4,61 +4,31 @@ Scene composer and renderer (Avalonia 12.1, .NET 10) for glTF/GLB, FBX, OBJ, 3DS
 
 ## Render gallery
 
-Official [KhronosGroup glTF sample models](https://github.com/KhronosGroup/glTF-Sample-Models) in `models/`, rendered headless at 640×480 with 4 samples, 2 bounces, and zoom 1.6. ▶ Each turntable below is a 36-frame GIF at 12 fps that plays automatically — one per backend.
+Official [KhronosGroup glTF sample models](https://github.com/KhronosGroup/glTF-Sample-Models) samples in `models/`, headless at 640×480, 4 samples, 2 bounces, zoom 1.6. ▶ 36-frame GIFs at 12 fps, one per backend, playing automatically.
 
-### Duck
+### Duck — 4,212 triangles
 
-**▶ raster**
+| ▶ raster | ▶ Vulkan raster |
+|---|---|
+| ![▶ Duck turntable, raster backend](screenshots/Duck-raster.gif) | ![▶ Duck turntable, Vulkan raster backend](screenshots/Duck-raster-vulkan.gif) |
+| ▶ Vulkan compute | ▶ CPU |
+| ![▶ Duck turntable, Vulkan compute backend](screenshots/Duck-vulkan.gif) | ![▶ Duck turntable, CPU backend](screenshots/Duck-cpu.gif) |
 
-![▶ Duck turntable, raster backend](screenshots/Duck-raster.gif)
+### CesiumMan — 4,672 triangles, bind pose
 
-**▶ Vulkan raster**
+| ▶ raster | ▶ Vulkan raster |
+|---|---|
+| ![▶ CesiumMan turntable, raster backend](screenshots/CesiumMan-raster.gif) | ![▶ CesiumMan turntable, Vulkan raster backend](screenshots/CesiumMan-raster-vulkan.gif) |
+| ▶ Vulkan compute | ▶ CPU |
+| ![▶ CesiumMan turntable, Vulkan compute backend](screenshots/CesiumMan-vulkan.gif) | ![▶ CesiumMan turntable, CPU backend](screenshots/CesiumMan-cpu.gif) |
 
-![▶ Duck turntable, Vulkan raster backend](screenshots/Duck-raster-vulkan.gif)
+### DamagedHelmet — 15,452 triangles, full PBR
 
-**▶ Vulkan compute**
-
-![▶ Duck turntable, Vulkan compute backend](screenshots/Duck-vulkan.gif)
-
-**▶ CPU**
-
-![▶ Duck turntable, CPU backend](screenshots/Duck-cpu.gif)
-
-### CesiumMan
-
-**▶ raster**
-
-![▶ CesiumMan turntable, raster backend](screenshots/CesiumMan-raster.gif)
-
-**▶ Vulkan raster**
-
-![▶ CesiumMan turntable, Vulkan raster backend](screenshots/CesiumMan-raster-vulkan.gif)
-
-**▶ Vulkan compute**
-
-![▶ CesiumMan turntable, Vulkan compute backend](screenshots/CesiumMan-vulkan.gif)
-
-**▶ CPU**
-
-![▶ CesiumMan turntable, CPU backend](screenshots/CesiumMan-cpu.gif)
-
-### DamagedHelmet
-
-**▶ raster**
-
-![▶ DamagedHelmet turntable, raster backend](screenshots/DamagedHelmet-raster.gif)
-
-**▶ Vulkan raster**
-
-![▶ DamagedHelmet turntable, Vulkan raster backend](screenshots/DamagedHelmet-raster-vulkan.gif)
-
-**▶ Vulkan compute**
-
-![▶ DamagedHelmet turntable, Vulkan compute backend](screenshots/DamagedHelmet-vulkan.gif)
-
-**▶ CPU**
-
-![▶ DamagedHelmet turntable, CPU backend](screenshots/DamagedHelmet-cpu.gif)
+| ▶ raster | ▶ Vulkan raster |
+|---|---|
+| ![▶ DamagedHelmet turntable, raster backend](screenshots/DamagedHelmet-raster.gif) | ![▶ DamagedHelmet turntable, Vulkan raster backend](screenshots/DamagedHelmet-raster-vulkan.gif) |
+| ▶ Vulkan compute | ▶ CPU |
+| ![▶ DamagedHelmet turntable, Vulkan compute backend](screenshots/DamagedHelmet-vulkan.gif) | ![▶ DamagedHelmet turntable, CPU backend](screenshots/DamagedHelmet-cpu.gif) |
 
 Model licenses: Duck under SCEA Shared Source 1.0; DamagedHelmet under CC Attribution-NonCommercial; CesiumMan under CC-BY 4.0.
 
@@ -75,15 +45,14 @@ AMD Ryzen 3 7320U (8 threads), AMD Radeon integrated graphics, 8 GB RAM, Windows
 ```bash
 ./run.sh render ./models/DamagedHelmet.glb --renderer raster-vulkan \
   --output ./screenshots/DamagedHelmet-raster-vulkan.gif \
-  --width 640 --height 480 --samples 4 --bounces 2 --zoom 1.6 \
-  --frames 36 --fps 12
+  --width 640 --height 480 --samples 4 --bounces 2 --zoom 1.6 --frames 36 --fps 12
 ```
 
 Headless default lights are seated relative to the camera so they always cover the visible area. Override them with repeatable `--light "kind=point;position=3,4,-2;color=1,1,1;intensity=5"` (kind, direction, range, cones, shadows, id, enabled also supported).
 
 ### glTF feature support
 
-The importer reads glTF 2.0 `.gltf`/`.glb`: triangle primitives (`POSITION`, `NORMAL`, `TEXCOORD_n`, `COLOR_0`), node hierarchies, core PBR materials, `KHR_materials_transmission`, `_ior`, `_volume`, `_clearcoat`, `KHR_texture_transform`, and `KHR_lights_punctual`. Not supported: skins, animations, morph targets, cameras, Draco/meshopt, sheen/specular/anisotropy/iridescence.
+The importer reads glTF 2.0 `.gltf`/`.glb`: triangle primitives (`POSITION`, `NORMAL`, `TEXCOORD_n`, `COLOR_0`), node hierarchy with matrix or TRS transforms, core PBR materials, `KHR_materials_transmission`, `_ior`, `_volume`, `_clearcoat`, `KHR_texture_transform`, and `KHR_lights_punctual`. Not supported: skins, animations, morph targets, cameras, Draco/meshopt, sheen/specular/anisotropy/iridescence.
 
 | Feature | raster | raster-vulkan | vulkan | cpu |
 |---|---|---|---|---|
