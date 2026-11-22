@@ -4,47 +4,77 @@ Scene composer and renderer (Avalonia 12.1, .NET 10) for glTF/GLB, FBX, OBJ, 3DS
 
 ## Render gallery
 
-Official [KhronosGroup glTF sample models](https://github.com/KhronosGroup/glTF-Sample-Models) in `models/`, rendered headless at 640×480 with 4 samples, 2 bounces, and zoom 1.6 as 36-frame turntable GIFs at 12 fps. Stills from the other backends follow each turntable.
+Official [KhronosGroup glTF sample models](https://github.com/KhronosGroup/glTF-Sample-Models) in `models/`, rendered headless at 640×480 with 4 samples, 2 bounces, and zoom 1.6. ▶ Each turntable below is a 36-frame GIF at 12 fps that plays automatically — one per backend.
 
 ### Duck
 
-![](screenshots/Duck.gif)
+**▶ raster**
 
-| raster | vulkan | cpu |
-|---|---|---|
-| ![](screenshots/Duck-raster.png) | ![](screenshots/Duck-vulkan.png) | ![](screenshots/Duck-cpu.png) |
+![▶ Duck turntable, raster backend](screenshots/Duck-raster.gif)
+
+**▶ Vulkan raster**
+
+![▶ Duck turntable, Vulkan raster backend](screenshots/Duck-raster-vulkan.gif)
+
+**▶ Vulkan compute**
+
+![▶ Duck turntable, Vulkan compute backend](screenshots/Duck-vulkan.gif)
+
+**▶ CPU**
+
+![▶ Duck turntable, CPU backend](screenshots/Duck-cpu.gif)
 
 ### CesiumMan
 
-![](screenshots/CesiumMan.gif)
+**▶ raster**
 
-| raster | vulkan | cpu |
-|---|---|---|
-| ![](screenshots/CesiumMan-raster.png) | ![](screenshots/CesiumMan-vulkan.png) | ![](screenshots/CesiumMan-cpu.png) |
+![▶ CesiumMan turntable, raster backend](screenshots/CesiumMan-raster.gif)
+
+**▶ Vulkan raster**
+
+![▶ CesiumMan turntable, Vulkan raster backend](screenshots/CesiumMan-raster-vulkan.gif)
+
+**▶ Vulkan compute**
+
+![▶ CesiumMan turntable, Vulkan compute backend](screenshots/CesiumMan-vulkan.gif)
+
+**▶ CPU**
+
+![▶ CesiumMan turntable, CPU backend](screenshots/CesiumMan-cpu.gif)
 
 ### DamagedHelmet
 
-![](screenshots/DamagedHelmet.gif)
+**▶ raster**
 
-| raster | vulkan | cpu |
-|---|---|---|
-| ![](screenshots/DamagedHelmet-raster.png) | ![](screenshots/DamagedHelmet-vulkan.png) | ![](screenshots/DamagedHelmet-cpu.png) |
+![▶ DamagedHelmet turntable, raster backend](screenshots/DamagedHelmet-raster.gif)
+
+**▶ Vulkan raster**
+
+![▶ DamagedHelmet turntable, Vulkan raster backend](screenshots/DamagedHelmet-raster-vulkan.gif)
+
+**▶ Vulkan compute**
+
+![▶ DamagedHelmet turntable, Vulkan compute backend](screenshots/DamagedHelmet-vulkan.gif)
+
+**▶ CPU**
+
+![▶ DamagedHelmet turntable, CPU backend](screenshots/DamagedHelmet-cpu.gif)
 
 Model licenses: Duck under SCEA Shared Source 1.0; DamagedHelmet under CC Attribution-NonCommercial; CesiumMan under CC-BY 4.0.
 
 ### Render times
 
-AMD Ryzen 3 7320U (8 threads), AMD Radeon integrated graphics, 8 GB RAM, Windows 11, .NET 10. Per-frame Vulkan raster times; steady excludes the first frame (one-time scene upload).
+AMD Ryzen 3 7320U (8 threads), AMD Radeon integrated graphics, 8 GB RAM, Windows 11, .NET 10. Steady-state time per frame (median; first frame excluded as one-time scene upload).
 
-| Model | Frames | Steady/frame | First frame | Total |
+| Model | raster | raster-vulkan | vulkan | cpu |
 |---|---|---|---|---|
-| Duck | 36 | 4.3 ms | 1.8 s | 10.1 s |
-| CesiumMan | 36 | 4.0 ms | 2.0 s | 9.6 s |
-| DamagedHelmet | 36 | 10.4 ms | 3.5 s | 14.1 s |
+| Duck | 221 ms | 4.4 ms | 342 ms | 1.7 s |
+| CesiumMan | 111 ms | 4.1 ms | 181 ms | 0.7 s |
+| DamagedHelmet | 368 ms | 8.5 ms | 574 ms | 2.2 s |
 
 ```bash
 ./run.sh render ./models/DamagedHelmet.glb --renderer raster-vulkan \
-  --output ./screenshots/DamagedHelmet.gif \
+  --output ./screenshots/DamagedHelmet-raster-vulkan.gif \
   --width 640 --height 480 --samples 4 --bounces 2 --zoom 1.6 \
   --frames 36 --fps 12
 ```
