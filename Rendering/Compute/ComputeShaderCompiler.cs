@@ -50,9 +50,9 @@ internal sealed class ComputeShaderCompiler
 
             try
             {
-                string diagnosticShaderCopy = Path.Combine(Path.GetTempPath(), "LightingShowcase-vulkan-failed-shader.comp");
-                File.WriteAllText(diagnosticShaderCopy, shaderSource);
-                log.Stage("Failed shader source copied to: " + diagnosticShaderCopy);
+                string diagnosticCopy = Path.Combine(Path.GetTempPath(), "LightingShowcase-vulkan-failed-shader.comp");
+                File.WriteAllText(diagnosticCopy, shaderSource);
+                log.Stage("Failed shader source copied to: " + diagnosticCopy);
             }
             catch (Exception copyEx)
             {

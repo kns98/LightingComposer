@@ -56,8 +56,7 @@ internal readonly struct CameraConstants
         Reserved1 = 0;
         Reserved2 = 0;
 
-        double clampedFov = Math.Clamp(fieldOfViewDegrees, 1.0, 179.0);
-        float fovScale = (float)Math.Tan(clampedFov * Math.PI / 360.0);
+        float fovScale = (float)Math.Tan(Math.Clamp(fieldOfViewDegrees, 1.0, 179.0) * Math.PI / 360.0);
         BackgroundTopFov = new Vector4(
             (float)Math.Max(0.0, settings.BackgroundTop.X),
             (float)Math.Max(0.0, settings.BackgroundTop.Y),

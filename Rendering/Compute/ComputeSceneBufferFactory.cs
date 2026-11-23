@@ -17,42 +17,31 @@ internal sealed class ComputeSceneBufferFactory
     public ComputeSceneBufferPlan Plan(
         int triangleCount, int bvhNodeCount, int lightCount, long texturePixelCount, int textureInfoCount)
     {
-        int triangleStride = Marshal.SizeOf<GpuTriangle>();
-        int bvhStride = Marshal.SizeOf<GpuBvhNode>();
-        int lightStride = Marshal.SizeOf<GpuLight>();
-        int textureInfoStride = Marshal.SizeOf<GpuTextureInfo>();
-
         return new ComputeSceneBufferPlan(
-            CheckedSceneBufferSize((long)triangleCount * triangleStride, triangleStride, "triangle"),
-            CheckedSceneBufferSize((long)bvhNodeCount * bvhStride, bvhStride, "BVH"),
-            CheckedSceneBufferSize((long)lightCount * lightStride, lightStride, "light"),
-            CheckedSceneBufferSize(texturePixelCount * sizeof(uint), sizeof(uint), "texture pixel"),
-            CheckedSceneBufferSize((long)textureInfoCount * textureInfoStride, textureInfoStride, "texture info"));
+            CheckedSize((long)triangleCount * Marshal.SizeOf<GpuTriangle>(), Marshal.SizeOf<GpuTriangle>(), "triangle"),
+            CheckedSize((long)bvhNodeCount * Marshal.SizeOf<GpuBvhNode>(), Marshal.SizeOf<GpuBvhNode>(), "BVH"),
+            CheckedSize((long)lightCount * Marshal.SizeOf<GpuLight>(), Marshal.SizeOf<GpuLight>(), "light"),
+            CheckedSize(texturePixelCount * sizeof(uint), sizeof(uint), "texture pixel"),
+            CheckedSize((long)textureInfoCount * Marshal.SizeOf<GpuTextureInfo>(), Marshal.SizeOf<GpuTextureInfo>(), "texture info"));
     }
 
     /// <summary>Creates the triangle, BVH, light, and texture buffers from a validated plan.</summary>
     public ComputeSceneBuffers Create(ResourceFactory factory, ComputeSceneBufferPlan plan)
     {
-        int triangleStride = Marshal.SizeOf<GpuTriangle>();
-        int bvhStride = Marshal.SizeOf<GpuBvhNode>();
-        int lightStride = Marshal.SizeOf<GpuLight>();
-        int textureInfoStride = Marshal.SizeOf<GpuTextureInfo>();
-
         using GpuResourceScope scope = new();
         ComputeSceneBuffers buffers = new()
         {
-            Triangles = scope.Track(factory.CreateBuffer(new BufferDescription(plan.Triangles, BufferUsage.StructuredBufferReadOnly, (uint)triangleStride))),
-            BvhNodes = scope.Track(factory.CreateBuffer(new BufferDescription(plan.BvhNodes, BufferUsage.StructuredBufferReadOnly, (uint)bvhStride))),
-            Lights = scope.Track(factory.CreateBuffer(new BufferDescription(plan.Lights, BufferUsage.StructuredBufferReadOnly, (uint)lightStride))),
+            Triangles = scope.Track(factory.CreateBuffer(new BufferDescription(plan.Triangles, BufferUsage.StructuredBufferReadOnly, (uint)Marshal.SizeOf<GpuTriangle>()))),
+            BvhNodes = scope.Track(factory.CreateBuffer(new BufferDescription(plan.BvhNodes, BufferUsage.StructuredBufferReadOnly, (uint)Marshal.SizeOf<GpuBvhNode>()))),
+            Lights = scope.Track(factory.CreateBuffer(new BufferDescription(plan.Lights, BufferUsage.StructuredBufferReadOnly, (uint)Marshal.SizeOf<GpuLight>()))),
             TexturePixels = scope.Track(factory.CreateBuffer(new BufferDescription(plan.TexturePixels, BufferUsage.StructuredBufferReadOnly, sizeof(uint)))),
-            TextureInfos = scope.Track(factory.CreateBuffer(new BufferDescription(plan.TextureInfos, BufferUsage.StructuredBufferReadOnly, (uint)textureInfoStride)))
+            TextureInfos = scope.Track(factory.CreateBuffer(new BufferDescription(plan.TextureInfos, BufferUsage.StructuredBufferReadOnly, (uint)Marshal.SizeOf<GpuTextureInfo>())))
         };
         scope.Commit();
         return buffers;
     }
 
-    /// <summary>Validates a scene buffer size against the Vulkan buffer limit.</summary>
-    private static uint CheckedSceneBufferSize(long requestedBytes, int minimumBytes, string label)
+    private static uint CheckedSize(long requestedBytes, int minimumBytes, string label)
     {
         long bytes = Math.Max(minimumBytes, requestedBytes);
         if (bytes > uint.MaxValue)

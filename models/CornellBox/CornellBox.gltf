@@ -102,7 +102,7 @@
         0
       ],
       "alphaMode": "OPAQUE",
-      "doubleSided": false
+      "doubleSided": true
     },
     {
       "name": "mat_2",
@@ -122,7 +122,7 @@
         0
       ],
       "alphaMode": "OPAQUE",
-      "doubleSided": false
+      "doubleSided": true
     },
     {
       "name": "mat_3",
@@ -142,7 +142,7 @@
         0
       ],
       "alphaMode": "OPAQUE",
-      "doubleSided": false
+      "doubleSided": true
     }
   ],
   "buffers": [

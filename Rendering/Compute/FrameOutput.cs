@@ -17,23 +17,13 @@ internal sealed class FrameOutput
     /// <summary>Clears the GPU output buffer in small chunks.</summary>
     public void Zero(GraphicsDevice gd, DeviceBuffer outputBuffer, uint outputBytes)
     {
-        // Avoid allocating one giant byte[width * height * 4] just to clear the
-        // output. Update the GPU buffer in small reusable chunks instead.
         const int chunkBytes = 1024 * 1024;
         byte[] zeroChunk = new byte[Math.Min(chunkBytes, checked((int)Math.Min(outputBytes, int.MaxValue)))];
         uint offset = 0;
         while (offset < outputBytes)
         {
             int count = checked((int)Math.Min((uint)zeroChunk.Length, outputBytes - offset));
-            if (count == zeroChunk.Length)
-            {
-                gd.UpdateBuffer(outputBuffer, offset, zeroChunk);
-            }
-            else
-            {
-                // Last chunk only; keep this allocation below 1 MB.
-                gd.UpdateBuffer(outputBuffer, offset, new byte[count]);
-            }
+            gd.UpdateBuffer(outputBuffer, offset, count == zeroChunk.Length ? zeroChunk : new byte[count]);
             offset += (uint)count;
         }
     }
@@ -67,7 +57,6 @@ internal sealed class FrameOutput
         }
     }
 
-    /// <summary>Copies mapped GPU pixels into a render image.</summary>
     private static RenderImage ToRenderImage(MappedResourceView<uint> pixels, int width, int height)
     {
         uint[] copy = new uint[checked(width * height)];

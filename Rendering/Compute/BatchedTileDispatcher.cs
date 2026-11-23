@@ -25,15 +25,15 @@ internal sealed class BatchedTileDispatcher
 
         for (int tileY = 0; tileY < request.Height;)
         {
-            List<(DeviceBuffer Constants, ResourceSet Set, int TileY, int Rows)> tileResources = new();
+            List<(DeviceBuffer Constants, ResourceSet Set, int TileY, int Rows)> batch = new();
             try
             {
-                for (int tileIndex = 0; tileIndex < tilesPerSubmit && tileY < request.Height; tileIndex++, tileY += tileRows)
+                for (int i = 0; i < tilesPerSubmit && tileY < request.Height; i++, tileY += tileRows)
                 {
                     log.ThrowIfCancellationRequested(request.Token, $"Prepare batched tile y={tileY}");
-                    int currentTileRows = Math.Min(tileRows, request.Height - tileY);
+                    int rows = Math.Min(tileRows, request.Height - tileY);
                     DeviceBuffer tileConstants = gd.ResourceFactory.CreateBuffer(new BufferDescription(constantBytes, BufferUsage.UniformBuffer));
-                    gd.UpdateBuffer(tileConstants, 0, TileConstants(prepared, request, tileY, currentTileRows));
+                    gd.UpdateBuffer(tileConstants, 0, TileConstants(prepared, request, tileY, rows));
                     ResourceSet tileSet = gd.ResourceFactory.CreateResourceSet(new ResourceSetDescription(
                         layout,
                         outputBuffer,
@@ -43,13 +43,13 @@ internal sealed class BatchedTileDispatcher
                         tileConstants,
                         prepared.Buffers.TexturePixels,
                         prepared.Buffers.TextureInfos));
-                    tileResources.Add((tileConstants, tileSet, tileY, currentTileRows));
+                    batch.Add((tileConstants, tileSet, tileY, rows));
                 }
 
                 using CommandList commandList = gd.ResourceFactory.CreateCommandList();
                 commandList.Begin();
                 commandList.SetPipeline(pipeline);
-                foreach (var tile in tileResources)
+                foreach (var tile in batch)
                 {
                     log.ThrowIfCancellationRequested(request.Token, $"Record batched tile y={tile.TileY}");
                     commandList.SetComputeResourceSet(0, tile.Set);
@@ -57,19 +57,19 @@ internal sealed class BatchedTileDispatcher
                 }
                 commandList.End();
 
-                int firstTileY = tileResources.Count == 0 ? tileY : tileResources[0].TileY;
-                int lastTileY = tileResources.Count == 0 ? tileY : tileResources[^1].TileY;
-                log.Stage($"Submit bounded Vulkan tile batch: count={tileResources.Count}, y={firstTileY}-{lastTileY}");
+                int firstY = batch.Count == 0 ? tileY : batch[0].TileY;
+                int lastY = batch.Count == 0 ? tileY : batch[^1].TileY;
+                log.Stage($"Submit bounded Vulkan tile batch: count={batch.Count}, y={firstY}-{lastY}");
                 gd.SubmitCommands(commandList);
                 gd.WaitForIdle();
                 log.Stage("Bounded Vulkan tile batch idle returned");
             }
             finally
             {
-                for (int i = tileResources.Count - 1; i >= 0; i--)
+                for (int i = batch.Count - 1; i >= 0; i--)
                 {
-                    GpuDisposal.Dispose(tileResources[i].Set);
-                    GpuDisposal.Dispose(tileResources[i].Constants);
+                    GpuDisposal.Dispose(batch[i].Set);
+                    GpuDisposal.Dispose(batch[i].Constants);
                 }
             }
         }

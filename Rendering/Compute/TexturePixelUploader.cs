@@ -29,11 +29,10 @@ internal sealed class TexturePixelUploader
         {
             log.ThrowIfCancellationRequested(token, "upload cached Vulkan texture pixels");
             uint[] pixels = upload.Texture.CopyPackedRgba32Pixels();
-            int expectedPixels = checked(Math.Max(1, upload.Texture.Width) * Math.Max(1, upload.Texture.Height));
-            if (pixels.Length != expectedPixels)
-                throw new InvalidOperationException($"Texture '{upload.Texture.Name}' returned {pixels.Length} pixels; expected {expectedPixels}.");
+            int expected = checked(Math.Max(1, upload.Texture.Width) * Math.Max(1, upload.Texture.Height));
+            if (pixels.Length != expected)
+                throw new InvalidOperationException($"Texture '{upload.Texture.Name}' returned {pixels.Length} pixels; expected {expected}.");
             gd.UpdateBuffer(destination, checked((uint)((long)upload.PixelOffset * sizeof(uint))), pixels);
-            pixels = Array.Empty<uint>();
         }
     }
 }

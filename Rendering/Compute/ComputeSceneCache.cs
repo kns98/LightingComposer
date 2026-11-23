@@ -38,9 +38,8 @@ internal sealed class ComputeSceneCache
                 prepared = null;
             }
 
-            PreparedComputeScene built = new PreparedComputeSceneBuilder(log).Build(gd, scene, token);
-            prepared = built;
-            return built;
+            prepared = new PreparedComputeSceneBuilder(log).Build(gd, scene, token);
+            return prepared;
         }
     }
 

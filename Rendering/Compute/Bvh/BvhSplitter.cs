@@ -48,12 +48,12 @@ internal sealed class BvhSplitter
         Array.Sort(triangleIndices, start, count, comparer);
 
         int leftCount = count / 2;
-        int rightCount = count - leftCount;
         int left = Build(start, leftCount);
-        int right = Build(start + leftCount, rightCount);
-        Vector3 boundsMin = Vector3.Min(nodes[left].BoundsMin, nodes[right].BoundsMin);
-        Vector3 boundsMax = Vector3.Max(nodes[left].BoundsMax, nodes[right].BoundsMax);
-        nodes[nodeIndex] = new CpuBvhNode(boundsMin, boundsMax, left, 0, right);
+        int right = Build(start + leftCount, count - leftCount);
+        nodes[nodeIndex] = new CpuBvhNode(
+            Vector3.Min(nodes[left].BoundsMin, nodes[right].BoundsMin),
+            Vector3.Max(nodes[left].BoundsMax, nodes[right].BoundsMax),
+            left, 0, right);
         return nodeIndex;
     }
 }

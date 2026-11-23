@@ -7,9 +7,8 @@ namespace LightingShowcase.Rendering;
 
 internal sealed class ComputeDeviceFactory
 {
-    // Veldrid/Vulkan device creation is expensive and, on some drivers, unsafe
-    // when repeated rapidly during progressive sampling. Keep one device alive
-    // for the app lifetime and only recreate it after an explicit cleanup.
+    // Device creation is expensive and, on some drivers, unsafe when repeated
+    // rapidly during progressive sampling. Keep one device for the app lifetime.
     private readonly ComputeStageLog log;
     private readonly object deviceLock;
     private GraphicsDevice? device;

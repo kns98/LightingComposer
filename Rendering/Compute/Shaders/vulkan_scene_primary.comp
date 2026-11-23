@@ -1,23 +1,18 @@
 #version 460
 
-// Declare 8x8 compute workgroup size
+// Vulkan compute path tracer: one pixel per invocation, BVH traversal,
+// PBR shading, tiled dispatch. Buffer bindings and record layouts must match
+// the host packing exactly; see Rendering/Compute/Gpu/*.
 layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
 
-// Define pi constant
 const float PI = 3.14159265358979323846;
 
-// Bind output pixel buffer
 layout(set = 0, binding = 0) buffer OutputBuffer
-// Begin output buffer block
 {
-    // Output pixel storage array
     uint pixels[];
-// End output buffer block
 };
 
-// Declare GPU triangle structure
 struct GpuTriangle
-// Begin GpuTriangle struct
 {
     vec4 a;             // xyz=position A, w=normal A.x
     vec4 b;             // xyz=position B, w=normal A.y
@@ -33,1728 +28,923 @@ struct GpuTriangle
     vec4 opticalFactors;// x=ior, y=thickness, z=clearcoat, w=clearcoat roughness
     vec4 attenuation;   // rgb=attenuation color, w=distance (0=infinite)
     vec4 textureInfo3;  // x=transmission index, y=clearcoat uses transmission, zw=reserved
-// End GpuTriangle struct
 };
 
-// Bind triangle buffer
 layout(set = 0, binding = 1) readonly buffer TriangleBuffer
-// Begin triangle buffer block
 {
-    // Scene triangle storage array
     GpuTriangle triangles[];
-// End triangle buffer block
 };
 
-// Declare BVH node structure
 struct GpuBvhNode
-// Begin GpuBvhNode struct
 {
-    // Node bounding box minimum
     vec4 boundsMin;
-    // Node bounding box maximum
     vec4 boundsMax;
     vec4 data; // x=left child or first triangle, y=triangle count (0 internal), z=right child, w=reserved
-// End GpuBvhNode struct
 };
 
-// Bind BVH node buffer
 layout(set = 0, binding = 2) readonly buffer BvhBuffer
-// Begin BVH buffer block
 {
-    // BVH node storage array
     GpuBvhNode bvhNodes[];
-// End BVH buffer block
 };
 
-// Declare GPU light structure
 struct GpuLight
-// Begin GpuLight struct
 {
     vec4 positionKind;   // xyz=position, w=0 point / 1 directional / 2 spot
     vec4 directionRange; // xyz=direction light travels, w=range
     vec4 colorIntensity; // rgb=color, w=intensity
     vec4 coneShadow;     // x=cos inner, y=cos outer, z=castsShadow, w=enabled
-// End GpuLight struct
 };
 
-// Bind light buffer
 layout(set = 0, binding = 3) readonly buffer LightBuffer
-// Begin light buffer block
 {
-    // Scene light storage array
     GpuLight lights[];
-// End light buffer block
 };
 
-// Bind camera constants block
 layout(set = 0, binding = 4) uniform CameraConstants
-// Begin camera constants block
 {
-    // Camera world position
     vec4 cameraPosition;
-    // Camera forward direction
     vec4 cameraForward;
-    // Camera right direction
     vec4 cameraRight;
-    // Camera up direction
     vec4 cameraUp;
     uvec4 viewportAndCounts; // x=width, y=height, z=triangle count, w=light count
     uvec4 renderParams;      // x=bounce count, y=sample index, z=tile Y offset, w=tile row count
     uvec4 bvhParams;         // x=BVH node count, y=sample batch count, zw=reserved
     vec4 backgroundTopFov;   // xyz=top background, w=tan(vertical fov / 2)
     vec4 backgroundBottomExposure; // xyz=bottom background, w=exposure
-    vec4 lightingOptions;    // x=ambient multiplier, y=shadows enabled, zw=reserved
-// End camera constants block
+    vec4 lightingOptions;    // x=ambient multiplier, y=shadows enabled, z=wireframe, w=reserved
 } constants;
 
-// Bind texture pixel buffer
 layout(set = 0, binding = 5) readonly buffer TexturePixelBuffer
-// Begin texture pixel block
 {
-    // Packed texture pixel storage
     uint texturePixels[];
-// End texture pixel block
 };
 
-// Declare texture info structure
 struct GpuTextureInfo
-// Begin GpuTextureInfo struct
 {
     vec4 data; // x=pixel offset, y=width, z=height, w=reserved
     vec4 textureTransform; // xy=offset, zw=scale
     vec4 textureAddress; // x=wrapU, y=wrapV, z=rotation, w=reserved
-// End GpuTextureInfo struct
 };
 
-// Bind texture info buffer
 layout(set = 0, binding = 6) readonly buffer TextureInfoBuffer
-// Begin texture info block
 {
-    // Texture descriptor storage array
     GpuTextureInfo textureInfos[];
-// End texture info block
 };
 
-// Declare ray hit record
 struct Hit
-// Begin Hit struct
 {
-    // Whether ray hit anything
     bool hit;
-    // Hit distance along ray
     float t;
-    // Hit triangle index
     uint index;
-    // Hit world position
     vec3 point;
-    // Hit shading normal
     vec3 normal;
-    // Hit base color
     vec3 baseColor;
-    // Hit emission color
     vec3 emission;
-    // Hit opacity value
     float alpha;
-    // Hit metallic factor
     float metallic;
-    // Hit roughness factor
     float roughness;
-    // Hit transmission factor
     float transmission;
-    // Hit occlusion factor
     float occlusion;
-    // Hit texture coordinates
     vec2 uv;
-    // Hit clearcoat layer weight
     float clearcoat;
-    // Hit clearcoat roughness
     float clearcoatRoughness;
-    // Hit volume thickness
     float thickness;
-    // Hit attenuation color
     vec3 attenuationColor;
-    // Hit attenuation distance
     float attenuationDistance;
-// End Hit struct
 };
 
-// Global RNG state
 uint rngState;
 
-// Hashes an integer with Wang's integer hash for the shader RNG.
-// Declare Wang hash function
 uint wangHash(uint s)
-// Begin wangHash function
 {
-    // Xor-shift input seed
     s = (s ^ 61u) ^ (s >> 16u);
-    // Multiply by hash constant
     s *= 9u;
-    // Fold high bits down
     s = s ^ (s >> 4u);
-    // Multiply by second constant
     s *= 0x27d4eb2du;
-    // Final avalanche mixing step
     s = s ^ (s >> 15u);
-    // Return hashed value
     return s;
-// End wangHash function
 }
 
-// Returns the next uniform random value in [0, 1).
-// Declare random float function
 float rand01()
-// Begin rand01 function
 {
-    // Advance RNG state
     rngState = wangHash(rngState);
-    // Return normalized random fraction
     return float(rngState & 0x00ffffffu) / 16777216.0;
-// End rand01 function
 }
 
-// Tests a ray against a triangle with the Moller-Trumbore algorithm.
-// Declare triangle intersection function
+// Double-sided Moller-Trumbore. Returns barycentric (u,v) for B,C and a
+// geometric normal flipped against the ray.
 bool intersectTriangle(vec3 ro, vec3 rd, vec3 v0, vec3 v1, vec3 v2, out float t, out vec3 n, out vec2 baryUv)
-// Begin intersectTriangle function
 {
-    // Define intersection epsilon
     const float eps = 0.000001;
-    // Compute first triangle edge
     vec3 e1 = v1 - v0;
-    // Compute second triangle edge
     vec3 e2 = v2 - v0;
-    // Compute determinant helper vector
     vec3 p = cross(rd, e2);
-    // Compute triangle determinant
     float det = dot(e1, p);
-    // Reject parallel rays
     if (abs(det) < eps) return false;
 
-    // Compute inverse determinant
     float invDet = 1.0 / det;
-    // Vector from vertex to origin
     vec3 s = ro - v0;
-    // Compute first barycentric coordinate
     float u = dot(s, p) * invDet;
-    // Reject misses outside edge
     if (u < 0.0 || u > 1.0) return false;
 
-    // Compute second helper vector
     vec3 q = cross(s, e1);
-    // Compute second barycentric coordinate
     float v = dot(rd, q) * invDet;
-    // Reject misses outside triangle
     if (v < 0.0 || u + v > 1.0) return false;
 
-    // Compute hit distance
     t = dot(e2, q) * invDet;
-    // Reject behind-origin hits
     if (t <= eps) return false;
 
-    // Compute geometric face normal
     n = normalize(cross(e1, e2));
-    // Face normal against ray
     if (dot(n, rd) > 0.0) n = -n;
-    // Output barycentric coordinates
     baryUv = vec2(u, v);
-    // Report successful hit
     return true;
-// End intersectTriangle function
 }
 
-// Addresses one coordinate with the texture wrap mode (0 repeat, 1 clamp, 2 mirror).
-// Declare texture addressing function
+// Wrap modes: 0 repeat, 1 clamp, 2 mirror.
 float addressTexture(float v, float mode)
-// Begin addressing function
 {
-    // Sanitize invalid coordinates
     if (isnan(v) || isinf(v)) return 0.0;
-    // Detect clamp addressing mode
     if (mode > 0.5 && mode < 1.5)
-        // Clamp coordinate into range
         return clamp(v, 0.0, 1.0);
-    // Detect mirrored repeat mode
     if (mode > 1.5)
-    // Begin mirror addressing block
     {
-        // Find integer repeat count
         float floorValue = floor(v);
-        // Find fractional local coordinate
         float local = v - floorValue;
-        // Mirror alternate repeats
         return mod(floorValue, 2.0) == 0.0 ? local : 1.0 - local;
-    // End mirror addressing block
     }
-    // Pass through in range coordinates
     if (v >= 0.0 && v <= 1.0)
-        // Return already valid coordinate
         return v;
-    // Wrap coordinate with fraction
     float wrapped = fract(v);
-    // Shift negatives into range
     return wrapped < 0.0 ? wrapped + 1.0 : wrapped;
-// End addressing function
 }
 
-// Applies the texture scale rotation offset transform to UV coordinates.
-// Declare UV transform function
+// glTF UV transform: scale, rotate, then offset.
 vec2 applyTextureTransform(vec2 uv, vec4 textureTransform, float rotation)
-// Begin UV transform function
 {
-    // Scale UV by transform factor
     vec2 transformed = uv * textureTransform.zw;
-    // Skip rotation when nearly zero
     if (abs(rotation) > 0.000001)
-    // Begin UV rotation block
     {
-        // Compute rotation cosine factor
         float c = cos(rotation);
-        // Compute rotation sine factor
         float s = sin(rotation);
-        // Rotate scaled UV coordinates
         transformed = vec2(transformed.x * c - transformed.y * s, transformed.x * s + transformed.y * c);
-    // End UV rotation block
     }
-    // Add UV offset translation
-    transformed += textureTransform.xy;
-    // Return transformed coordinates
-    return transformed;
-// End UV transform function
+    return transformed + textureTransform.xy;
 }
 
-// Unpacks a packed RGBA32 texel into linear float components.
-// Declare texel unpack function
 vec4 unpackTexturePixel(uint packed)
-// Begin unpack function
 {
-    // Unpack red channel
-    float r = float(packed & 0xFFu) / 255.0;
-    // Unpack green channel
-    float g = float((packed >> 8) & 0xFFu) / 255.0;
-    // Unpack blue channel
-    float b = float((packed >> 16) & 0xFFu) / 255.0;
-    // Unpack alpha channel
-    float a = float((packed >> 24) & 0xFFu) / 255.0;
-    // Return unpacked texel
-    return vec4(r, g, b, a);
-// End unpack function
+    return vec4(
+        float(packed & 0xFFu) / 255.0,
+        float((packed >> 8) & 0xFFu) / 255.0,
+        float((packed >> 16) & 0xFFu) / 255.0,
+        float((packed >> 24) & 0xFFu) / 255.0);
 }
 
-// Samples a packed GPU texture at a UV coordinate with bilinear filtering.
-// Declare texture sampling function
 vec4 sampleBaseTexture(uint textureIndex, vec2 uv)
-// Begin sample function
 {
-    // Fetch texture descriptor
     GpuTextureInfo info = textureInfos[textureIndex];
-    // Decode pixel buffer offset
     uint offset = uint(max(info.data.x, 0.0) + 0.5);
-    // Decode texture width
     uint texWidth = max(uint(info.data.y + 0.5), 1u);
-    // Decode texture height
     uint texHeight = max(uint(info.data.z + 0.5), 1u);
 
-    // Apply texture transform
     vec2 transformed = applyTextureTransform(uv, info.textureTransform, info.textureAddress.z);
-    // Wrap horizontal coordinate
     float u = addressTexture(transformed.x, info.textureAddress.x);
-    // Wrap vertical coordinate
     float v = addressTexture(transformed.y, info.textureAddress.y);
-    // Scale u to texel space
     float fx = texWidth == 1u ? 0.0 : u * float(texWidth - 1u);
-    // Scale v to texel space
     float fy = texHeight == 1u ? 0.0 : v * float(texHeight - 1u);
-    // Left texel column
     uint x0 = uint(floor(fx));
-    // Top texel row
     uint y0 = uint(floor(fy));
-    // Right texel column clamped
     uint x1 = min(texWidth - 1u, x0 + 1u);
-    // Bottom texel row clamped
     uint y1 = min(texHeight - 1u, y0 + 1u);
-    // Horizontal blend factor
     float tx = fx - floor(fx);
-    // Vertical blend factor
     float ty = fy - floor(fy);
 
-    // Fetch top-left texel
     vec4 c00 = unpackTexturePixel(texturePixels[offset + y0 * texWidth + x0]);
-    // Fetch top-right texel
     vec4 c10 = unpackTexturePixel(texturePixels[offset + y0 * texWidth + x1]);
-    // Fetch bottom-left texel
     vec4 c01 = unpackTexturePixel(texturePixels[offset + y1 * texWidth + x0]);
-    // Fetch bottom-right texel
     vec4 c11 = unpackTexturePixel(texturePixels[offset + y1 * texWidth + x1]);
-    // Blend top row
-    vec4 top = mix(c00, c10, tx);
-    // Blend bottom row
-    vec4 bottom = mix(c01, c11, tx);
-    // Blend rows vertically
-    return mix(top, bottom, ty);
-// End sample function
+    return mix(mix(c00, c10, tx), mix(c01, c11, tx), ty);
 }
 
-// Converts one sRGB channel to linear space.
-// Declare sRGB decode function
 float srgbChannelToLinear(float value)
-// Begin sRGB decode function
 {
-    // Clamp channel to unit range
     value = clamp(value, 0.0, 1.0);
-    // Apply sRGB transfer curve
     return value <= 0.04045 ? value / 12.92 : pow((value + 0.055) / 1.055, 2.4);
-// End sRGB decode function
 }
 
-// Converts an sRGB color to linear space.
-// Declare color decode function
 vec3 srgbToLinear(vec3 value)
-// Begin color decode function
 {
-    // Begin decoded color constructor
-    return vec3(
-        // Decode red channel
-        srgbChannelToLinear(value.r),
-        // Decode green channel
-        srgbChannelToLinear(value.g),
-        // Decode blue channel
-        srgbChannelToLinear(value.b));
-// End color decode function
+    return vec3(srgbChannelToLinear(value.r), srgbChannelToLinear(value.g), srgbChannelToLinear(value.b));
 }
 
-// Converts one linear channel to sRGB space.
-// Declare linear encode function
 float linearChannelToSrgb(float value)
-// Begin linear encode function
 {
-    // Clamp negative values away
     value = max(value, 0.0);
-    // Apply inverse sRGB curve
     return value <= 0.0031308 ? value * 12.92 : 1.055 * pow(value, 1.0 / 2.4) - 0.055;
-// End linear encode function
 }
 
-// Converts a linear color to sRGB space.
-// Declare color encode function
 vec3 linearToSrgb(vec3 value)
-// Begin color encode function
 {
-    // Begin encoded color constructor
-    return vec3(
-        // Encode red channel
-        linearChannelToSrgb(value.r),
-        // Encode green channel
-        linearChannelToSrgb(value.g),
-        // Encode blue channel
-        linearChannelToSrgb(value.b));
-// End color encode function
+    return vec3(linearChannelToSrgb(value.r), linearChannelToSrgb(value.g), linearChannelToSrgb(value.b));
 }
 
-// Applies the Khronos PBR neutral tone mapping operator.
-// Declare tone mapping function
+// Khronos PBR neutral tone mapping operator.
 vec3 pbrNeutralToneMap(vec3 color)
-// Begin tone map function
 {
-    // Define compression start threshold
     const float startCompression = 0.76;
-    // Define desaturation amount
     const float desaturation = 0.15;
-    // Find minimum color channel
     float x = min(color.r, min(color.g, color.b));
-    // Compute toe offset
     float offset = x < 0.08 ? x - 6.25 * x * x : 0.04;
-    // Subtract toe offset
     color -= offset;
 
-    // Find maximum color channel
     float peak = max(color.r, max(color.g, color.b));
-    // Skip compression for dark colors
     if (peak < startCompression)
-        // Return uncompressed dark color
         return max(color, vec3(0.0));
 
-    // Compute compression range
     float d = 1.0 - startCompression;
-    // Compress peak toward white
     float newPeak = 1.0 - d * d / (peak + d - startCompression);
-    // Scale color to compressed peak
     color *= newPeak / max(peak, 0.000001);
-    // Compute desaturation blend factor
     float grayMix = 1.0 - 1.0 / (desaturation * (peak - newPeak) + 1.0);
-    // Return desaturated mapped color
     return max(mix(color, newPeak * vec3(1.0), grayMix), vec3(0.0));
-// End tone map function
 }
 
-// Evaluates the GGX normal distribution term.
-// Declare GGX distribution function
 float distributionGgx(float nDotH, float alphaRoughness)
-// Begin GGX function
 {
-    // Square roughness parameter
     float a2 = alphaRoughness * alphaRoughness;
-    // Compute denominator factor
     float f = nDotH * nDotH * (a2 - 1.0) + 1.0;
-    // Return GGX distribution value
     return a2 / max(PI * f * f, 0.000001);
-// End GGX function
 }
 
-// Evaluates the correlated Smith GGX visibility term.
-// Declare Smith visibility function
 float visibilitySmithGgxCorrelated(float nDotV, float nDotL, float alphaRoughness)
-// Begin visibility function
 {
-    // Square roughness parameter
     float a2 = alphaRoughness * alphaRoughness;
-    // Compute view geometry term
     float gv = nDotL * sqrt(max(nDotV * nDotV * (1.0 - a2) + a2, 0.0));
-    // Compute light geometry term
     float gl = nDotV * sqrt(max(nDotL * nDotL * (1.0 - a2) + a2, 0.0));
-    // Return correlated visibility
     return 0.5 / max(gv + gl, 0.000001);
-// End visibility function
 }
 
-// Evaluates Schlick's Fresnel approximation.
-// Declare Fresnel function
 vec3 fresnelSchlick(float vDotH, vec3 f0)
-// Begin Fresnel function
 {
-    // Compute fifth-power falloff
     float factor = pow(1.0 - clamp(vDotH, 0.0, 1.0), 5.0);
-    // Blend toward white reflectance
     return f0 + (vec3(1.0) - f0) * factor;
-// End Fresnel function
 }
 
-// Decodes a stored float into a texture table index.
-// Declare texture index decoder
 int textureIndex(float encoded)
-// Begin index decode function
 {
-    // Round encoded float to index
     return int(round(encoded));
-// End index decode function
 }
 
-// Unpacks the first vertex normal stored in a GPU triangle.
-// Declare first normal unpacker
 vec3 triangleNormalA(GpuTriangle tri)
-// Begin normal A function
 {
-    // Gather normal from w slots
     return vec3(tri.a.w, tri.b.w, tri.c.w);
-// End normal A function
 }
 
-// Unpacks the second vertex normal stored in a GPU triangle.
-// Declare second normal unpacker
 vec3 triangleNormalB(GpuTriangle tri)
-// Begin normal B function
 {
-    // Gather normal from UV slots
     return vec3(tri.uvA.z, tri.uvA.w, tri.uvB.z);
-// End normal B function
 }
 
-// Unpacks the third vertex normal stored in a GPU triangle.
-// Declare third normal unpacker
 vec3 triangleNormalC(GpuTriangle tri)
-// Begin normal C function
 {
-    // Gather normal from UV slots
     return vec3(tri.uvB.w, tri.uvC.z, tri.uvC.w);
-// End normal C function
 }
 
-// Samples the base color of a triangle at a UV coordinate.
-// Declare base color sampler
 vec4 triangleBaseColorAt(GpuTriangle tri, vec2 uv)
-// Begin base color function
 {
-    // Start from material factor
     vec4 color = tri.baseColor;
-    // Decode base texture index
     int index = textureIndex(tri.textureInfo.x);
-    // Check for bound texture
     if (index >= 0)
-    // Begin texture modulation block
     {
-        // Sample base texture
         vec4 sampled = sampleBaseTexture(uint(index), uv);
-        // Multiply linear albedo texel
         color.rgb *= srgbToLinear(sampled.rgb);
-        // Multiply texture alpha
         color.a *= sampled.a;
-    // End texture modulation block
     }
-    // Return clamped base color
     return clamp(color, vec4(0.0), vec4(64.0));
-// End base color function
 }
 
-// Computes the emission of a triangle at a UV coordinate.
-// Declare emission sampler
 vec3 triangleEmissionAt(GpuTriangle tri, vec2 uv, vec3 linearBaseColor)
-// Begin emission function
 {
-    // Read emission strength
     float strength = max(tri.emission.a, 0.0);
-    // Skip non-emissive triangles
     if (strength <= 0.0) return vec3(0.0);
 
-    // Default source to base color
     vec3 source = linearBaseColor;
-    // Decode emissive texture index
     int index = textureIndex(tri.textureInfo.y);
-    // Check for emissive texture
     if (index >= 0)
-        // Sample emissive texture source
         source = srgbToLinear(sampleBaseTexture(uint(index), uv).rgb);
-    // Return scaled clamped emission
     return clamp(source * tri.emission.rgb * strength, vec3(0.0), vec3(64.0));
-// End emission function
 }
 
-// Samples metallic and roughness of a triangle at a UV coordinate.
-// Declare metallic-roughness sampler
 vec2 triangleMetallicRoughnessAt(GpuTriangle tri, vec2 uv)
-// Begin MR sampler function
 {
-    // Clamp metallic factor
     float metallic = clamp(tri.materialParams.x, 0.0, 1.0);
-    // Clamp roughness with minimum
     float roughness = clamp(tri.materialParams.y, 0.045, 1.0);
-    // Decode MR texture index
     int index = textureIndex(tri.textureInfo2.x);
-    // Check for MR texture
     if (index >= 0)
-    // Begin MR modulation block
     {
-        // Sample MR texture
         vec3 mr = sampleBaseTexture(uint(index), uv).rgb;
-        // Modulate roughness from green
         roughness *= mr.g;
-        // Modulate metallic from blue
         metallic *= mr.b;
-    // End MR modulation block
     }
-    // Return clamped MR pair
     return vec2(clamp(metallic, 0.0, 1.0), clamp(roughness, 0.045, 1.0));
-// End MR sampler function
 }
 
-// Samples ambient occlusion of a triangle at a UV coordinate.
-// Declare occlusion sampler
 float triangleOcclusionAt(GpuTriangle tri, vec2 uv)
-// Begin occlusion function
 {
-    // Decode occlusion texture index
     int index = textureIndex(tri.textureInfo2.z);
-    // Check for missing texture
     if (index < 0)
-        // Return full light no occlusion
         return 1.0;
 
-    // Sample occlusion red channel
     float sampled = clamp(sampleBaseTexture(uint(index), uv).r, 0.0, 1.0);
-    // Blend by occlusion strength
     return mix(1.0, sampled, clamp(tri.textureInfo2.w, 0.0, 1.0));
-// End occlusion function
 }
 
-// Interpolates vertex normals across a triangle from barycentric coordinates.
-// Declare normal interpolation function
 vec3 interpolatedNormal(GpuTriangle tri, vec2 bary, vec3 geometricNormal)
-// Begin interpolation function
 {
-    // Compute third barycentric weight
     float w = 1.0 - bary.x - bary.y;
-    // Begin weighted normal sum
     vec3 normal = normalize(
-        // Weight first vertex normal
         triangleNormalA(tri) * w +
-        // Weight second vertex normal
         triangleNormalB(tri) * bary.x +
-        // Weight third vertex normal
         triangleNormalC(tri) * bary.y);
-    // Check hemisphere flip needed
     if (dot(normal, geometricNormal) < 0.0)
-        // Flip normal toward geometry
         normal = -normal;
-    // Return interpolated normal
     return normal;
-// End interpolation function
 }
 
-// Perturbs the shading normal with the triangle normal map.
-// Declare normal mapping function
 vec3 applyNormalMap(GpuTriangle tri, vec2 uv, vec3 shadingNormal)
-// Begin normal map function
 {
-    // Normalize input shading normal
     vec3 normal = normalize(shadingNormal);
-    // Decode normal texture index
     int index = textureIndex(tri.textureInfo2.y);
-    // Check for missing map
     if (index < 0)
-        // Return unperturbed normal
         return normal;
 
-    // Compute first position edge
     vec3 edge1 = tri.b.xyz - tri.a.xyz;
-    // Compute second position edge
     vec3 edge2 = tri.c.xyz - tri.a.xyz;
-    // Compute first UV delta
     vec2 deltaUv1 = tri.uvB.xy - tri.uvA.xy;
-    // Compute second UV delta
     vec2 deltaUv2 = tri.uvC.xy - tri.uvA.xy;
-    // Compute UV area determinant
     float determinant = deltaUv1.x * deltaUv2.y - deltaUv1.y * deltaUv2.x;
 
-    // Declare tangent vector
     vec3 tangent;
-    // Declare bitangent vector
     vec3 bitangent;
-    // Check UVs are non-degenerate
     if (abs(determinant) > 0.0000001)
-    // Begin tangent basis block
     {
-        // Invert UV determinant
         float inverse = 1.0 / determinant;
-        // Solve raw tangent vector
         vec3 rawTangent = (edge1 * deltaUv2.y - edge2 * deltaUv1.y) * inverse;
-        // Solve raw bitangent vector
         vec3 rawBitangent = (edge2 * deltaUv1.x - edge1 * deltaUv2.x) * inverse;
-        // Orthogonalize tangent to normal
         tangent = normalize(rawTangent - normal * dot(normal, rawTangent));
-        // Determine basis handedness sign
         float handedness = dot(cross(normal, tangent), rawBitangent) < 0.0 ? -1.0 : 1.0;
-        // Build handed bitangent
         bitangent = normalize(cross(normal, tangent)) * handedness;
-    // End tangent basis block
     }
-    // Fall back for degenerate UVs
     else
-    // Begin fallback basis block
     {
-        // Pick axis away from normal
         vec3 axis = abs(normal.z) < 0.999 ? vec3(0.0, 0.0, 1.0) : vec3(0.0, 1.0, 0.0);
-        // Build arbitrary tangent
         tangent = normalize(cross(axis, normal));
-        // Build orthogonal bitangent
         bitangent = normalize(cross(normal, tangent));
-    // End fallback basis block
     }
 
-    // Decode tangent-space normal texel
     vec3 tangentNormal = sampleBaseTexture(uint(index), uv).xyz * 2.0 - 1.0;
-    // Scale normal map strength
     tangentNormal.xy *= tri.materialParams.w;
-    // Renormalize perturbed vector
     tangentNormal = normalize(tangentNormal);
-    // Transform normal to world
     return normalize(tangent * tangentNormal.x + bitangent * tangentNormal.y + normal * tangentNormal.z);
-// End normal map function
 }
 
-// Tests a ray against an axis-aligned box with the slab method.
-// Declare AABB intersection function
+// Slab test with a small tolerance so grazing rays still enter thin boxes.
 bool intersectAabb(vec3 ro, vec3 invRd, vec3 bmin, vec3 bmax, float maxT)
-// Begin AABB function
 {
-    // Compute entry slab distances
     vec3 t0 = (bmin - ro) * invRd;
-    // Compute exit slab distances
     vec3 t1 = (bmax - ro) * invRd;
-    // Take per-axis entry distances
     vec3 tsmaller = min(t0, t1);
-    // Take per-axis exit distances
     vec3 tbigger = max(t0, t1);
-    // Compute overall entry distance
     float tmin = max(max(tsmaller.x, tsmaller.y), max(tsmaller.z, 0.0));
-    // Compute overall exit distance
     float tmax = min(min(tbigger.x, tbigger.y), min(tbigger.z, maxT));
-
-    // Match the CPU BVH's conservative behavior.  Without a small tolerance,
-    // very thin triangle boxes can be rejected by the float slab test even
-    // though the ray/triangle test would have hit them.
-    // Report overlap with tolerance
     return tmax + 0.00001 >= tmin;
-// End AABB function
 }
 
-// Traverses the GPU BVH to find the closest ray hit.
-// Declare BVH traversal function
-Hit traceClosest(vec3 ro, vec3 rd, float maxT, uint ignoreIndex)
-// Begin traversal function
+Hit emptyHit()
 {
-    // Declare closest hit record
     Hit h;
-    // Initialize no-hit flag
     h.hit = false;
-    // Initialize closest distance
-    h.t = maxT;
-    // Initialize hit index
+    h.t = 1.0e30;
     h.index = 0u;
-    // Initialize hit position
     h.point = vec3(0.0);
-    // Initialize up normal
     h.normal = vec3(0.0, 1.0, 0.0);
-    // Initialize black base color
     h.baseColor = vec3(0.0);
-    // Initialize black emission
     h.emission = vec3(0.0);
-    // Initialize opaque alpha
     h.alpha = 1.0;
-    // Initialize dielectric metallic
     h.metallic = 0.0;
-    // Initialize rough default
     h.roughness = 0.8;
-    // Initialize opaque transmission
     h.transmission = 0.0;
-    // Initialize full occlusion light
     h.occlusion = 1.0;
-    // Initialize zero UVs
     h.uv = vec2(0.0);
-    // Initialize absent clearcoat layer
     h.clearcoat = 0.0;
-    // Initialize default clearcoat roughness
     h.clearcoatRoughness = 1.0;
-    // Initialize zero volume thickness
     h.thickness = 0.0;
-    // Initialize white attenuation color
     h.attenuationColor = vec3(1.0);
-    // Initialize infinite attenuation distance
     h.attenuationDistance = 0.0;
+    return h;
+}
 
-    // Read BVH node count
+// Iterative BVH traversal with an explicit stack. Children are pushed
+// unordered; the shrinking closest distance prunes later AABB tests.
+void recordHit(vec3 ro, vec3 rd, GpuTriangle tri, uint i, float t, vec3 n, vec2 bary, inout Hit h);
+
+Hit traceClosest(vec3 ro, vec3 rd, float maxT, uint ignoreIndex)
+{
+    Hit h = emptyHit();
+    h.t = maxT;
+
     uint nodeCount = constants.bvhParams.x;
-    // Check for empty BVH
     if (nodeCount == 0u)
-        // Return miss for empty scene
         return h;
 
-    // Begin inverse ray direction
-    vec3 invRd = 1.0 / vec3(
-        // Guard X against zero
+    vec3 guarded = vec3(
         abs(rd.x) < 0.000001 ? (rd.x < 0.0 ? -0.000001 : 0.000001) : rd.x,
-        // Guard Y against zero
         abs(rd.y) < 0.000001 ? (rd.y < 0.0 ? -0.000001 : 0.000001) : rd.y,
-        // Guard Z against zero
         abs(rd.z) < 0.000001 ? (rd.z < 0.0 ? -0.000001 : 0.000001) : rd.z);
+    vec3 invRd = 1.0 / guarded;
 
-    // Declare traversal stack
     uint stack[64];
-    // Initialize stack pointer
     int stackPtr = 0;
-    // Push root node
     stack[stackPtr++] = 0u;
 
-    // Loop while nodes remain
     while (stackPtr > 0)
-    // Begin traversal loop
     {
-        // Pop next node index
         uint nodeIndex = stack[--stackPtr];
-        // Skip out-of-range nodes
         if (nodeIndex >= nodeCount) continue;
 
-        // Fetch current BVH node
         GpuBvhNode node = bvhNodes[nodeIndex];
-        // Test ray against node bounds
         if (!intersectAabb(ro, invRd, node.boundsMin.xyz, node.boundsMax.xyz, h.t))
-            // Skip missed subtrees
             continue;
 
-        // Decode first child index
         uint firstOrLeft = uint(node.data.x + 0.5);
-        // Decode triangle count
         uint triCount = uint(node.data.y + 0.5);
-        // Decode right child index
         uint rightChild = uint(node.data.z + 0.5);
 
-        // Check for leaf node
         if (triCount > 0u)
-        // Begin leaf block
         {
-            // Loop over leaf triangles
             for (uint j = 0u; j < triCount; j++)
-            // Begin per-triangle loop
             {
-                // Compute global triangle index
                 uint i = firstOrLeft + j;
-                // Skip ignored or invalid triangles
                 if (i == ignoreIndex || i >= constants.viewportAndCounts.z) continue;
-                // Declare hit distance
                 float t;
-                // Declare geometric normal
                 vec3 n;
-                // Declare barycentric output
                 vec2 bary;
-                // Fetch candidate triangle
                 GpuTriangle tri = triangles[i];
-                // Test triangle for closer hit
                 if (intersectTriangle(ro, rd, tri.a.xyz, tri.b.xyz, tri.c.xyz, t, n, bary) && t < h.t)
-                // Begin closer-hit block
-                {
-                    // Decode alpha flags
-                    int alphaFlags = int(round(tri.textureInfo.z));
-                    // Cull single-sided backfaces
-                    vec3 faceNormal = normalize(cross(tri.b.xyz - tri.a.xyz, tri.c.xyz - tri.a.xyz));
-                    if (dot(faceNormal, rd) > 0.0 && (alphaFlags & 4) == 0)
-                        // Skip culled backface hit
-                        continue;
-                    // Compute third barycentric weight
-                    float w = 1.0 - bary.x - bary.y;
-                    // Interpolate hit UVs
-                    vec2 hitUv = tri.uvA.xy * w + tri.uvB.xy * bary.x + tri.uvC.xy * bary.y;
-                    // Sample base color
-                    vec4 sampledBase = triangleBaseColorAt(tri, hitUv);
-                    // Extract alpha mode bits
-                    int alphaMode = alphaFlags & 3;
-                    // Test alpha cutoff discard
-                    if (alphaMode == 1 && sampledBase.a < tri.textureInfo.w)
-                        // Discard transparent texels
-                        continue;
-
-                    // Sample metallic-roughness pair
-                    vec2 mr = triangleMetallicRoughnessAt(tri, hitUv);
-                    // Interpolate shading normal
-                    vec3 shadingNormal = interpolatedNormal(tri, bary, n);
-                    // Check backface orientation
-                    if (dot(shadingNormal, rd) > 0.0)
-                        // Flip shading normal forward
-                        shadingNormal = -shadingNormal;
-
-                    // Record hit found
-                    h.hit = true;
-                    // Record closest distance
-                    h.t = t;
-                    // Record triangle index
-                    h.index = i;
-                    // Record world hit point
-                    h.point = ro + rd * t;
-                    // Record perturbed normal
-                    h.normal = applyNormalMap(tri, hitUv, shadingNormal);
-                    // Check mapped normal orientation
-                    if (dot(h.normal, rd) > 0.0)
-                        // Flip mapped normal forward
-                        h.normal = -h.normal;
-                    // Record base color
-                    h.baseColor = sampledBase.rgb;
-                    // Record emission color
-                    h.emission = triangleEmissionAt(tri, hitUv, sampledBase.rgb);
-                    // Record effective alpha
-                    h.alpha = alphaMode == 0 ? 1.0 : clamp(sampledBase.a, 0.0, 1.0);
-                    // Record metallic factor
-                    h.metallic = mr.x;
-                    // Record roughness factor
-                    h.roughness = mr.y;
-                    // Record transmission factor
-                    h.transmission = clamp(tri.materialParams.z, 0.0, 1.0);
-                    // Decode transmission texture index
-                    int transmissionIndex = textureIndex(tri.textureInfo3.x);
-                    // Check for transmission texture
-                    if (transmissionIndex >= 0)
-                        // Modulate transmission by mask
-                        h.transmission *= clamp(sampleBaseTexture(uint(transmissionIndex), hitUv).r, 0.0, 1.0);
-                    // Record clearcoat layer weight
-                    h.clearcoat = clamp(tri.opticalFactors.z, 0.0, 1.0);
-                    // Check for shared clearcoat mask
-                    if (tri.textureInfo3.y > 0.5 && transmissionIndex >= 0)
-                        // Reuse transmission mask for clearcoat
-                        h.clearcoat *= clamp(sampleBaseTexture(uint(transmissionIndex), hitUv).r, 0.0, 1.0);
-                    // Record clearcoat roughness
-                    h.clearcoatRoughness = clamp(tri.opticalFactors.w, 0.045, 1.0);
-                    // Record volume thickness
-                    h.thickness = max(tri.opticalFactors.y, 0.0);
-                    // Record attenuation color
-                    h.attenuationColor = tri.attenuation.rgb;
-                    // Record attenuation distance
-                    h.attenuationDistance = tri.attenuation.w;
-                    // Record occlusion factor
-                    h.occlusion = triangleOcclusionAt(tri, hitUv);
-                    // Record hit UVs
-                    h.uv = hitUv;
-                // End closer-hit block
-                }
-            // End per-triangle loop
+                    recordHit(ro, rd, tri, i, t, n, bary, h);
             }
-        // End leaf block
         }
-        // Handle interior nodes
         else
-        // Begin interior block
         {
-            // Push both children. Near/far ordering is intentionally omitted for
-            // simplicity; the current closest hit still prunes later AABB tests.
-            // Push right child node
             if (stackPtr < 63 && rightChild < nodeCount) stack[stackPtr++] = rightChild;
-            // Push left child node
             if (stackPtr < 63 && firstOrLeft < nodeCount) stack[stackPtr++] = firstOrLeft;
-        // End interior block
         }
-    // End traversal loop
     }
 
-    // Return closest hit record
     return h;
-// End traversal function
 }
 
-// Returns the vertical gradient background color for a ray direction.
-// Declare background function
+// Records a closer hit, applying backface culling and alpha-mask discard.
+// Single-sided materials (flag bit 2 clear) skip backfaces; the geometric
+// face normal decides facing, independent of the shading normal.
+void recordHit(vec3 ro, vec3 rd, GpuTriangle tri, uint i, float t, vec3 n, vec2 bary, inout Hit h)
+{
+    int alphaFlags = int(round(tri.textureInfo.z));
+    vec3 faceNormal = normalize(cross(tri.b.xyz - tri.a.xyz, tri.c.xyz - tri.a.xyz));
+    if (dot(faceNormal, rd) > 0.0 && (alphaFlags & 4) == 0)
+        return;
+
+    float w = 1.0 - bary.x - bary.y;
+    vec2 hitUv = tri.uvA.xy * w + tri.uvB.xy * bary.x + tri.uvC.xy * bary.y;
+    vec4 sampledBase = triangleBaseColorAt(tri, hitUv);
+    int alphaMode = alphaFlags & 3;
+    if (alphaMode == 1 && sampledBase.a < tri.textureInfo.w)
+        return;
+
+    vec2 mr = triangleMetallicRoughnessAt(tri, hitUv);
+    vec3 shadingNormal = interpolatedNormal(tri, bary, n);
+    if (dot(shadingNormal, rd) > 0.0)
+        shadingNormal = -shadingNormal;
+
+    h.hit = true;
+    h.t = t;
+    h.index = i;
+    h.point = ro + rd * t;
+    h.normal = applyNormalMap(tri, hitUv, shadingNormal);
+    if (dot(h.normal, rd) > 0.0)
+        h.normal = -h.normal;
+    h.baseColor = sampledBase.rgb;
+    h.emission = triangleEmissionAt(tri, hitUv, sampledBase.rgb);
+    h.alpha = alphaMode == 0 ? 1.0 : clamp(sampledBase.a, 0.0, 1.0);
+    h.metallic = mr.x;
+    h.roughness = mr.y;
+    h.transmission = clamp(tri.materialParams.z, 0.0, 1.0);
+    int transmissionIndex = textureIndex(tri.textureInfo3.x);
+    if (transmissionIndex >= 0)
+        h.transmission *= clamp(sampleBaseTexture(uint(transmissionIndex), hitUv).r, 0.0, 1.0);
+    h.clearcoat = clamp(tri.opticalFactors.z, 0.0, 1.0);
+    if (tri.textureInfo3.y > 0.5 && transmissionIndex >= 0)
+        h.clearcoat *= clamp(sampleBaseTexture(uint(transmissionIndex), hitUv).r, 0.0, 1.0);
+    h.clearcoatRoughness = clamp(tri.opticalFactors.w, 0.045, 1.0);
+    h.thickness = max(tri.opticalFactors.y, 0.0);
+    h.attenuationColor = tri.attenuation.rgb;
+    h.attenuationDistance = tri.attenuation.w;
+    h.occlusion = triangleOcclusionAt(tri, hitUv);
+    h.uv = hitUv;
+}
+
 vec3 background(vec3 rd)
-// Begin background function
 {
-    // Read sky top color
     vec3 skyTop = max(constants.backgroundTopFov.xyz, vec3(0.0));
-    // Read sky bottom color
     vec3 skyBottom = max(constants.backgroundBottomExposure.xyz, vec3(0.0));
-    // Blend gradient by ray height
     return mix(skyBottom, skyTop, clamp(rd.y * 0.5 + 0.5, 0.0, 1.0));
-// End background gradient function
 }
 
-// Computes inverse-square light falloff with range edge fading.
-// Declare distance falloff function signature
 float distanceAttenuation(float distance, float range)
-// Begin distance attenuation function
 {
-    // Compute inverse square light falloff
     float attenuation = 1.0 / (1.0 + 0.11 * distance * distance);
-    // Skip range fade for infinite lights
     if (range <= 0.0) return attenuation;
-    // Normalize distance by light range
     float normalized = clamp(distance / max(range, 0.0001), 0.0, 1.0);
-    // Compute smooth range edge fade
     float edgeFade = 1.0 - normalized * normalized;
-    // Return falloff times squared edge fade
     return attenuation * edgeFade * edgeFade;
-// End distance attenuation function
 }
 
-// Traces a shadow ray and returns the transmitted light fraction.
-// Declare shadow ray test function
+// Shadow ray with translucent transmission handling. Never fully black:
+// minimum 0.18 keeps shadowed regions readable like the raster preview.
 float shadowFactor(vec3 point, vec3 normal, vec3 lightDir, float maxDistance, uint sourceIndex)
-// Begin shadow factor function
 {
-    // Offset ray origin above surface
     vec3 ro = point + normal * 0.004;
-    // Trace ray toward light source
     Hit blocker = traceClosest(ro, lightDir, maxDistance, sourceIndex);
-    // Return full light when unoccluded
     if (!blocker.hit) return 1.0;
 
-    // Cheap translucent shadow approximation. Transparent/transmission surfaces
-    // darken less than opaque objects.
-    // Compute blocker opacity with transmission
     float opacity = clamp(blocker.alpha * (1.0 - blocker.transmission * 0.65), 0.0, 1.0);
-    // Return transmitted light fraction clamped
     return clamp(1.0 - opacity * 0.82, 0.18, 1.0);
-// End shadow factor function
 }
 
-// Computes diffuse plus specular PBR lighting from one light.
-// Declare single light PBR evaluator
 vec3 lightContribution(vec3 baseColor, vec3 normal, vec3 view, vec3 lightDir, vec3 lightColor, float strength, float metallic, float roughness, float clearcoat, float clearcoatRoughness)
-// Begin light contribution function
 {
-    // Compute clamped light facing factor
     float nDotL = max(dot(normal, lightDir), 0.0);
-    // Compute clamped view facing factor
     float nDotV = max(dot(normal, view), 0.0001);
-    // Skip backfacing or zero strength lights
     if (nDotL <= 0.0 || strength <= 0.0) return vec3(0.0);
 
-    // Compute halfway vector between light view
     vec3 halfVector = normalize(lightDir + view);
-    // Compute normal halfway alignment factor
     float nDotH = max(dot(normal, halfVector), 0.0);
-    // Compute view halfway alignment factor
     float vDotH = max(dot(view, halfVector), 0.0);
-    // Square roughness for microfacet distribution
     float alphaRoughness = roughness * roughness;
-    // Evaluate GGX normal distribution term
     float distribution = distributionGgx(nDotH, alphaRoughness);
-    // Evaluate Smith visibility geometry term
     float visibility = visibilitySmithGgxCorrelated(nDotV, nDotL, alphaRoughness);
-    // Blend base reflectivity by metalness
     vec3 f0 = mix(vec3(0.04), baseColor, metallic);
-    // Evaluate Schlick fresnel reflectance factor
     vec3 fresnel = fresnelSchlick(vDotH, f0);
-    // Combine specular BRDF terms
     vec3 specular = distribution * visibility * fresnel;
-    // Compute metallic aware diffuse term
     vec3 diffuse = (vec3(1.0) - fresnel) * (1.0 - metallic) * baseColor / PI;
-    // Combine base BRDF terms
     vec3 brdf = diffuse + specular;
-    // Test clearcoat layer presence
     if (clearcoat > 0.001)
-    // Begin clearcoat direct block
     {
-        // Square clearcoat roughness value
         float clearcoatAlpha = clearcoatRoughness * clearcoatRoughness;
-        // Evaluate clearcoat GGX distribution
         float clearcoatDistribution = distributionGgx(nDotH, clearcoatAlpha);
-        // Evaluate clearcoat geometry term
         float clearcoatVisibility = visibilitySmithGgxCorrelated(nDotV, nDotL, clearcoatAlpha);
-        // Evaluate clearcoat Fresnel term
         vec3 clearcoatFresnel = fresnelSchlick(vDotH, vec3(0.04));
-        // Evaluate clearcoat view fresnel
         float clearcoatViewFresnel = 0.04 + 0.96 * pow(1.0 - nDotV, 5.0);
-        // Layer clearcoat over scaled base
         brdf = brdf * (1.0 - clearcoat * clearcoatViewFresnel) +
             clearcoatFresnel * (clearcoat * clearcoatDistribution * clearcoatVisibility);
-    // End clearcoat direct block
     }
-    // Scale light color by intensity
     vec3 radiance = lightColor * strength * 0.18;
-    // Return shaded light contribution result
     return brdf * radiance * nDotL;
-// End light contribution function
 }
 
-// Computes the smooth cone falloff of a spot light.
-// Declare spotlight cone falloff function
 float spotConeFactor(GpuLight light, vec3 lightToSurface)
-// Begin spot cone function
 {
-    // Normalize spotlight beam direction
     vec3 direction = normalize(light.directionRange.xyz);
-    // Compute beam surface alignment cosine
     float theta = dot(direction, normalize(lightToSurface));
-    // Read spotlight inner cone angle
     float inner = light.coneShadow.x;
-    // Read spotlight outer cone angle
     float outer = light.coneShadow.y;
-    // Reject fragments outside outer cone
     if (theta <= outer) return 0.0;
-    // Accept fragments inside inner cone
     if (theta >= inner) return 1.0;
-    // Interpolate smooth penumbra falloff factor
     return clamp((theta - outer) / max(inner - outer, 0.0001), 0.0, 1.0);
-// End spot cone function
 }
 
-// Evaluates the analytic studio environment radiance.
-// Declare analytic studio environment function
+// Analytic studio environment: sky gradient plus warm key and cool rim lobes.
 vec3 studioEnvironment(vec3 direction)
-// Begin studio environment function
 {
-    // Normalize environment sample direction
     direction = normalize(direction);
-    // Blend sky gradient by height
     float skyAmount = smoothstep(-0.25, 0.65, direction.y);
-    // Mix ground and sky radiance
     vec3 radiance = mix(vec3(0.035, 0.040, 0.050), vec3(0.32, 0.39, 0.49), skyAmount);
-    // Define studio key light direction
     vec3 keyDirection = normalize(vec3(-0.55, 0.62, -0.56));
-    // Define studio rim light direction
     vec3 rimDirection = normalize(vec3(0.78, 0.28, 0.56));
-    // Add warm key light lobe
     radiance += vec3(5.2, 4.8, 4.2) * pow(max(dot(direction, keyDirection), 0.0), 96.0);
-    // Add cool rim light lobe
     radiance += vec3(2.0, 2.7, 3.8) * pow(max(dot(direction, rimDirection), 0.0), 180.0);
-    // Return studio environment radiance
     return radiance;
-// End studio environment function
 }
 
-// Evaluates the diffuse-only environment ambient.
-// Declare diffuse ambient environment function
 vec3 diffuseEnvironment(vec3 normal)
-// Begin diffuse environment function
 {
-    // Map normal height to sky blend
     float skyAmount = clamp(normal.y * 0.5 + 0.5, 0.0, 1.0);
-    // Return ground sky ambient mix
     return mix(vec3(0.055, 0.060, 0.070), vec3(0.42, 0.47, 0.54), skyAmount);
-// End diffuse environment function
 }
 
-// Computes image-based diffuse and specular environment lighting.
-// Declare image based lighting function
 vec3 environmentLighting(Hit h, vec3 view)
-// Begin environment lighting function
 {
-    // Compute clamped view facing factor
     float nDotV = max(dot(h.normal, view), 0.0001);
-    // Blend base reflectivity by metalness
     vec3 f0 = mix(vec3(0.04), h.baseColor, h.metallic);
-    // Approximate roughness aware fresnel term
     vec3 fresnel = f0 + (max(vec3(1.0 - h.roughness), f0) - f0) * pow(1.0 - nDotV, 5.0);
-    // Compute ambient diffuse contribution term
     vec3 diffuse = diffuseEnvironment(h.normal) * h.baseColor * (vec3(1.0) - fresnel) * (1.0 - h.metallic);
-    // Mirror view about surface normal
     vec3 reflection = reflect(-view, h.normal);
-    // Sample sharp studio reflection radiance
     vec3 sharpSpecular = studioEnvironment(reflection);
-    // Sample broad diffuse ambient radiance
     vec3 broadSpecular = diffuseEnvironment(h.normal);
-    // Blend reflections by surface roughness
     vec3 specular = mix(sharpSpecular, broadSpecular, h.roughness * h.roughness) * fresnel;
-    // Combine indirect lighting
     vec3 indirect = diffuse + specular;
-    // Test clearcoat layer presence
     if (h.clearcoat > 0.001)
-    // Begin clearcoat indirect block
     {
-        // Evaluate clearcoat view fresnel
         float clearcoatViewFresnel = 0.04 + 0.96 * pow(1.0 - nDotV, 5.0);
-        // Blend clearcoat environment reflections
         vec3 clearcoatIbl = mix(sharpSpecular, broadSpecular, h.clearcoatRoughness * h.clearcoatRoughness) * clearcoatViewFresnel * h.clearcoat;
-        // Scale indirect by clearcoat layer
         indirect = indirect * (1.0 - h.clearcoat * clearcoatViewFresnel);
-        // Scale combined IBL output
         indirect *= h.occlusion * 0.72 * max(constants.lightingOptions.x, 0.0);
-        // Add clearcoat indirect
         indirect += clearcoatIbl;
-        // Return layered indirect lighting
         return indirect;
-    // End clearcoat indirect block
     }
-    // Return occlusion scaled environment lighting
     return indirect * h.occlusion * 0.72 * max(constants.lightingOptions.x, 0.0);
-// End environment lighting function
 }
 
-// Accumulates direct lighting from every enabled scene light.
-// Declare direct light accumulation function
 vec3 directLighting(Hit h, vec3 incomingDirection)
-// Begin direct lighting function
 {
-    // Derive view direction from ray
     vec3 view = normalize(-incomingDirection);
-    // Initialize accumulated direct light
     vec3 color = vec3(0.0);
-    // Read active scene light count
     uint lightCount = constants.viewportAndCounts.w;
 
-    // Loop over all scene lights
     for (uint i = 0u; i < lightCount; i++)
-    // Begin per-light loop
     {
-        // Fetch current light record
         GpuLight light = lights[i];
-        // Skip disabled light entries
         if (light.coneShadow.w < 0.5) continue;
 
-        // Read light type selector
         float kind = light.positionKind.w;
-        // Declare light direction variable
         vec3 lightDir;
-        // Declare shadow ray distance
         float maxDistance;
-        // Read light intensity value
         float strength = light.colorIntensity.w;
-        // Read light tint color
         vec3 lightColor = light.colorIntensity.rgb;
 
-        // Test for directional light type
         if (kind > 0.5 && kind < 1.5)
-        // Begin directional light branch
         {
-            // Set parallel directional light vector
             lightDir = normalize(-light.directionRange.xyz);
-            // Use infinite directional shadow distance
             maxDistance = 1.0e20;
-        // End directional light branch
         }
-        // Handle positional point or spot
         else
-        // Begin positional light branch
         {
-            // Compute vector toward light position
             vec3 toLight = light.positionKind.xyz - h.point;
-            // Measure distance to light
             maxDistance = length(toLight);
-            // Skip degenerate zero distance light
             if (maxDistance <= 0.0001) continue;
-            // Cull lights beyond their range
             if (light.directionRange.w > 0.0 && maxDistance > light.directionRange.w) continue;
-            // Normalize direction toward light
             lightDir = toLight / maxDistance;
-            // Apply distance falloff to intensity
             strength *= distanceAttenuation(maxDistance, light.directionRange.w);
 
-            // Test for spotlight light type
             if (kind >= 1.5)
-            // Begin spotlight cone branch
             {
-                // Evaluate spotlight cone factor
                 float cone = spotConeFactor(light, -lightDir);
-                // Skip fragments outside spotlight cone
                 if (cone <= 0.0) continue;
-                // Apply squared cone falloff
                 strength *= cone * cone;
-            // End spotlight cone branch
             }
-        // End positional light branch
         }
 
-        // Read global shadow toggle
         bool shadowsEnabled = constants.lightingOptions.y > 0.5;
-        // Start conditional shadow factor selection
         float shadow = shadowsEnabled && light.coneShadow.z > 0.5
-            // Trace shadow ray when enabled
             ? shadowFactor(h.point, h.normal, lightDir, maxDistance, h.index)
-            // Use full light without shadows
             : 1.0;
-        // Accumulate shaded light contribution
         color += lightContribution(h.baseColor, h.normal, view, lightDir, lightColor, strength * shadow, h.metallic, h.roughness, h.clearcoat, h.clearcoatRoughness);
-    // End per-light loop
     }
 
-    // Return accumulated direct lighting
     return color;
-// End direct lighting function
 }
 
-// Generates a cosine-weighted hemisphere direction.
-// Declare hemisphere sampler function
 vec3 cosineHemisphere(vec3 n)
-// Begin hemisphere sampler function
 {
-    // Draw first random uniform sample
     float r1 = rand01();
-    // Draw second random uniform sample
     float r2 = rand01();
-    // Map random sample to azimuth
     float phi = 6.28318530718 * r1;
-    // Map random sample to radius
     float radius = sqrt(r2);
-    // Compute disk sample x coordinate
     float x = cos(phi) * radius;
-    // Compute disk sample y coordinate
     float y = sin(phi) * radius;
-    // Compute cosine weighted height
     float z = sqrt(max(0.0, 1.0 - r2));
 
-    // Build stable tangent basis vector
     vec3 tangent = abs(n.y) < 0.9 ? normalize(cross(vec3(0.0, 1.0, 0.0), n)) : normalize(cross(vec3(1.0, 0.0, 0.0), n));
-    // Build orthogonal bitangent basis vector
     vec3 bitangent = normalize(cross(n, tangent));
-    // Transform sample to world space
     return normalize(tangent * x + bitangent * y + n * z);
-// End hemisphere sampler function
 }
 
-// Evaluates Beer-Lambert volume attenuation for transmitted light.
-// Declare volume attenuation function
 vec3 volumeAttenuation(vec3 attenuationColor, float thickness, float attenuationDistance, vec3 normal, vec3 viewDir)
-// Begin volume attenuation function
 {
-    // Compute view dependent path length
     float pathLength = thickness / max(abs(dot(normal, viewDir)), 0.15);
-    // Apply Beer Lambert absorption
     return pow(max(attenuationColor, vec3(0.0001)), vec3(pathLength / attenuationDistance));
-// End volume attenuation function
 }
 
-// Chooses the next path bounce direction with its throughput weight.
-// Declare path bounce chooser function
 vec3 nextBounceDirection(vec3 incoming, Hit h, out vec3 bounceWeight)
-// Begin bounce direction function
 {
-    // Copy surface normal locally
     vec3 normal = h.normal;
-    // Flip normal against incoming ray
     if (dot(normal, incoming) > 0.0) normal = -normal;
 
-    // Test probabilistic transmission bounce path
     if (h.transmission > 0.05 && rand01() < h.transmission)
-    // Begin transmission bounce branch
     {
-        // Weight transmissive bounce by tint
         bounceWeight = mix(vec3(1.0), h.baseColor, 0.45) / max(h.transmission, 0.05);
-        // Test volumetric absorption enabled
         if (h.thickness > 0.0 && h.attenuationDistance > 0.0)
-            // Attenuate bounce by volume absorption
             bounceWeight *= volumeAttenuation(h.attenuationColor, h.thickness, h.attenuationDistance, normal, normalize(-incoming));
-        // Continue straight through transmissive surface
         return normalize(incoming);
-    // End transmission bounce branch
     }
 
-    // Compute specular bounce selection probability
     float specularProbability = clamp(h.metallic + (1.0 - h.roughness) * 0.18, 0.05, 0.9);
-    // Test probabilistic specular bounce path
     if (rand01() < specularProbability)
-    // Begin specular bounce branch
     {
-        // Compute perfect mirror reflection direction
         vec3 reflected = normalize(reflect(incoming, normal));
-        // Sample glossy lobe around reflection
         vec3 glossy = cosineHemisphere(reflected);
-        // Square roughness for lobe blend
         float rough = clamp(h.roughness * h.roughness, 0.0, 1.0);
-        // Blend base reflectivity by metalness
         vec3 f0 = mix(vec3(0.04), h.baseColor, h.metallic);
-        // Weight specular bounce by reflectivity
         bounceWeight = f0 / max(specularProbability, 0.0001);
-        // Blend mirror and glossy directions
         return normalize(mix(reflected, glossy, rough));
-    // End specular bounce branch
     }
 
-    // Weight diffuse bounce by albedo
     bounceWeight = h.baseColor * ((1.0 - h.metallic) / max(1.0 - specularProbability, 0.0001));
-    // Sample diffuse hemisphere bounce direction
     return cosineHemisphere(normal);
-// End bounce direction function
 }
 
-// Replaces NaN or infinite colors with black and clamps the range.
-// Declare color sanitizer function
 vec3 sanitizeColor(vec3 c)
-// Begin sanitize color function
 {
-    // Detect invalid NaN infinite colors
     if (any(isnan(c)) || any(isinf(c)))
-        // Replace invalid colors with black
         return vec3(0.0);
-    // Clamp colors to safe range
     return clamp(c, vec3(0.0), vec3(64.0));
-// End sanitize color function
 }
 
-// Traces a ray while blending through translucent surfaces.
-// Declare direct transparent tracer function
+// Direct renderer that blends through translucent layers (thin glass would
+// otherwise shade as one opaque flat triangle).
 vec3 traceDirectTransparent(vec3 ro, vec3 rd)
-// Begin direct transparent tracer
 {
-    // Initialize accumulated surface color
     vec3 result = vec3(0.0);
-    // Initialize transparency throughput weight
     vec3 throughput = vec3(1.0);
-    // Initialize ignored self hit index
     uint ignoreIndex = 0xffffffffu;
 
-    // CPU Trace() blends through translucent / transmission surfaces for the
-    // direct renderer.  Without this, thin lamp glass is shaded as one opaque
-    // flat triangle and the Vulkan image visibly facets even when UVs are right.
-    // Loop through translucent surface layers
     for (uint depth = 0u; depth < 5u; depth++)
-    // Begin transparency depth loop
     {
-        // Trace closest scene intersection
         Hit h = traceClosest(ro, rd, 1.0e30, ignoreIndex);
-        // Test for background miss
         if (!h.hit)
-        // Begin background miss branch
         {
-            // Add weighted background radiance
             result += throughput * background(rd);
-            // Return sanitized accumulated result
             return sanitizeColor(result);
-        // End background miss branch
         }
 
-        // Shade hit with direct ambient emission
         vec3 shaded = h.emission + directLighting(h, rd) + environmentLighting(h, normalize(-rd));
-        // Compute transmission reduced surface opacity
         float visibleOpacity = clamp(h.alpha * (1.0 - h.transmission * 0.72), 0.0, 1.0);
-        // Test for opaque final surface
         if (visibleOpacity >= 0.995 || depth == 4u)
-        // Begin opaque surface branch
         {
-            // Add weighted opaque surface color
             result += throughput * shaded;
-            // Return sanitized accumulated result
             return sanitizeColor(result);
-        // End opaque surface branch
         }
 
-        // Accumulate translucent layer contribution
         result += throughput * shaded * visibleOpacity;
-        // Compute transmissive tint blend strength
         float tintStrength = clamp(h.transmission * 0.55, 0.0, 0.75);
-        // Attenuate throughput by layer transparency
         throughput *= (1.0 - visibleOpacity) * mix(vec3(1.0), h.baseColor, tintStrength);
-        // Test volumetric absorption enabled
         if (h.transmission > 0.001 && h.thickness > 0.0 && h.attenuationDistance > 0.0)
-            // Attenuate throughput by volume absorption
             throughput *= volumeAttenuation(h.attenuationColor, h.thickness, h.attenuationDistance, h.normal, normalize(-rd));
-        // Sanitize accumulated throughput weights
         throughput = sanitizeColor(throughput);
 
-        // Advance ray past current surface
         ro = h.point + rd * 0.004;
-        // Ignore current surface next trace
         ignoreIndex = h.index;
-    // End transparency depth loop
     }
 
-    // Add remaining background contribution
     result += throughput * background(rd);
-    // Return sanitized accumulated result
     return sanitizeColor(result);
-// End direct transparent tracer
 }
 
-// Traces a full path with emission, direct light, and indirect bounces.
-// Declare full path tracer function
 vec3 tracePath(vec3 ro, vec3 rd, uint maxBounces)
-// Begin path tracer function
 {
-    // Test for direct only mode
     if (maxBounces == 0u)
-        // Delegate to direct transparent tracer
         return traceDirectTransparent(ro, rd);
 
-    // Initialize accumulated path radiance
     vec3 radiance = vec3(0.0);
-    // Initialize path throughput weight
     vec3 throughput = vec3(1.0);
-    // Initialize ignored self hit index
     uint ignoreIndex = 0xffffffffu;
 
-    // Loop over path bounce budget
     for (uint bounce = 0u; bounce <= maxBounces; bounce++)
-    // Begin path bounce loop
     {
-        // Trace closest scene intersection
         Hit h = traceClosest(ro, rd, 1.0e30, ignoreIndex);
-        // Test for background miss
         if (!h.hit)
-        // Begin background miss branch
         {
-            // Add weighted background radiance
             radiance += throughput * background(rd);
-            // Exit bounce loop on miss
             break;
-        // End background miss branch
         }
 
-        // Accumulate surface emission contribution
         radiance += throughput * h.emission;
-        // Accumulate direct and ambient lighting
         radiance += throughput * (directLighting(h, rd) + environmentLighting(h, normalize(-rd)));
 
-        // Stop after final bounce
         if (bounce == maxBounces) break;
 
-        // Declare bounce throughput weight
         vec3 bounceWeight;
-        // Choose next bounce direction
         vec3 newDir = nextBounceDirection(rd, h, bounceWeight);
-        // Apply sanitized bounce weight
         throughput *= sanitizeColor(bounceWeight);
-        // Sanitize accumulated throughput weights
         throughput = sanitizeColor(throughput);
 
-        // Find brightest throughput channel
         float maxChannel = max(max(throughput.r, throughput.g), throughput.b);
-        // Terminate dim negligible paths
         if (maxChannel < 0.002) break;
 
-        // Advance ray along bounce direction
         ro = h.point + newDir * 0.004;
-        // Update ray direction to bounce
         rd = newDir;
-        // Ignore current surface next trace
         ignoreIndex = h.index;
-    // End path bounce loop
     }
 
-    // Return accumulated path radiance
     return radiance;
-// End path tracer function
 }
 
-// Measure point to segment distance
 float pointSegmentDistance(vec3 p, vec3 a, vec3 b)
-// Begin point segment function
 {
-    // Build segment direction vector
     vec3 ab = b - a;
-    // Compute squared segment length
     float denom = dot(ab, ab);
-    // Handle degenerate segment case
     if (denom < 0.000000000001)
-        // Return distance to endpoint
         return length(p - a);
-    // Project point onto segment line
     float t = clamp(dot(p - a, ab) / denom, 0.0, 1.0);
-    // Return distance to closest point
     return length(p - (a + ab * t));
-// End point segment function
 }
 
-// Measure world distance to triangle edges
 float triangleEdgeDistance(uint triIndex, vec3 p)
-// Begin edge distance function
 {
-    // Fetch candidate triangle record
     GpuTriangle tri = triangles[triIndex];
-    // Measure distance to first edge
     float dab = pointSegmentDistance(p, tri.a.xyz, tri.b.xyz);
-    // Measure distance to second edge
     float dbc = pointSegmentDistance(p, tri.b.xyz, tri.c.xyz);
-    // Measure distance to third edge
     float dca = pointSegmentDistance(p, tri.c.xyz, tri.a.xyz);
-    // Return nearest edge distance
     return min(dab, min(dbc, dca));
-// End edge distance function
 }
 
-// Trace wireframe view with dashed hidden lines
 vec3 traceWireframe(vec3 ro, vec3 rd, ivec2 pixel)
-// Begin wireframe trace function
 {
-    // Define solid wireframe color
     vec3 solidColor = vec3(0.85, 0.92, 1.0);
-    // Define dashed hidden line color
     vec3 hiddenColor = vec3(0.30, 0.38, 0.52);
-    // Start with no ignored triangle
     uint ignoreIndex = 0xffffffffu;
-    // March through successive hits
     for (uint depth = 0u; depth < 6u; depth++)
-    // Begin hit marching loop
     {
-        // Find nearest remaining hit
         Hit h = traceClosest(ro, rd, 1.0e30, ignoreIndex);
-        // Missed everything shows background
         if (!h.hit)
-            // Return background gradient color
             return background(rd);
-        // Scale pixel width by hit distance
         float pixelWorld = 2.0 * h.t * max(constants.backgroundTopFov.w, 0.0001) / max(float(constants.viewportAndCounts.y), 1.0);
-        // Measure world distance to edges
         float edgeDistance = triangleEdgeDistance(h.index, h.point);
-        // Test hit against line width
         if (edgeDistance <= pixelWorld * 0.75)
-        // Begin edge pixel branch
         {
-            // Nearest edge draws solid line
             if (depth == 0u)
-                // Return solid wireframe color
                 return solidColor;
-            // Phase screen-space dash pattern
             float dashPhase = mod(float(pixel.x + pixel.y * 2), 8.0);
-            // Draw dash segment color
             if (dashPhase < 4.0)
-                // Return dashed hidden color
                 return hiddenColor;
-            // Dash gaps keep marching deeper
-        // End edge pixel branch
         }
-        // Advance ray origin past hit
         ro = h.point + rd * max(0.004, h.t * 0.0001);
-        // Ignore current triangle next trace
         ignoreIndex = h.index;
-    // End hit marching loop
     }
-    // Return background when march exhausts
     return background(rd);
-// End wireframe trace function
 }
 
-// Applies exposure, tone mapping, and sRGB conversion, then packs RGBA8.
-// Declare output color packer
 uint packColor(vec3 c)
-// Begin color packer function
 {
-    // Apply exposure to sanitized color
     c = sanitizeColor(c) * max(constants.backgroundBottomExposure.w, 0.01);
-    // Tone map and convert colorspace
     c = linearToSrgb(pbrNeutralToneMap(c));
-    // Clamp display color range
     c = clamp(c, 0.0, 1.0);
-    // Quantize red channel byte
     uint r = uint(c.r * 255.0 + 0.5);
-    // Quantize green channel byte
     uint g = uint(c.g * 255.0 + 0.5);
-    // Quantize blue channel byte
     uint b = uint(c.b * 255.0 + 0.5);
-    // Pack channels into RGBA8 integer
     return r | (g << 8) | (b << 16) | (255u << 24);
-// End color packer function
 }
 
-// Renders one pixel per invocation with multi-sample accumulation.
-// Declare compute shader entry point
 void main()
-// Begin main kernel function
 {
-    // Read pixel x coordinate
     uint x = gl_GlobalInvocationID.x;
-    // Read tile local y coordinate
     uint localY = gl_GlobalInvocationID.y;
-    // Read framebuffer width
     uint width = constants.viewportAndCounts.x;
-    // Read framebuffer height
     uint height = constants.viewportAndCounts.y;
-    // Read tile vertical offset
     uint tileY = constants.renderParams.z;
-    // Read tile row count
     uint tileRows = constants.renderParams.w;
-    // Discard out of tile threads
     if (x >= width || localY >= tileRows) return;
-    // Compute global pixel y
     uint y = tileY + localY;
-    // Discard threads past bottom
     if (y >= height) return;
 
-    // Read progressive sample base index
     uint sampleBase = constants.renderParams.y;
-    // Read samples per pixel count
     uint sampleCount = max(constants.bvhParams.y, 1u);
-    // Build framebuffer size vector
     vec2 size = vec2(float(width), float(height));
-    // Read camera field scale
     float fovScale = max(constants.backgroundTopFov.w, 0.0001);
-    // Compute framebuffer aspect ratio
     float aspect = float(width) / max(float(height), 1.0);
-    // Initialize pixel accumulator
     vec3 color = vec3(0.0);
 
-    // Detect wireframe view request
     bool wireframe = constants.lightingOptions.z > 0.5;
-    // Render single pass for wireframe
     uint wireLoops = wireframe ? 1u : sampleCount;
-    // Loop over pixel sample batch
     for (uint sampleOffset = 0u; sampleOffset < wireLoops; sampleOffset++)
-    // Begin per-sample loop
     {
-        // Compute absolute sample index
         uint currentSample = sampleBase + sampleOffset;
-        // Seed pixel sample random generator
         rngState = wangHash(x * 1973u + y * 9277u + currentSample * 26699u + 911u);
 
-        // Pick horizontal subpixel jitter
         float jitterX = currentSample == 0u ? 0.5 : rand01();
-        // Pick vertical subpixel jitter
         float jitterY = currentSample == 0u ? 0.5 : rand01();
-        // Compute jittered fragment position
         vec2 frag = vec2(float(x) + jitterX, float(y) + jitterY);
-        // Normalize fragment to UV coordinates
         vec2 uv = frag / size;
 
-        // Compute horizontal camera ray offset
         float sx = (1.0 - 2.0 * uv.x) * aspect * fovScale;
-        // Compute vertical camera ray offset
         float sy = (1.0 - 2.0 * uv.y) * fovScale;
 
-        // Read camera origin position
         vec3 ro = constants.cameraPosition.xyz;
-        // Build normalized primary ray direction
         vec3 rd = normalize(constants.cameraForward.xyz + constants.cameraRight.xyz * sx + constants.cameraUp.xyz * sy);
 
-        // Clamp configured bounce count
         uint bounces = min(constants.renderParams.x, 8u);
-        // Trace wireframe or full path sample
         color += wireframe ? traceWireframe(ro, rd, ivec2(x, y)) : tracePath(ro, rd, bounces);
-    // End per-sample loop
     }
 
-    // Average accumulated pixel samples
     color /= float(wireframe ? 1u : sampleCount);
-    // Pack and store pixel color
     pixels[y * width + x] = packColor(color);
-// End main kernel function
 }

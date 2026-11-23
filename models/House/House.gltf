@@ -224,7 +224,7 @@
         0
       ],
       "alphaMode": "OPAQUE",
-      "doubleSided": false
+      "doubleSided": true
     },
     {
       "name": "mat_4",

@@ -67,9 +67,9 @@ internal sealed class ComputeFrameRenderer
         SharedComputeResources computeResources = pipelines.GetOrCreate(gd);
         frame.CreateSet(log, factory, computeResources.Layout, prepared);
 
-        // Submit the compute shader in row tiles. When no per-tile preview is
-        // needed, batch all tile dispatches into one command-list submission and
-        // wait only once; waiting after every tile serializes the GPU.
+        // Submit the shader in row tiles. Without per-tile preview, batch the
+        // dispatches into one submission and wait once; waiting per tile
+        // serializes the GPU.
         int tileRows = TileScheduler.ChooseTileRows(request.Width, request.Height, prepared.TriangleCount, request.BounceCount, prepared.LightCount, request.SampleCount);
         log.Stage($"Dispatch compute shader in row tiles: tileRows={tileRows}");
 

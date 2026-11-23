@@ -27,27 +27,23 @@ internal sealed class PreparedComputeSceneBuilder
         if (sourceTriangleCount == 0)
             throw new InvalidOperationException("Vulkan scene render requires at least one triangle.");
 
-        // The BVH keeps only an integer triangle-order array and compact CPU
-        // nodes. GPU records are generated directly into small upload chunks.
         log.Stage("Build cached traversal BVH");
         BvhBuildResult bvh = new BvhBuilder(log).Build(scene);
         GpuLight[] lights = new ComputeLightBufferBuilder().Build(scene, out int sourceLightCount);
 
-        // Keep all scene triangles unless the buffer byte-size check overflows.
         ComputeSceneBufferFactory bufferFactory = new();
         ComputeSceneBufferPlan plan = bufferFactory.Plan(
             sourceTriangleCount, bvh.Nodes.Length, lights.Length,
             textureBuild.PixelCount, textureBuild.Infos.Length);
         log.Stage($"Create cached Vulkan compute scene: {plan.TotalBytes / (1024.0 * 1024.0):F1} MB, triangles={sourceTriangleCount}, BVH nodes={bvh.Nodes.Length}, textures={textureBuild.TextureCount}");
         ComputeSceneBuffers buffers = bufferFactory.Create(gd.ResourceFactory, plan);
-        int bvhStride = Marshal.SizeOf<GpuBvhNode>();
 
         log.ThrowIfCancellationRequested(token, "upload cached Vulkan triangle buffer");
         new GpuTriangleUploader(gd, log).Upload(buffers.Triangles, scene.Triangles, bvh.TriangleIndices, textureBuild.TextureIds, token);
         bvh.TriangleIndices = Array.Empty<int>();
         textureBuild.TextureIds.Clear();
 
-        new BvhNodeUploader(gd, log).Upload(buffers.BvhNodes, bvh.Nodes, bvhStride, token);
+        new BvhNodeUploader(gd, log).Upload(buffers.BvhNodes, bvh.Nodes, Marshal.SizeOf<GpuBvhNode>(), token);
         int bvhNodeCount = bvh.Nodes.Length;
         bvh.Nodes = Array.Empty<CpuBvhNode>();
 

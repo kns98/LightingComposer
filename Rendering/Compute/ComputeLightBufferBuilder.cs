@@ -14,9 +14,8 @@ internal sealed class ComputeLightBufferBuilder
     public GpuLight[] Build(Scene scene, out int sourceLightCount)
     {
         sourceLightCount = scene.Lights.Count;
-        int count = Math.Min(sourceLightCount, MaxGpuLights);
-        List<GpuLight> result = new(count);
-        for (int i = 0; i < count; i++)
+        List<GpuLight> result = new(Math.Min(sourceLightCount, MaxGpuLights));
+        for (int i = 0; i < result.Capacity; i++)
         {
             SceneLight light = scene.Lights[i];
             if (light.Enabled)

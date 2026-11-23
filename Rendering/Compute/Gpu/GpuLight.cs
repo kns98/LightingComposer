@@ -24,7 +24,6 @@ internal readonly struct GpuLight
             SceneLightKind.Spot => 2.0f,
             _ => 0.0f
         };
-
         PositionKind = light.Position.ToVector4(kind);
         DirectionRange = light.Direction.Normalize().ToVector4((float)light.Range);
         ColorIntensity = light.Color.ToVector4((float)light.Intensity);

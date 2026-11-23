@@ -18,11 +18,10 @@ internal static class BvhBounds
         for (int i = start; i < start + count; i++)
         {
             Triangle triangle = triangles[triangleIndices[i]];
-            Vector3 a = triangle.A.ToVector3();
-            Vector3 b = triangle.B.ToVector3();
-            Vector3 c = triangle.C.ToVector3();
-            boundsMin = Vector3.Min(boundsMin, Vector3.Min(a, Vector3.Min(b, c)) - pad);
-            boundsMax = Vector3.Max(boundsMax, Vector3.Max(a, Vector3.Max(b, c)) + pad);
+            Vector3 triMin = Vector3.Min(triangle.A.ToVector3(), Vector3.Min(triangle.B.ToVector3(), triangle.C.ToVector3()));
+            Vector3 triMax = Vector3.Max(triangle.A.ToVector3(), Vector3.Max(triangle.B.ToVector3(), triangle.C.ToVector3()));
+            boundsMin = Vector3.Min(boundsMin, triMin - pad);
+            boundsMax = Vector3.Max(boundsMax, triMax + pad);
         }
     }
 
@@ -51,11 +50,10 @@ internal static class BvhBounds
         Vector3 globalMax = new(float.NegativeInfinity);
         foreach (Triangle tri in scene.Triangles)
         {
-            Vector3 a = new((float)tri.A.X, (float)tri.A.Y, (float)tri.A.Z);
-            Vector3 b = new((float)tri.B.X, (float)tri.B.Y, (float)tri.B.Z);
-            Vector3 c = new((float)tri.C.X, (float)tri.C.Y, (float)tri.C.Z);
-            globalMin = Vector3.Min(globalMin, Vector3.Min(a, Vector3.Min(b, c)));
-            globalMax = Vector3.Max(globalMax, Vector3.Max(a, Vector3.Max(b, c)));
+            Vector3 triMin = Vector3.Min(tri.A.ToVector3(), Vector3.Min(tri.B.ToVector3(), tri.C.ToVector3()));
+            Vector3 triMax = Vector3.Max(tri.A.ToVector3(), Vector3.Max(tri.B.ToVector3(), tri.C.ToVector3()));
+            globalMin = Vector3.Min(globalMin, triMin);
+            globalMax = Vector3.Max(globalMax, triMax);
         }
 
         float sceneDiagonal = Vector3.Distance(globalMin, globalMax);

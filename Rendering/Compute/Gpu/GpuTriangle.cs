@@ -11,9 +11,8 @@ namespace LightingShowcase.Rendering;
 [StructLayout(LayoutKind.Sequential)]
 internal readonly struct GpuTriangle
 {
-    // Position and UV padding components carry the three authored vertex
-    // normals. This preserves the original 11-vec4 record size while giving
-    // the ray tracer smooth glTF shading without another scene-sized buffer.
+    // The w slots of positions and UVs carry the authored vertex normals,
+    // keeping the record at 14 vec4s while giving smooth glTF shading.
     public readonly Vector4 A; // xyz=position A, w=normal A.x
     public readonly Vector4 B; // xyz=position B, w=normal A.y
     public readonly Vector4 C; // xyz=position C, w=normal A.z
@@ -43,19 +42,16 @@ internal readonly struct GpuTriangle
         UvC = new Vector4((float)triangle.UvC.U, (float)triangle.UvC.V, (float)normalC.Y, (float)normalC.Z);
 
         Material material = triangle.Material;
-        Vec3 colorFactor = material.Color;
         BaseColor = new Vector4(
-            (float)Math.Clamp(colorFactor.X, 0.0, 64.0),
-            (float)Math.Clamp(colorFactor.Y, 0.0, 64.0),
-            (float)Math.Clamp(colorFactor.Z, 0.0, 64.0),
+            (float)Math.Clamp(material.Color.X, 0.0, 64.0),
+            (float)Math.Clamp(material.Color.Y, 0.0, 64.0),
+            (float)Math.Clamp(material.Color.Z, 0.0, 64.0),
             (float)Math.Clamp(material.Alpha, 0.0, 1.0));
-
         Emission = new Vector4(
             (float)Math.Max(0.0, material.EmissionColor.X),
             (float)Math.Max(0.0, material.EmissionColor.Y),
             (float)Math.Max(0.0, material.EmissionColor.Z),
             (float)Math.Max(0.0, material.Emission));
-
         MaterialParams = new Vector4(
             (float)Math.Clamp(material.Metallic, 0.0, 1.0),
             (float)Math.Clamp(material.Roughness, 0.02, 1.0),
@@ -90,11 +86,6 @@ internal readonly struct GpuTriangle
             0.0f);
     }
 
-    /// <summary>Returns the GPU texture index for a texture map.</summary>
-    private static int TextureIndex(IReadOnlyDictionary<TextureMap, int> textureIds, TextureMap? texture)
-    {
-        if (texture == null)
-            return -1;
-        return textureIds.TryGetValue(texture, out int textureIndex) ? textureIndex : -1;
-    }
+    private static int TextureIndex(IReadOnlyDictionary<TextureMap, int> textureIds, TextureMap? texture) =>
+        texture != null && textureIds.TryGetValue(texture, out int index) ? index : -1;
 }

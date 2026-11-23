@@ -28,26 +28,26 @@ internal sealed class GpuTriangleUploader
     {
         int stride = Marshal.SizeOf<GpuTriangle>();
         GpuTriangle[] chunk = new GpuTriangle[TrianglesPerChunk];
-        int chunkCount = 0;
+        int pending = 0;
         int uploaded = 0;
 
         for (int i = 0; i < orderedTriangleIndices.Count; i++)
         {
-            chunk[chunkCount++] = new GpuTriangle(sourceTriangles[orderedTriangleIndices[i]], textureIds);
-            if (chunkCount == chunk.Length)
+            chunk[pending++] = new GpuTriangle(sourceTriangles[orderedTriangleIndices[i]], textureIds);
+            if (pending == chunk.Length)
             {
                 gd.UpdateBuffer(destination, checked((uint)((long)uploaded * stride)), chunk);
-                uploaded += chunkCount;
-                chunkCount = 0;
+                uploaded += pending;
+                pending = 0;
                 log.ThrowIfCancellationRequested(token, "upload cached Vulkan triangle buffer");
             }
         }
 
-        if (chunkCount > 0)
+        if (pending > 0)
         {
-            GpuTriangle[] finalChunk = new GpuTriangle[chunkCount];
-            Array.Copy(chunk, finalChunk, chunkCount);
-            gd.UpdateBuffer(destination, checked((uint)((long)uploaded * stride)), finalChunk);
+            GpuTriangle[] tail = new GpuTriangle[pending];
+            Array.Copy(chunk, tail, pending);
+            gd.UpdateBuffer(destination, checked((uint)((long)uploaded * stride)), tail);
         }
     }
 }

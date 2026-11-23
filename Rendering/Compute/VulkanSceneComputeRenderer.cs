@@ -6,7 +6,6 @@
 // scene lights, simple material properties, hard shadows, emissive surfaces, and
 // optional stochastic bounces selected from the Render pane.
 
-using System.IO;
 using LightingShowcase.CameraSystem;
 using LightingShowcase.Math3D;
 using LightingShowcase.SceneGraph;
