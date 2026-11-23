@@ -444,6 +444,24 @@ public sealed class GltfImporterTests
         Assert.Equal(3.0, fabric.Texture.ScaleV);
     }
 
+    [Theory]
+    [InlineData("CornellBox", "CornellBox.gltf")]
+    [InlineData("House", "House.gltf")]
+    public void Import_SampleMeshes_HaveConsistentWinding(string directory, string file)
+    {
+        string path = FindRepoFile("models", directory, file);
+        Assert.True(File.Exists(path), "Sample model missing: " + path);
+        Scene scene = ImportFixture(path);
+
+        Assert.NotEmpty(scene.Triangles);
+        foreach (Triangle triangle in scene.Triangles)
+        {
+            Vec3 geometric = (triangle.B - triangle.A).Cross(triangle.C - triangle.A).Normalize();
+            Vec3 authored = (triangle.NormalA + triangle.NormalB + triangle.NormalC).Normalize();
+            Assert.True(geometric.Dot(authored) > 0.9, $"Flipped winding in {file}.");
+        }
+    }
+
     [Fact]
     public void Import_SparseIndexOutOfRange_Throws()
     {

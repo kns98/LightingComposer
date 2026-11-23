@@ -11,27 +11,41 @@ internal static class CameraProjector
     /// <summary>Projects one world point to raster coordinates.</summary>
     public static bool TryProject(Vec3 p, Vec3 cameraPosition, CameraBasis basis, int width, int height, out ProjectedVertex projected)
     {
-        Vec3 rel = p - cameraPosition;
-        double z = rel.Dot(basis.Forward);
-        if (!double.IsFinite(z) || z <= ShadowLimits.CameraNear)
+        if (!TryGetCameraSpace(p, cameraPosition, basis, out double vx, out double vy, out double vz) || vz <= ShadowLimits.CameraNear)
         {
             projected = default;
             return false;
         }
 
+        if (!ProjectCameraSpace(vx, vy, vz, width, height, out double x, out double y))
+        {
+            projected = default;
+            return false;
+        }
+
+        projected = new ProjectedVertex(x, y, vz);
+        return true;
+    }
+
+    /// <summary>Transforms one world point into camera-space coordinates.</summary>
+    public static bool TryGetCameraSpace(Vec3 p, Vec3 cameraPosition, CameraBasis basis, out double vx, out double vy, out double vz)
+    {
+        Vec3 rel = p - cameraPosition;
+        vx = rel.Dot(basis.Right);
+        vy = rel.Dot(basis.Up);
+        vz = rel.Dot(basis.Forward);
+        return double.IsFinite(vx) && double.IsFinite(vy) && double.IsFinite(vz);
+    }
+
+    /// <summary>Projects camera-space coordinates to raster coordinates.</summary>
+    public static bool ProjectCameraSpace(double vx, double vy, double vz, int width, int height, out double x, out double y)
+    {
         double aspect = width / (double)Math.Max(1, height);
         double fov = Math.Tan((ShadowLimits.CameraFovDegrees * Math.PI / 180.0) * 0.5);
-        double u = rel.Dot(basis.Right) / z;
-        double v = rel.Dot(basis.Up) / z;
-        double x = (1.0 - u / (aspect * fov)) * 0.5 * width;
-        double y = (1.0 - v / fov) * 0.5 * height;
-        if (!double.IsFinite(x) || !double.IsFinite(y))
-        {
-            projected = default;
-            return false;
-        }
-
-        projected = new ProjectedVertex(x, y, z);
-        return true;
+        double u = vx / vz;
+        double v = vy / vz;
+        x = (1.0 - u / (aspect * fov)) * 0.5 * width;
+        y = (1.0 - v / fov) * 0.5 * height;
+        return double.IsFinite(x) && double.IsFinite(y);
     }
 }

@@ -177,7 +177,7 @@ public sealed class RasterShadowTests
         (int A, int B, int C, int D, Vec3 Normal)[] faces =
         {
             (0, 1, 2, 3, new Vec3(0, -1, 0)),
-            (4, 6, 5, 7, new Vec3(0, 1, 0)),
+            (4, 7, 6, 5, new Vec3(0, 1, 0)),
             (0, 4, 5, 1, new Vec3(0, 0, -1)),
             (2, 6, 7, 3, new Vec3(0, 0, 1)),
             (1, 5, 6, 2, new Vec3(1, 0, 0)),

@@ -14,11 +14,34 @@ internal sealed class TriangleRasterizer
         uint[] pixels, double[] zBuffer, int width, int height, Triangle tri,
         Vec3 cameraPosition, CameraBasis basis, IReadOnlyList<PreparedLight> lights, bool interactiveFast, double exposure)
     {
-        if (!CameraProjector.TryProject(tri.A, cameraPosition, basis, width, height, out ProjectedVertex a) ||
-            !CameraProjector.TryProject(tri.B, cameraPosition, basis, width, height, out ProjectedVertex b) ||
-            !CameraProjector.TryProject(tri.C, cameraPosition, basis, width, height, out ProjectedVertex c))
+        if (CameraProjector.TryProject(tri.A, cameraPosition, basis, width, height, out ProjectedVertex a) &&
+            CameraProjector.TryProject(tri.B, cameraPosition, basis, width, height, out ProjectedVertex b) &&
+            CameraProjector.TryProject(tri.C, cameraPosition, basis, width, height, out ProjectedVertex c))
+        {
+            RasterizePiece(pixels, zBuffer, width, height, tri, a, b, c, null, cameraPosition, basis, lights, interactiveFast, exposure);
+            return;
+        }
+
+        if (!RasterClipper.TryClip(tri, cameraPosition, basis, width, height,
+                out RasterClipper.ClippedTriangle[] clipped, out _, out double za, out double zb, out double zc))
             return;
 
+        foreach (RasterClipper.ClippedTriangle piece in clipped)
+        {
+            RasterizePiece(pixels, zBuffer, width, height, tri,
+                new ProjectedVertex(piece.A.X, piece.A.Y, za),
+                new ProjectedVertex(piece.B.X, piece.B.Y, zb),
+                new ProjectedVertex(piece.C.X, piece.C.Y, zc),
+                piece, cameraPosition, basis, lights, interactiveFast, exposure);
+        }
+    }
+
+    /// <summary>Rasterizes one fully-projectable triangle piece with optional barycentric mapping.</summary>
+    private void RasterizePiece(
+        uint[] pixels, double[] zBuffer, int width, int height, Triangle tri,
+        ProjectedVertex a, ProjectedVertex b, ProjectedVertex c, RasterClipper.ClippedTriangle? map,
+        Vec3 cameraPosition, CameraBasis basis, IReadOnlyList<PreparedLight> lights, bool interactiveFast, double exposure)
+    {
         double area = RasterMath.Edge(a.X, a.Y, b.X, b.Y, c.X, c.Y);
         if (Math.Abs(area) < 1e-9)
             return;
@@ -43,11 +66,12 @@ internal sealed class TriangleRasterizer
             for (int x = minX; x <= maxX; x++)
             {
                 double px = x + 0.5;
-                double wa = RasterMath.Edge(b.X, b.Y, c.X, c.Y, px, py) / area;
-                double wb = RasterMath.Edge(c.X, c.Y, a.X, a.Y, px, py) / area;
-                double wc = 1.0 - wa - wb;
-                if (wa < -1e-7 || wb < -1e-7 || wc < -1e-7)
+                double qa = RasterMath.Edge(b.X, b.Y, c.X, c.Y, px, py) / area;
+                double qb = RasterMath.Edge(c.X, c.Y, a.X, a.Y, px, py) / area;
+                double qc = 1.0 - qa - qb;
+                if (qa < -1e-7 || qb < -1e-7 || qc < -1e-7)
                     continue;
+                (double wa, double wb, double wc) = map?.Map(qa, qb, qc) ?? (qa, qb, qc);
 
                 double depth = wa * a.Z + wb * b.Z + wc * c.Z;
                 int pixel = y * width + x;

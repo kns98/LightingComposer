@@ -1,0 +1,349 @@
+{
+  "asset": {
+    "version": "2.0",
+    "generator": "LightingShowcase"
+  },
+  "scene": 0,
+  "scenes": [
+    {
+      "name": "Built-in room",
+      "nodes": [
+        0,
+        1,
+        2
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "name": "cornell",
+      "mesh": 0
+    },
+    {
+      "name": "cornell_key",
+      "extensions": {
+        "KHR_lights_punctual": {
+          "light": 0
+        }
+      },
+      "translation": [
+        0,
+        1.7,
+        0
+      ]
+    },
+    {
+      "name": "cornell_fill",
+      "extensions": {
+        "KHR_lights_punctual": {
+          "light": 1
+        }
+      },
+      "translation": [
+        -0.75,
+        1.2,
+        -0.55
+      ]
+    }
+  ],
+  "meshes": [
+    {
+      "name": "cornell",
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 0,
+            "NORMAL": 1,
+            "TEXCOORD_0": 2
+          },
+          "indices": 3,
+          "material": 0,
+          "mode": 4
+        },
+        {
+          "attributes": {
+            "POSITION": 4,
+            "NORMAL": 5,
+            "TEXCOORD_0": 6
+          },
+          "indices": 7,
+          "material": 1,
+          "mode": 4
+        },
+        {
+          "attributes": {
+            "POSITION": 8,
+            "NORMAL": 9,
+            "TEXCOORD_0": 10
+          },
+          "indices": 11,
+          "material": 2,
+          "mode": 4
+        }
+      ]
+    }
+  ],
+  "materials": [
+    {
+      "name": "mat_1",
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [
+          0.73,
+          0.73,
+          0.73,
+          1
+        ],
+        "metallicFactor": 0,
+        "roughnessFactor": 0.9
+      },
+      "emissiveFactor": [
+        0,
+        0,
+        0
+      ],
+      "alphaMode": "OPAQUE",
+      "doubleSided": false
+    },
+    {
+      "name": "mat_2",
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [
+          0.63,
+          0.065,
+          0.05,
+          1
+        ],
+        "metallicFactor": 0,
+        "roughnessFactor": 0.9
+      },
+      "emissiveFactor": [
+        0,
+        0,
+        0
+      ],
+      "alphaMode": "OPAQUE",
+      "doubleSided": false
+    },
+    {
+      "name": "mat_3",
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [
+          0.14,
+          0.45,
+          0.15,
+          1
+        ],
+        "metallicFactor": 0,
+        "roughnessFactor": 0.9
+      },
+      "emissiveFactor": [
+        0,
+        0,
+        0
+      ],
+      "alphaMode": "OPAQUE",
+      "doubleSided": false
+    }
+  ],
+  "buffers": [
+    {
+      "byteLength": 2380,
+      "uri": "CornellBox.bin"
+    }
+  ],
+  "bufferViews": [
+    {
+      "buffer": 0,
+      "byteOffset": 0,
+      "byteLength": 720
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 720,
+      "byteLength": 720
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 1440,
+      "byteLength": 480
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 1920,
+      "byteLength": 180
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 2100,
+      "byteLength": 48
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 2148,
+      "byteLength": 48
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 2196,
+      "byteLength": 32
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 2228,
+      "byteLength": 12
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 2240,
+      "byteLength": 48
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 2288,
+      "byteLength": 48
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 2336,
+      "byteLength": 32
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 2368,
+      "byteLength": 12
+    }
+  ],
+  "accessors": [
+    {
+      "bufferView": 0,
+      "componentType": 5126,
+      "count": 60,
+      "type": "VEC3",
+      "min": [
+        -1,
+        0,
+        -1
+      ],
+      "max": [
+        1,
+        2,
+        1
+      ]
+    },
+    {
+      "bufferView": 1,
+      "componentType": 5126,
+      "count": 60,
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 2,
+      "componentType": 5126,
+      "count": 60,
+      "type": "VEC2"
+    },
+    {
+      "bufferView": 3,
+      "componentType": 5123,
+      "count": 90,
+      "type": "SCALAR"
+    },
+    {
+      "bufferView": 4,
+      "componentType": 5126,
+      "count": 4,
+      "type": "VEC3",
+      "min": [
+        -1,
+        0,
+        -1
+      ],
+      "max": [
+        -1,
+        2,
+        1
+      ]
+    },
+    {
+      "bufferView": 5,
+      "componentType": 5126,
+      "count": 4,
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 6,
+      "componentType": 5126,
+      "count": 4,
+      "type": "VEC2"
+    },
+    {
+      "bufferView": 7,
+      "componentType": 5123,
+      "count": 6,
+      "type": "SCALAR"
+    },
+    {
+      "bufferView": 8,
+      "componentType": 5126,
+      "count": 4,
+      "type": "VEC3",
+      "min": [
+        1,
+        0,
+        -1
+      ],
+      "max": [
+        1,
+        2,
+        1
+      ]
+    },
+    {
+      "bufferView": 9,
+      "componentType": 5126,
+      "count": 4,
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 10,
+      "componentType": 5126,
+      "count": 4,
+      "type": "VEC2"
+    },
+    {
+      "bufferView": 11,
+      "componentType": 5123,
+      "count": 6,
+      "type": "SCALAR"
+    }
+  ],
+  "extensionsUsed": [
+    "KHR_lights_punctual"
+  ],
+  "extensions": {
+    "KHR_lights_punctual": {
+      "lights": [
+        {
+          "name": "cornell_key",
+          "type": "point",
+          "color": [
+            1,
+            1,
+            1
+          ],
+          "intensity": 8
+        },
+        {
+          "name": "cornell_fill",
+          "type": "point",
+          "color": [
+            0.8,
+            0.9,
+            1
+          ],
+          "intensity": 3
+        }
+      ]
+    }
+  }
+}

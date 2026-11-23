@@ -23,6 +23,7 @@ internal sealed class ShadowFrameRenderer
         if (wireframe)
             return new WireframeFrameRenderer().Render(cache.Scene, cameraPosition, basis, width, height, cancellationToken, out details, backgroundTop, backgroundBottom, exposure);
 
+        Console.Error.WriteLine($"DBG raster pos=({cameraPosition.X:0.##},{cameraPosition.Y:0.##},{cameraPosition.Z:0.##}) fwd=({basis.Forward.X:0.##},{basis.Forward.Y:0.##},{basis.Forward.Z:0.##})");
         Stopwatch stopwatch = Stopwatch.StartNew();
         Scene scene = cache.Scene;
         PreparedLight[] lights = new LightPreparer().Prepare(scene, cache.ShadowMaps);
@@ -42,6 +43,11 @@ internal sealed class ShadowFrameRenderer
         }
 
         stopwatch.Stop();
+        int nonBg = 0;
+        for (int i = 0; i < pixels.Length; i += 97)
+            if (pixels[i] != pixels[0]) nonBg++;
+        uint center = pixels[(height / 2) * width + (width / 2)];
+        Console.Error.WriteLine($"DBG pixels center=0x{center:X8} mixed={nonBg}");
         details = $"Shadow raster {(interactiveFast ? "20fps preview" : "OK")} - {width}x{height}, revision={cache.CacheStamp.Revision}, triangles={cache.TriangleCount}, lights={(interactiveFast ? lights.Length : cache.LightCount)}, shadowMaps={cache.EnabledShadowMapCount}, cache={cache.BuildMilliseconds}ms, frame={stopwatch.ElapsedMilliseconds}ms";
         return new RenderImage(width, height, pixels);
     }
