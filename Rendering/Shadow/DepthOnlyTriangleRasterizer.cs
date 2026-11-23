@@ -42,6 +42,9 @@ internal static class DepthOnlyTriangleRasterizer
         double area = RasterMath.Edge(a.X, a.Y, b.X, b.Y, c.X, c.Y);
         if (Math.Abs(area) < 1e-9)
             return;
+        double invZa = 1.0 / TriangleRasterizer.ClampDepth(a.Z);
+        double invZb = 1.0 / TriangleRasterizer.ClampDepth(b.Z);
+        double invZc = 1.0 / TriangleRasterizer.ClampDepth(c.Z);
         RasterMath.ClampBounds(a, b, c, width, height, out int minX, out int maxX, out int minY, out int maxY);
         for (int y = minY; y <= maxY; y++)
         {
@@ -53,7 +56,8 @@ internal static class DepthOnlyTriangleRasterizer
                 if (qa < 0.0 || qb < 0.0 || qc < 0.0)
                     continue;
                 (double wa, double wb, double wc) = map?.Map(qa, qb, qc) ?? (qa, qb, qc);
-                double depth = wa * a.Z + wb * b.Z + wc * c.Z;
+                double invDepth = wa * invZa + wb * invZb + wc * invZc;
+                double depth = invDepth > 1e-12 ? 1.0 / invDepth : double.PositiveInfinity;
                 int index = y * width + x;
                 if (depth < zBuffer[index])
                     zBuffer[index] = depth;

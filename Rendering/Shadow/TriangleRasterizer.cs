@@ -46,6 +46,10 @@ internal sealed class TriangleRasterizer
         if (Math.Abs(area) < 1e-9)
             return;
 
+        double invZa = 1.0 / ClampDepth(a.Z);
+        double invZb = 1.0 / ClampDepth(b.Z);
+        double invZc = 1.0 / ClampDepth(c.Z);
+
         RasterMath.ClampBounds(a, b, c, width, height, out int minX, out int maxX, out int minY, out int maxY);
         if (maxX < minX || maxY < minY)
             return;
@@ -73,7 +77,8 @@ internal sealed class TriangleRasterizer
                     continue;
                 (double wa, double wb, double wc) = map?.Map(qa, qb, qc) ?? (qa, qb, qc);
 
-                double depth = wa * a.Z + wb * b.Z + wc * c.Z;
+                double invDepth = wa * invZa + wb * invZb + wc * invZc;
+                double depth = invDepth > 1e-12 ? 1.0 / invDepth : double.PositiveInfinity;
                 int pixel = y * width + x;
                 if (depth >= zBuffer[pixel])
                     continue;
@@ -96,5 +101,13 @@ internal sealed class TriangleRasterizer
                 }
             }
         }
+    }
+
+    /// <summary>Clamps a camera-space depth away from zero, preserving its sign for reciprocal interpolation.</summary>
+    internal static double ClampDepth(double z)
+    {
+        if (z >= 0.0)
+            return Math.Max(z, 1e-9);
+        return Math.Min(z, -1e-9);
     }
 }

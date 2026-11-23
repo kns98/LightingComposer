@@ -129,8 +129,10 @@ void main()
     float farPlane = max(Camera.Projection.w, nearPlane + 1.0);
     // Use forward depth as w
     float z = vz;
-    // Normalize depth between planes
-    float ndcDepth = (z - nearPlane) / (farPlane - nearPlane);
+    // Standard perspective depth scale mapping near to 0 and far to 1
+    float depthScale = farPlane / (farPlane - nearPlane);
+    // Standard perspective depth offset for Vulkan zero to one range
+    float depthOffset = -depthScale * nearPlane;
 
     // Start clip position constructor
     gl_Position = vec4(
@@ -139,7 +141,7 @@ void main()
          // Compute vertical clip coordinate
          vy / tanHalfFov,
          // Scale depth by view distance
-         ndcDepth * z,
+         depthScale * z + depthOffset,
          // Store view depth as w
          z);
     // Flip Y for Vulkan coordinates

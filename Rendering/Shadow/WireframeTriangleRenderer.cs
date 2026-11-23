@@ -48,6 +48,9 @@ internal static class WireframeTriangleRenderer
         double area = RasterMath.Edge(a.X, a.Y, b.X, b.Y, c.X, c.Y);
         if (Math.Abs(area) < 1e-9)
             return;
+        double invZa = 1.0 / TriangleRasterizer.ClampDepth(a.Z);
+        double invZb = 1.0 / TriangleRasterizer.ClampDepth(b.Z);
+        double invZc = 1.0 / TriangleRasterizer.ClampDepth(c.Z);
         double dxA = c.X - b.X;
         double dyA = c.Y - b.Y;
         double invBc = 1.0 / Math.Max(1e-9, Math.Sqrt(dxA * dxA + dyA * dyA));
@@ -85,7 +88,8 @@ internal static class WireframeTriangleRenderer
                 if (edgeDistance > 0.75)
                     continue;
                 (double wa, double wb, double wc) = map?.Map(qa, qb, qc) ?? (qa, qb, qc);
-                double depth = wa * a.Z + wb * b.Z + wc * c.Z;
+                double invDepth = wa * invZa + wb * invZb + wc * invZc;
+                double depth = invDepth > 1e-12 ? 1.0 / invDepth : double.PositiveInfinity;
                 int index = y * width + x;
                 if (depth <= zBuffer[index] + 1e-6 * (1.0 + zBuffer[index]))
                 {

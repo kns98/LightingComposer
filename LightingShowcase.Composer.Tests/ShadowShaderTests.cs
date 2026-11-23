@@ -223,6 +223,43 @@ public sealed class ShadowShaderTests
         Assert.True(changed > 0);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Rasterize_ObliqueNearTriangleWinsOcclusion(bool reverseOrder)
+    {
+        Triangle obliqueNear = new(
+            new Vec3(-2, -1, 5), new Vec3(2, -1, 5), new Vec3(0, 1, 0.6),
+            new Material(new Vec3(1, 0, 0)));
+        Triangle flatFar = new(
+            new Vec3(-0.3, -0.3, 2), new Vec3(0.3, -0.3, 2), new Vec3(0, 0.9, 2),
+            new Material(new Vec3(0, 0, 1)));
+        int width = 160;
+        int height = 120;
+        uint[] pixels = new uint[width * height];
+        double[] zBuffer = new double[pixels.Length];
+        Array.Fill(zBuffer, double.PositiveInfinity);
+        uint background = ColorMath.PackDisplay(new Vec3(0.4, 0.6, 0.8));
+        Array.Fill(pixels, background);
+        CameraBasis basis = new(new Vec3(0, 0, 1), new Vec3(1, 0, 0), new Vec3(0, 1, 0));
+        TriangleRasterizer rasterizer = new();
+
+        Triangle first = reverseOrder ? flatFar : obliqueNear;
+        Triangle second = reverseOrder ? obliqueNear : flatFar;
+        rasterizer.Rasterize(pixels, zBuffer, width, height, first, Vec3.Zero, basis,
+            Array.Empty<PreparedLight>(), interactiveFast: true, exposure: 1.0);
+        rasterizer.Rasterize(pixels, zBuffer, width, height, second, Vec3.Zero, basis,
+            Array.Empty<PreparedLight>(), interactiveFast: true, exposure: 1.0);
+
+        int index = 40 * width + 80;
+        Assert.NotEqual(background, pixels[index]);
+        Vec3 unpacked = ColorMath.UnpackDisplay(pixels[index]);
+        Assert.True(unpacked.X > 0.02);
+        Assert.True(unpacked.X > unpacked.Y * 3.0);
+        Assert.True(unpacked.X > unpacked.Z * 3.0);
+        Assert.True(Math.Abs(zBuffer[index] - 1.827) < 0.05);
+    }
+
     private static ShadowMap MakeShadowMap()
     {
         SceneLight light = new("sun", Vec3.Zero, new Vec3(1, 1, 1), 1.0,
