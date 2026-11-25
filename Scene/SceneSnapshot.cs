@@ -57,6 +57,7 @@ internal static class SceneCloner
         foreach (KeyValuePair<string, double> parameter in source.PrimitiveParameters)
             clone.PrimitiveParameters[parameter.Key] = parameter.Value;
         clone.LocalTriangles.AddRange(source.LocalTriangles);
+        RestampTriangleGroupIds(clone);
         clone.SetLogicalFaceTriangleGroups(source.LogicalFaceTriangleGroups);
 
         foreach (SceneObjectGroup sourceChild in source.Children)
@@ -85,6 +86,7 @@ internal static class SceneCloner
         foreach (KeyValuePair<string, double> parameter in source.PrimitiveParameters)
             clone.PrimitiveParameters[parameter.Key] = parameter.Value;
         clone.LocalTriangles.AddRange(source.LocalTriangles);
+        RestampTriangleGroupIds(clone);
         clone.SetLogicalFaceTriangleGroups(source.LogicalFaceTriangleGroups);
 
         foreach (SceneObjectGroup sourceChild in source.Children)
@@ -92,6 +94,20 @@ internal static class SceneCloner
 
         clone.RecalculatePivot();
         return clone;
+    }
+
+    /// <summary>Restamps cloned local triangles with the clone's own id so picking attributes hits correctly.</summary>
+    private static void RestampTriangleGroupIds(SceneObjectGroup clone)
+    {
+        for (int i = 0; i < clone.LocalTriangles.Count; i++)
+        {
+            Triangle tri = clone.LocalTriangles[i];
+            clone.LocalTriangles[i] = new Triangle(
+                tri.A, tri.B, tri.C,
+                tri.UvA, tri.UvB, tri.UvC,
+                tri.NormalA, tri.NormalB, tri.NormalC,
+                tri.Material, clone.Id);
+        }
     }
 
     /// <summary>Clones the given light.</summary>

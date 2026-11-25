@@ -58,7 +58,7 @@ The importer reads glTF 2.0 `.gltf`/`.glb`: triangle primitives (`POSITION`, `NO
 
 ## Build and run
 
-Requires the .NET 10 SDK and, for Vulkan modes, a Vulkan-capable driver. Open `LightingShowcase.Composer.sln` in VS 2022 17.8+/Rider, or `dotnet build`. Run `./run.sh`; headless verbs: `render`, `export`, `formats`, `--help`.
+Requires the .NET 10 SDK and, for Vulkan modes, a Vulkan-capable driver. When a Vulkan loader is present, the viewport defaults to Vulkan raster. Open `LightingShowcase.Composer.sln` in VS 2022 17.8+/Rider, or `dotnet build`. Run `./run.sh`; headless verbs: `render`, `export`, `formats`, `--help`.
 
 ## Controls
 

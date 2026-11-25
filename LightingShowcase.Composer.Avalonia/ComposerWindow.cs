@@ -14,6 +14,7 @@ using Avalonia.Media;
 using Avalonia.Threading;
 using LightingShowcase.CameraSystem;
 using LightingShowcase.Math3D;
+using LightingShowcase.Rendering;
 using LightingShowcase.SceneGraph;
 
 namespace LightingShowcase.Composer;
@@ -208,7 +209,7 @@ internal sealed class ComposerWindow : Window
         rendererBox = new ComboBox
         {
             ItemsSource = rendererChoices,
-            SelectedIndex = 0,
+            SelectedIndex = DefaultRendererIndex(),
             MinWidth = 150
         };
         gizmoModeBox = new ComboBox
@@ -548,6 +549,17 @@ internal sealed class ComposerWindow : Window
     }
 
     private RendererChoice SelectedRenderer => rendererBox.SelectedItem as RendererChoice ?? rendererChoices[0];
+
+    /// <summary>Selects Vulkan raster when present, else software raster.</summary>
+    internal static ComposerRendererKind DefaultKind(bool vulkanPresent) =>
+        vulkanPresent ? ComposerRendererKind.VulkanRaster : ComposerRendererKind.Raster;
+
+    /// <summary>Returns the renderer-box index for the detected default renderer.</summary>
+    private int DefaultRendererIndex()
+    {
+        int index = Array.FindIndex(rendererChoices, choice => choice.Kind == DefaultKind(VulkanLoader.IsPresent()));
+        return index >= 0 ? index : 0;
+    }
     private ComposerGizmoMode SelectedGizmoMode =>
         (gizmoModeBox.SelectedItem as GizmoModeChoice)?.Mode ?? ComposerGizmoMode.Translate;
     private ComposerSelectionMode SelectedSelectionMode =>

@@ -75,6 +75,7 @@
     <Compile Include="../Rendering/Raster/**/*.cs" LinkBase="Rendering/Raster" />
     <EmbeddedResource Include="../Rendering/Raster/Shaders/*.glsl" LogicalName="Raster.%(Filename)%(Extension)" />
     <Compile Include="../Rendering/VeldridVulkanDevicePreflight.cs" Link="Rendering/VeldridVulkanDevicePreflight.cs" />
+    <Compile Include="../Rendering/VulkanLoader.cs" Link="Rendering/VulkanLoader.cs" />
     <Compile Include="../Rendering/Compute/**/*.cs" LinkBase="Rendering/Compute" />
   </ItemGroup>
 </Project>
