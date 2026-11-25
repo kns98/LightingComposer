@@ -28,7 +28,7 @@ public sealed class BinarySceneSaveOptions
 public static class BinarySceneFile
 {
     private const string Magic = "LSCN";
-    private const int Version = 13;
+    private const int Version = 14;
 
     private enum GeometryKind : byte
     {
@@ -100,6 +100,13 @@ public static class BinarySceneFile
                     foreach (SceneObjectGroup group in scene.ObjectGroups)
                         WriteObject(writer, group, textureTable, materialTable);
 
+                    writer.Write(scene.MaterialLibrary.Count);
+                    foreach (SceneMaterialEntry entry in scene.MaterialLibrary)
+                    {
+                        writer.Write(entry.Name ?? string.Empty);
+                        WriteMaterial(writer, entry.Material, textureTable);
+                    }
+
                     writer.Flush();
                 }
 
@@ -155,6 +162,17 @@ public static class BinarySceneFile
         int objectCount = reader.ReadInt32();
         for (int i = 0; i < objectCount; i++)
             ReadObject(reader, scene, parent: null, sceneFilePath: filePath, version: version, textureTable: textureTable, materialTable: materialTable);
+
+        if (version >= 14)
+        {
+            int libraryCount = reader.ReadInt32();
+            for (int i = 0; i < libraryCount; i++)
+            {
+                string name = reader.ReadString();
+                Material material = ReadMaterial(reader, filePath, version, textureTable);
+                scene.MaterialLibrary.Add(new SceneMaterialEntry(name, material));
+            }
+        }
 
         scene.RebuildWorldGeometry();
         return string.IsNullOrWhiteSpace(description) ? $"Binary scene: {Path.GetFileName(filePath)}" : description;
@@ -753,7 +771,7 @@ public static class BinarySceneFile
             ? (MaterialAlphaMode)reader.ReadByte()
             : alphaBlend ? MaterialAlphaMode.Blend : MaterialAlphaMode.Opaque;
         double alphaCutoff = version >= 8 ? reader.ReadDouble() : 0.5;
-        bool doubleSided = version >= 8 && reader.ReadBoolean();
+        bool doubleSided = version >= 8 ? reader.ReadBoolean() : true;
         TextureMap? transmissionTexture = version >= 9 ? textureTable?.ById(reader.ReadInt32()) : null;
         double ior = version >= 9 ? reader.ReadDouble() : 1.5;
         double thickness = version >= 9 ? reader.ReadDouble() : 0.0;

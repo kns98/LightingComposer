@@ -34,3 +34,6 @@ top-left-origin UVs.
 | metal_plate_albedo_1k.jpg | [Metal Plate](https://polyhaven.com/a/metal_plate) | Diffuse |
 | metal_plate_normal_1k.jpg | [Metal Plate](https://polyhaven.com/a/metal_plate) | Normal (DirectX) |
 | metal_plate_roughness_1k.jpg | [Metal Plate](https://polyhaven.com/a/metal_plate) | Roughness |
+| brown_leather_albedo_1k.jpg | [Brown Leather](https://polyhaven.com/a/brown_leather) | Diffuse |
+| brown_leather_normal_1k.jpg | [Brown Leather](https://polyhaven.com/a/brown_leather) | Normal (DirectX) |
+| brown_leather_roughness_1k.jpg | [Brown Leather](https://polyhaven.com/a/brown_leather) | Roughness |

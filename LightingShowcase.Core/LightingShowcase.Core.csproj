@@ -48,6 +48,7 @@
     <Compile Include="../Scene/SceneExportPackage.cs" Link="Scene/SceneExportPackage.cs" />
     <Compile Include="../Scene/SceneImportExportService.cs" Link="Scene/SceneImportExportService.cs" />
     <Compile Include="../Scene/SceneMaterials.cs" Link="Scene/SceneMaterials.cs" />
+    <Compile Include="../Scene/SceneMaterialEntry.cs" Link="Scene/SceneMaterialEntry.cs" />
     <Compile Include="../Scene/SceneObjectGroup.cs" Link="Scene/SceneObjectGroup.cs" />
     <Compile Include="../Scene/ScenePrimitive.cs" Link="Scene/ScenePrimitive.cs" />
     <Compile Include="../Scene/ScenePrimitiveRegistry.cs" Link="Scene/ScenePrimitiveRegistry.cs" />

@@ -60,6 +60,7 @@ internal sealed class ComposerSelectionController
     private readonly HashSet<int> selectedObjectIds = new();
     private int? selectedTriangleGroupId;
     private int? selectedTriangleIndex;
+    private bool controlHeld;
 
     /// <summary>Initializes the selection controller with the session, render, dialog, menu, tree, and inspector controls.</summary>
     public ComposerSelectionController(
@@ -134,6 +135,9 @@ internal sealed class ComposerSelectionController
 
     public HashSet<int> SelectedObjectIds => selectedObjectIds;
     public int SelectedObjectCount => selectedObjectIds.Count;
+
+    /// <summary>Tracks whether Control is held for toggle-click multi-selection.</summary>
+    public void SetControlHeld(bool held) => controlHeld = held;
 
     /// <summary>Clears selection, expanded nodes, and face paging for a new scene.</summary>
     public void ResetForScene()
@@ -304,13 +308,7 @@ internal sealed class ComposerSelectionController
                 ? new SolidColorBrush(Color.FromArgb(110, 255, 125, 40))
                 : Brushes.Transparent
         };
-        select.PointerPressed += (_, args) =>
-        {
-            if (!args.GetCurrentPoint(select).Properties.IsLeftButtonPressed)
-                return;
-            SelectObject(node.Id, args.KeyModifiers.HasFlag(Avalonia.Input.KeyModifiers.Control));
-            args.Handled = true;
-        };
+        select.Click += (_, _) => SelectObject(node.Id, controlHeld);
         row.Children.Add(select);
         Grid.SetColumn(select, 1);
         branch.Children.Add(row);

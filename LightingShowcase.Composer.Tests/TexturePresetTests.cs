@@ -83,6 +83,7 @@ public sealed class TexturePresetTests
     [InlineData("Red Brick Wall", "Brick", MaterialTextureSlot.BaseColor)]
     [InlineData("White Marble", "Stone", MaterialTextureSlot.BaseColor)]
     [InlineData("Metal Plate", "Metal", MaterialTextureSlot.BaseColor)]
+    [InlineData("Brown Leather", "Leather", MaterialTextureSlot.BaseColor)]
     public void Library_SpotCheckEntries(string name, string category, MaterialTextureSlot slot)
     {
         TexturePreset preset = TexturePresetLibrary.All.First(p => p.Name == name);

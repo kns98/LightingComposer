@@ -25,6 +25,7 @@ internal static class TexturePresetLibrary
         new("White Marble", "Stone", "textures/marble_01_albedo_1k.jpg", MaterialTextureSlot.BaseColor, "textures/marble_01_normal_1k.jpg", "textures/marble_01_roughness_1k.jpg", "Polished white marble; Poly Haven Marble 01 (CC0)."),
         new("Denim Fabric", "Fabric", "textures/denim_fabric_albedo_1k.jpg", MaterialTextureSlot.BaseColor, "textures/denim_fabric_normal_1k.jpg", "textures/denim_fabric_roughness_1k.jpg", "Woven blue denim; Poly Haven Denim Fabric (CC0)."),
         new("Metal Plate", "Metal", "textures/metal_plate_albedo_1k.jpg", MaterialTextureSlot.BaseColor, "textures/metal_plate_normal_1k.jpg", "textures/metal_plate_roughness_1k.jpg", "Brushed metal plate; Poly Haven Metal Plate (CC0)."),
+        new("Brown Leather", "Leather", "textures/brown_leather_albedo_1k.jpg", MaterialTextureSlot.BaseColor, "textures/brown_leather_normal_1k.jpg", "textures/brown_leather_roughness_1k.jpg", "Worn brown leather; Poly Haven Brown Leather (CC0)."),
     };
 
     /// <summary>Resolves a library-relative path against the working directory, the app directory, or the repo root.</summary>

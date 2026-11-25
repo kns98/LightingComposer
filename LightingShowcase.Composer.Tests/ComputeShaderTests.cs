@@ -44,7 +44,7 @@ public sealed class ComputeShaderTests
     public void GpuTriangle_PacksDoubleSidedFlag()
     {
         Dictionary<TextureMap, int> ids = new();
-        GpuTriangle single = new(MakeTriangle(new Material(new Vec3(1, 1, 1))), ids);
+        GpuTriangle single = new(MakeTriangle(new Material(new Vec3(1, 1, 1), doubleSided: false)), ids);
         GpuTriangle both = new(MakeTriangle(new Material(new Vec3(1, 1, 1), doubleSided: true)), ids);
         GpuTriangle maskedBoth = new(MakeTriangle(new Material(new Vec3(1, 1, 1), alphaMode: MaterialAlphaMode.Mask, doubleSided: true)), ids);
 

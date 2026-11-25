@@ -436,6 +436,17 @@ internal sealed class ComposerWindow : Window
     /// <summary>Wires button clicks, combo boxes, and viewport input to their handlers.</summary>
     private void WireEvents()
     {
+        KeyDown += (_, args) =>
+        {
+            if (args.Key == Key.LeftCtrl || args.Key == Key.RightCtrl)
+                selectionController.SetControlHeld(true);
+        };
+        KeyUp += (_, args) =>
+        {
+            if (args.Key == Key.LeftCtrl || args.Key == Key.RightCtrl)
+                selectionController.SetControlHeld(false);
+        };
+        Deactivated += (_, _) => selectionController.SetControlHeld(false);
         newButton.Click += async (_, _) => await NewSceneAsync();
         openButton.Click += async (_, _) => await BrowseAndOpenAsync();
         insertButton.Click += async (_, _) => await BrowseAndInsertAsync();

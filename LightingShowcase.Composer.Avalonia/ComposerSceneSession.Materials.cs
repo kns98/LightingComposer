@@ -209,6 +209,38 @@ internal sealed partial class ComposerSceneSession
             group => group.ApplyMaterialPreset(preset.Material));
     }
 
+    /// <summary>Saves the given values as a named scene-library material.</summary>
+    public SceneMaterialEntry AddSceneMaterial(string name, Vec3 color, ComposerMaterialProperties properties)
+    {
+        ArgumentNullException.ThrowIfNull(properties);
+        ValidateColor(color);
+        ValidateMaterialProperties(properties);
+        Material material = MaterialPropertiesFunc(properties)(new Material(color));
+        sceneGate.Wait();
+        try
+        {
+            return scene.AddMaterialToLibrary(name, material);
+        }
+        finally
+        {
+            sceneGate.Release();
+        }
+    }
+
+    /// <summary>Returns a snapshot of the scene material library.</summary>
+    public IReadOnlyList<SceneMaterialEntry> GetSceneMaterials()
+    {
+        sceneGate.Wait();
+        try
+        {
+            return scene.MaterialLibrary.ToArray();
+        }
+        finally
+        {
+            sceneGate.Release();
+        }
+    }
+
     /// <summary>Sets the base color of the object with the given id.</summary>
     public bool SetObjectBaseColor(int id, Vec3 color)
     {
@@ -261,7 +293,7 @@ internal sealed partial class ComposerSceneSession
     }
 
     /// <summary>Builds the per-material mapping that overwrites direct PBR values but keeps colors and textures.</summary>
-    private static Func<Material, Material> MaterialPropertiesFunc(ComposerMaterialProperties properties) => material => new Material(
+    internal static Func<Material, Material> MaterialPropertiesFunc(ComposerMaterialProperties properties) => material => new Material(
         material.Color,
         properties.Emission,
         material.LightId,

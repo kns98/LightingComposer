@@ -104,7 +104,7 @@ public sealed class Material
         double occlusionStrength = 1.0,
         MaterialAlphaMode alphaMode = MaterialAlphaMode.Opaque,
         double alphaCutoff = 0.5,
-        bool doubleSided = false,
+        bool doubleSided = true,
         TextureMap? transmissionTexture = null,
         double ior = 1.5,
         double thickness = 0.0,
@@ -439,8 +439,9 @@ public sealed class Material
 
     /// <summary>
     /// Copies the visible/PBR values from a material-library preset while retaining
-    /// this material's texture maps and light association. This lets a user choose
-    /// a metal/plastic/glass preset without unexpectedly discarding an assigned image.
+    /// this material's texture maps, light association, and double-sided rendering.
+    /// This lets a user choose a metal/plastic/glass preset without unexpectedly
+    /// discarding an assigned image or flipping back-face rendering.
     /// </summary>
     public Material WithPreset(Material preset)
     {
@@ -465,7 +466,7 @@ public sealed class Material
             preset.OcclusionStrength,
             preset.AlphaMode,
             preset.AlphaCutoff,
-            preset.DoubleSided,
+            DoubleSided,
             TransmissionTexture,
             preset.Ior,
             preset.Thickness,

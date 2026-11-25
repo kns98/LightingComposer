@@ -36,13 +36,22 @@ internal sealed class MaterialEditorWindow : Window
         public override string ToString() => Label;
     }
 
+    private sealed record SceneMaterialChoice(SceneMaterialEntry Entry)
+    {
+        /// <summary>Returns the saved material name for display.</summary>
+        public override string ToString() => Entry.Name;
+    }
+
     private readonly ComposerSceneSession session;
     private readonly int objectId;
     private readonly int[] targetIds;
     private readonly Action onMaterialChanged;
     private readonly Action onClosed;
     private readonly ComboBox presetBox;
+    private readonly ComboBox categoryBox;
     private readonly TextBlock presetSummary;
+    private readonly ComboBox sceneMaterialBox;
+    private readonly TextBlock sceneMaterialSummary;
     private readonly TextBox hexBox;
     private readonly TextBox redBox;
     private readonly TextBox greenBox;
@@ -94,6 +103,13 @@ internal sealed class MaterialEditorWindow : Window
     private readonly TextBlock statusText;
     private bool synchronizingColor;
     private ComposerMaterialModel? currentModel;
+    private ColorPresetPicker? colorSwatchPicker;
+    private FinishPresetPicker? finishPicker;
+    private AlphaPresetPicker? alphaPicker;
+    private GlowPresetPicker? glowPicker;
+    private GlassPresetPicker? glassPicker;
+    private DetailEffectPresetPicker? detailPicker;
+    private MappingPresetPicker? mappingPicker;
 
     public int ObjectId => objectId;
 
@@ -135,10 +151,38 @@ internal sealed class MaterialEditorWindow : Window
         {
             ItemsSource = MaterialPresetLibrary.Common,
             SelectedIndex = 0,
+            PlaceholderText = "Unassigned",
             MinWidth = 260,
             HorizontalAlignment = HorizontalAlignment.Stretch
         };
+        string[] presetCategories = MaterialPresetLibrary.Common
+            .Select(static p => p.Category)
+            .Distinct(StringComparer.Ordinal)
+            .OrderBy(static c => c, StringComparer.Ordinal)
+            .ToArray();
+        categoryBox = new ComboBox
+        {
+            ItemsSource = new[] { "All categories" }.Concat(presetCategories).ToArray(),
+            SelectedIndex = 0,
+            MinWidth = 200,
+            HorizontalAlignment = HorizontalAlignment.Left
+        };
+        categoryBox.SelectionChanged += (_, _) =>
+        {
+            string? category = categoryBox.SelectedItem as string;
+            presetBox.ItemsSource = MaterialPresetLibrary.Common
+                .Where(p => category == "All categories" || p.Category == category)
+                .ToArray();
+            presetBox.SelectedIndex = 0;
+        };
         presetSummary = new TextBlock { TextWrapping = TextWrapping.Wrap, Opacity = 0.72, FontSize = 12 };
+        sceneMaterialBox = new ComboBox
+        {
+            PlaceholderText = "No saved materials",
+            MinWidth = 260,
+            HorizontalAlignment = HorizontalAlignment.Stretch
+        };
+        sceneMaterialSummary = new TextBlock { TextWrapping = TextWrapping.Wrap, Opacity = 0.72, FontSize = 12 };
 
         hexBox = new TextBox { Name = "MaterialHex", MinWidth = 105, TextAlignment = TextAlignment.Center };
         redBox = ChannelBox();
@@ -230,7 +274,8 @@ internal sealed class MaterialEditorWindow : Window
         };
 
         presetBox.SelectionChanged += (_, _) => UpdatePresetSummary();
-        mappingSlotBox.SelectionChanged += (_, _) => LoadSelectedTextureMapping();
+        sceneMaterialBox.SelectionChanged += (_, _) => UpdateSceneMaterialSummary();
+        mappingSlotBox.SelectionChanged += (_, _) => { LoadSelectedTextureMapping(); SyncMappingHighlight(); };
         redBox.TextChanged += (_, _) => SyncColorFromChannels();
         greenBox.TextChanged += (_, _) => SyncColorFromChannels();
         blueBox.TextChanged += (_, _) => SyncColorFromChannels();
@@ -268,7 +313,9 @@ internal sealed class MaterialEditorWindow : Window
     /// <summary>Attaches detailed help tooltips to every editor control.</summary>
     private void ApplyTooltips()
     {
-        Tip(presetBox, "Library preset picker. Choose a starting material (metal, plastic, glass, …) and press Apply preset. The summary line shows its metallic and roughness values. Applying a preset overwrites the base color and resets extended PBR values to the preset; assigned texture maps and the light link are preserved.");
+        Tip(categoryBox, "Filters the library preset list to one material category.");
+        Tip(sceneMaterialBox, "Saved scene materials. Pick a material saved with Save as… and press Apply to use it on every targeted object.");
+        Tip(presetBox, "Library preset picker. Choose a starting material (metal, plastic, glass, …) and press Apply preset. The summary line shows its metallic and roughness values. Applying a preset overwrites the base color and resets extended PBR values to the preset; assigned texture maps, the light link, and double-sided rendering are preserved.");
         Tip(hexBox, "Base color as a hex triplet such as #C8A060. Press Enter or leave the box to sync the RGB editors and pickers below, then press Apply color to write it to the material.");
         Tip(redBox, "Red channel 0–255. Syncs with the hex box and pickers; press Apply color to write the combined color.");
         Tip(greenBox, "Green channel 0–255. Syncs with the hex box and pickers; press Apply color to write the combined color.");
@@ -300,7 +347,7 @@ internal sealed class MaterialEditorWindow : Window
         Tip(iridescenceThicknessMaxBox, "Maximum film thickness in nanometers. Thicker films shift the interference toward red; min and max define the range across the surface.");
         Tip(alphaModeBox, "Alpha mode. Opaque ignores opacity, Mask discards pixels below the cutoff, and Blend fades smoothly using opacity.");
         Tip(alphaCutoffBox, "Alpha cutoff 0–1 for Mask mode. Pixels with opacity below this value are discarded; used for cutout foliage and grilles.");
-        Tip(doubleSidedBox, "Render both sides. When checked, back faces are drawn too, so open or single-sided geometry stays visible from behind.");
+        Tip(doubleSidedBox, "Render both sides. When checked, back faces are drawn too, so open or single-sided geometry stays visible from behind. Double-sided is the default for new materials.");
         foreach ((MaterialTextureSlot slot, TextBox pathBox) in texturePathBoxes)
             Tip(pathBox, $"{ComposerSceneSession.TextureSlotLabel(slot)} texture display. Shows the image file currently assigned to this slot, or the empty watermark when none is assigned. Use Browse to assign one and Clear to remove it.");
         Tip(mappingSlotBox, "Mapping target. Chooses which texture slot the UV source, tile size, offset, scale, rotation, and wrap modes below apply to.");
@@ -408,31 +455,10 @@ internal sealed class MaterialEditorWindow : Window
     {
         StackPanel stack = NewTabStack();
         stack.Children.Add(Heading("Library preset"));
-        string[] categories = MaterialPresetLibrary.Common
-            .Select(static p => p.Category)
-            .Distinct(StringComparer.Ordinal)
-            .OrderBy(static c => c, StringComparer.Ordinal)
-            .ToArray();
-        ComboBox categoryBox = new()
-        {
-            ItemsSource = new[] { "All categories" }.Concat(categories).ToArray(),
-            SelectedIndex = 0,
-            MinWidth = 200,
-            HorizontalAlignment = HorizontalAlignment.Left
-        };
-        Tip(categoryBox, "Filters the library preset list to one material category.");
-        categoryBox.SelectionChanged += (_, _) =>
-        {
-            string? category = categoryBox.SelectedItem as string;
-            presetBox.ItemsSource = MaterialPresetLibrary.Common
-                .Where(p => category == "All categories" || p.Category == category)
-                .ToArray();
-            presetBox.SelectedIndex = 0;
-        };
         stack.Children.Add(LabeledControl("Category", categoryBox));
         Grid presetRow = new() { ColumnDefinitions = new ColumnDefinitions("*,Auto"), ColumnSpacing = 8 };
         presetRow.Children.Add(presetBox);
-        Button applyPreset = Tip(NewButton("Apply preset"), "Applies the selected library preset to every targeted object. Base color is overwritten and extended PBR values reset to the preset; texture maps are preserved. One undo step covers all targeted objects.");
+        Button applyPreset = Tip(NewButton("Apply preset"), "Applies the selected library preset to every targeted object. Base color is overwritten and extended PBR values reset to the preset; texture maps, the light link, and double-sided rendering are preserved. One undo step covers all targeted objects.");
         applyPreset.Click += async (_, _) => await ApplyPresetAsync();
         presetRow.Children.Add(applyPreset);
         Grid.SetColumn(applyPreset, 1);
@@ -440,11 +466,31 @@ internal sealed class MaterialEditorWindow : Window
         stack.Children.Add(presetSummary);
         stack.Children.Add(new TextBlock
         {
-            Text = "Applying a preset overwrites the base color and resets extended PBR values (IOR, clearcoat, sheen, …) to the preset. Texture maps and the light link are preserved.",
+            Text = "Applying a preset overwrites the base color and resets extended PBR values (IOR, clearcoat, sheen, …) to the preset. Texture maps, the light link, and double-sided rendering are preserved.",
             TextWrapping = TextWrapping.Wrap,
             Opacity = 0.68,
             FontSize = 12
         });
+        stack.Children.Add(Heading("Scene materials"));
+        stack.Children.Add(new TextBlock
+        {
+            Text = "Save the current editors as a named material stored in this scene file, then re-apply it to any object. Saved materials capture base color and PBR values; texture assignments stay per-object.",
+            TextWrapping = TextWrapping.Wrap,
+            Opacity = 0.68,
+            FontSize = 12
+        });
+        Grid sceneRow = new() { ColumnDefinitions = new ColumnDefinitions("*,Auto"), ColumnSpacing = 8 };
+        sceneRow.Children.Add(sceneMaterialBox);
+        Button applySceneMaterial = Tip(NewButton("Apply"), "Applies the selected saved material to every targeted object, like a library preset. Base color is overwritten; texture maps, the light link, and double-sided rendering are preserved. One undo step covers all targeted objects.");
+        applySceneMaterial.Click += async (_, _) => await ApplySceneMaterialAsync();
+        sceneRow.Children.Add(applySceneMaterial);
+        Grid.SetColumn(applySceneMaterial, 1);
+        stack.Children.Add(sceneRow);
+        stack.Children.Add(sceneMaterialSummary);
+        Button saveAs = Tip(NewButton("Save as…"), "Saves the current dialog values as a named material in this scene file so it can be re-applied later.");
+        saveAs.HorizontalAlignment = HorizontalAlignment.Right;
+        saveAs.Click += async (_, _) => await SaveSceneMaterialAsync();
+        stack.Children.Add(saveAs);
         return stack;
     }
 
@@ -473,9 +519,16 @@ internal sealed class MaterialEditorWindow : Window
         spectrumPicker.ColorPicked += color =>
             SetColorEditors(new Vec3(color.R / 255.0, color.G / 255.0, color.B / 255.0));
         stack.Children.Add(spectrumPicker);
-        ColorPresetPicker presetPicker = Tip(new ColorPresetPicker { Name = "MaterialPresets" }, "Named color preset library. Click a swatch to load its color into the hex and RGB editors above, then press Apply color to write it to the material.");
-        presetPicker.PresetPicked += preset => SetColorEditors(preset.Color);
-        stack.Children.Add(presetPicker);
+        colorSwatchPicker = Tip(new ColorPresetPicker { Name = "MaterialPresets" }, "Named color preset library. Click a swatch to load its color into the hex and RGB editors above, then press Apply color to write it to the material.");
+        colorSwatchPicker.PresetPicked += preset =>
+        {
+            SetColorEditors(preset.Color);
+            colorSwatchPicker?.SetSelected(preset);
+            SyncPresetSelectionFromDialog();
+        };
+        stack.Children.Add(colorSwatchPicker);
+        foreach (TextBox box in new[] { hexBox, redBox, greenBox, blueBox })
+            box.TextChanged += (_, _) => RefreshPropertyHighlightsFromDialog();
         return stack;
     }
 
@@ -505,12 +558,25 @@ internal sealed class MaterialEditorWindow : Window
         stack.Children.Add(LabeledControl("IOR (1–2.333)", iorBox));
         stack.Children.Add(TwoPropertyRow("Alpha mode", alphaModeBox, "Alpha cutoff (0–1)", alphaCutoffBox));
         stack.Children.Add(doubleSidedBox);
-        FinishPresetPicker finishPicker = Tip(new FinishPresetPicker(), "Finish presets. Click one to load its metallic and roughness values into the editors above, then press Apply properties to write them to the material.");
-        finishPicker.PresetPicked += SetFinishEditors;
+        finishPicker = Tip(new FinishPresetPicker(), "Finish presets. Click one to load its metallic and roughness values into the editors above, then press Apply properties to write them to the material.");
+        finishPicker.PresetPicked += preset =>
+        {
+            SetFinishEditors(preset);
+            finishPicker?.SetSelected(preset);
+            SyncPresetSelectionFromDialog();
+        };
         stack.Children.Add(PresetSection("Finish presets", finishPicker));
-        AlphaPresetPicker alphaPicker = Tip(new AlphaPresetPicker(), "Alpha presets. Click one to load its alpha mode, opacity, and cutoff into the editors above, then press Apply properties to write them to the material.");
-        alphaPicker.PresetPicked += SetAlphaEditors;
+        alphaPicker = Tip(new AlphaPresetPicker(), "Alpha presets. Click one to load its alpha mode, opacity, and cutoff into the editors above, then press Apply properties to write them to the material.");
+        alphaPicker.PresetPicked += preset =>
+        {
+            SetAlphaEditors(preset);
+            alphaPicker?.SetSelected(preset);
+            SyncPresetSelectionFromDialog();
+        };
         stack.Children.Add(PresetSection("Alpha presets", alphaPicker));
+        foreach (TextBox box in new[] { metallicBox, roughnessBox, transmissionBox, opacityBox, iorBox, alphaCutoffBox })
+            box.TextChanged += (_, _) => RefreshPropertyHighlightsFromDialog();
+        alphaModeBox.SelectionChanged += (_, _) => RefreshPropertyHighlightsFromDialog();
         stack.Children.Add(NewApplyPropertiesButton());
         return stack;
     }
@@ -532,12 +598,24 @@ internal sealed class MaterialEditorWindow : Window
         stack.Children.Add(TwoPropertyRow("Thickness (m)", thicknessBox, "Attenuation distance (m)", attenuationDistanceBox));
         stack.Children.Add(LabeledControl("Attenuation color", attenuationColorBox));
         stack.Children.Add(TwoPropertyRow("Clearcoat (0–1)", clearcoatBox, "Clearcoat roughness (0–1)", clearcoatRoughnessBox));
-        GlowPresetPicker glowPicker = Tip(new GlowPresetPicker(), "Glow presets. Click one to load its emission strength and color into the editors above, then press Apply properties to write them to the material.");
-        glowPicker.PresetPicked += SetGlowEditors;
+        glowPicker = Tip(new GlowPresetPicker(), "Glow presets. Click one to load its emission strength and color into the editors above, then press Apply properties to write them to the material.");
+        glowPicker.PresetPicked += preset =>
+        {
+            SetGlowEditors(preset);
+            glowPicker?.SetSelected(preset);
+            SyncPresetSelectionFromDialog();
+        };
         stack.Children.Add(PresetSection("Glow presets", glowPicker));
-        GlassPresetPicker glassPicker = Tip(new GlassPresetPicker(), "Glass presets. Click one to load its transmission, volume, and IOR values into the editors (transmission and IOR live on the Surface tab), then press Apply properties to write them to the material.");
-        glassPicker.PresetPicked += SetGlassEditors;
+        glassPicker = Tip(new GlassPresetPicker(), "Glass presets. Click one to load its transmission, volume, and IOR values into the editors (transmission and IOR live on the Surface tab), then press Apply properties to write them to the material.");
+        glassPicker.PresetPicked += preset =>
+        {
+            SetGlassEditors(preset);
+            glassPicker?.SetSelected(preset);
+            SyncPresetSelectionFromDialog();
+        };
         stack.Children.Add(PresetSection("Glass presets", glassPicker));
+        foreach (TextBox box in new[] { emissionBox, emissionColorBox, thicknessBox, attenuationColorBox, attenuationDistanceBox, clearcoatBox, clearcoatRoughnessBox })
+            box.TextChanged += (_, _) => RefreshPropertyHighlightsFromDialog();
         stack.Children.Add(NewApplyPropertiesButton());
         return stack;
     }
@@ -561,9 +639,16 @@ internal sealed class MaterialEditorWindow : Window
         stack.Children.Add(TwoPropertyRow("Anisotropy (0–1)", anisotropyBox, "Anisotropy rotation (rad)", anisotropyRotationBox));
         stack.Children.Add(TwoPropertyRow("Iridescence (0–1)", iridescenceBox, "Iridescence IOR (≥1)", iridescenceIorBox));
         stack.Children.Add(TwoPropertyRow("Iridescence min (nm)", iridescenceThicknessMinBox, "Iridescence max (nm)", iridescenceThicknessMaxBox));
-        DetailEffectPresetPicker detailPicker = Tip(new DetailEffectPresetPicker(), "Effect presets. Click one to load its detail values into the editors above, then press Apply properties to write them to the material.");
-        detailPicker.PresetPicked += SetDetailEffectEditors;
+        detailPicker = Tip(new DetailEffectPresetPicker(), "Effect presets. Click one to load its detail values into the editors above, then press Apply properties to write them to the material.");
+        detailPicker.PresetPicked += preset =>
+        {
+            SetDetailEffectEditors(preset);
+            detailPicker?.SetSelected(preset);
+            SyncPresetSelectionFromDialog();
+        };
         stack.Children.Add(PresetSection("Effect presets", detailPicker));
+        foreach (TextBox box in new[] { normalScaleBox, occlusionStrengthBox, specularBox, specularColorBox, sheenColorBox, sheenRoughnessBox, anisotropyBox, anisotropyRotationBox, iridescenceBox, iridescenceIorBox, iridescenceThicknessMinBox, iridescenceThicknessMaxBox })
+            box.TextChanged += (_, _) => RefreshPropertyHighlightsFromDialog();
         stack.Children.Add(NewApplyPropertiesButton());
         return stack;
     }
@@ -609,9 +694,18 @@ internal sealed class MaterialEditorWindow : Window
         stack.Children.Add(TwoPropertyRow("Scale U", scaleUBox, "Scale V", scaleVBox));
         stack.Children.Add(LabeledControl("Rotation (degrees)", rotationBox));
         stack.Children.Add(TwoPropertyRow("Wrap U", wrapUBox, "Wrap V", wrapVBox));
-        MappingPresetPicker mappingPicker = Tip(new MappingPresetPicker(), "Mapping presets. Click one to load its UV source, tile size, transform, and wrap modes into the editors above, then press Apply mapping to write them to the target slot.");
-        mappingPicker.PresetPicked += SetMappingEditors;
+        mappingPicker = Tip(new MappingPresetPicker(), "Mapping presets. Click one to load its UV source, tile size, transform, and wrap modes into the editors above, then press Apply mapping to write them to the target slot.");
+        mappingPicker.PresetPicked += preset =>
+        {
+            SetMappingEditors(preset);
+            mappingPicker?.SetSelected(preset);
+        };
         stack.Children.Add(PresetSection("Mapping presets", mappingPicker));
+        foreach (TextBox box in new[] { tileMetersBox, offsetUBox, offsetVBox, scaleUBox, scaleVBox, rotationBox })
+            box.TextChanged += (_, _) => RefreshMappingHighlightFromDialog();
+        projectionModeBox.SelectionChanged += (_, _) => RefreshMappingHighlightFromDialog();
+        wrapUBox.SelectionChanged += (_, _) => RefreshMappingHighlightFromDialog();
+        wrapVBox.SelectionChanged += (_, _) => RefreshMappingHighlightFromDialog();
         Button applyMapping = Tip(NewButton("Apply mapping"), "Applies the UV source plus offset, scale, rotation, and wrap modes to the target slot on every targeted object. One undo step covers all targeted objects.");
         applyMapping.HorizontalAlignment = HorizontalAlignment.Right;
         applyMapping.Click += async (_, _) => await ApplyTextureMappingAsync();
@@ -630,10 +724,78 @@ internal sealed class MaterialEditorWindow : Window
     private async Task ApplyPresetAsync()
     {
         if (presetBox.SelectedItem is not MaterialPreset preset)
+        {
+            statusText.Text = "Choose a library preset to apply.";
             return;
+        }
         await RunEditAsync(
             () => session.ApplyMaterialPreset(targetIds, preset) > 0,
             $"Applied {preset.Category} — {preset.Name}. Base color overwritten and direct-property fields refreshed; assigned textures were preserved.");
+    }
+
+    /// <summary>Saves the current dialog values as a named scene-library material.</summary>
+    private async Task SaveSceneMaterialAsync()
+    {
+        if (!TryReadColor(out Vec3 color))
+        {
+            statusText.Text = "Enter RGB values from 0 to 255 or a hex color such as #C8A060.";
+            return;
+        }
+        if (!TryReadMaterialProperties(out ComposerMaterialProperties? properties, out string error))
+        {
+            statusText.Text = error;
+            return;
+        }
+        string? name = await TextPromptDialog.AskAsync(this, "Save material", "Name this material:");
+        if (string.IsNullOrWhiteSpace(name))
+            return;
+        try
+        {
+            SceneMaterialEntry entry = session.AddSceneMaterial(name, color, properties!);
+            RefreshSceneMaterialList(entry.Name);
+            statusText.Text = $"Material '{entry.Name}' saved in the scene.";
+            onMaterialChanged();
+        }
+        catch (ArgumentException ex)
+        {
+            statusText.Text = ex.Message;
+        }
+    }
+
+    /// <summary>Applies the selected saved scene material to the edited objects.</summary>
+    private async Task ApplySceneMaterialAsync()
+    {
+        if (sceneMaterialBox.SelectedItem is not SceneMaterialChoice choice)
+        {
+            statusText.Text = "Save the current material with Save as… first.";
+            return;
+        }
+        MaterialPreset preset = new("Scene", choice.Entry.Name, choice.Entry.Material, $"Scene material {choice.Entry.Name}.");
+        await RunEditAsync(
+            () => session.ApplyMaterialPreset(targetIds, preset) > 0,
+            $"Applied scene material {choice.Entry.Name}. Base color overwritten and direct-property fields refreshed; assigned textures were preserved.");
+    }
+
+    /// <summary>Rebuilds the saved-material list, keeping the selection when possible.</summary>
+    private void RefreshSceneMaterialList(string? selectName = null)
+    {
+        IReadOnlyList<SceneMaterialEntry> entries = session.GetSceneMaterials();
+        string? keep = selectName ?? (sceneMaterialBox.SelectedItem as SceneMaterialChoice)?.Entry.Name;
+        SceneMaterialChoice[] choices = entries.Select(static entry => new SceneMaterialChoice(entry)).ToArray();
+        sceneMaterialBox.ItemsSource = choices;
+        sceneMaterialBox.SelectedItem = choices.FirstOrDefault(choice => choice.Entry.Name == keep) ?? choices.FirstOrDefault();
+        UpdateSceneMaterialSummary();
+    }
+
+    /// <summary>Updates the saved-material summary line for the current selection.</summary>
+    private void UpdateSceneMaterialSummary()
+    {
+        if (sceneMaterialBox.SelectedItem is not SceneMaterialChoice choice)
+        {
+            sceneMaterialSummary.Text = string.Empty;
+            return;
+        }
+        sceneMaterialSummary.Text = $"Color {ToHex(choice.Entry.Material.Color)}  Metallic {choice.Entry.Material.Metallic:0.##}, roughness {choice.Entry.Material.Roughness:0.##}.";
     }
 
     /// <summary>Applies the entered base color to the edited object.</summary>
@@ -931,6 +1093,83 @@ internal sealed class MaterialEditorWindow : Window
             $"Color {ToHex(model.BaseColor)}   Metallic {model.Metallic:0.###}   Roughness {model.Roughness:0.###}\n" +
             $"Transmission {model.Transmission:0.###}   Opacity {model.Alpha:0.###}   IOR {model.Ior:0.###}   Emission {model.Emission:0.###}\n" +
             $"Clearcoat {model.Clearcoat:0.###}   Thickness {model.Thickness:0.######} m   Texture maps {textureCount}";
+        SyncPresetSelection(model);
+        SyncPickerHighlights(model);
+        RefreshSceneMaterialList();
+    }
+
+    /// <summary>Highlights the tab presets matching the loaded model values.</summary>
+    private void SyncPickerHighlights(ComposerMaterialModel model)
+    {
+        SyncPropertyHighlights(model.BaseColor, model.DirectProperties);
+        SyncMappingHighlight();
+    }
+
+    /// <summary>Highlights the property and color presets matching the given values.</summary>
+    private void SyncPropertyHighlights(Vec3 baseColor, ComposerMaterialProperties properties)
+    {
+        finishPicker?.SetSelected(MatchFinishPreset(properties.Metallic, properties.Roughness));
+        alphaPicker?.SetSelected(MatchAlphaPreset(properties.AlphaMode, properties.Alpha, properties.AlphaCutoff));
+        glowPicker?.SetSelected(MatchGlowPreset(properties.Emission, properties.EmissionColor));
+        glassPicker?.SetSelected(MatchGlassPreset(properties.Transmission, properties.Thickness, properties.AttenuationColor, properties.AttenuationDistance, properties.Ior));
+        detailPicker?.SetSelected(MatchDetailEffectPreset(properties));
+        colorSwatchPicker?.SetSelected(MatchColorPreset(baseColor));
+    }
+
+    /// <summary>Clears every property and color preset highlight.</summary>
+    private void ClearPropertyHighlights()
+    {
+        finishPicker?.SetSelected(null);
+        alphaPicker?.SetSelected(null);
+        glowPicker?.SetSelected(null);
+        glassPicker?.SetSelected(null);
+        detailPicker?.SetSelected(null);
+        colorSwatchPicker?.SetSelected(null);
+    }
+
+    /// <summary>Recomputes property highlights from the dialog values, whatever changed them.</summary>
+    private void RefreshPropertyHighlightsFromDialog()
+    {
+        if (!TryReadColor(out Vec3 color) || !TryReadMaterialProperties(out ComposerMaterialProperties? properties, out _))
+        {
+            ClearPropertyHighlights();
+            return;
+        }
+        SyncPropertyHighlights(color, properties!);
+    }
+
+    /// <summary>Recomputes the mapping highlight from the dialog values, whatever changed them.</summary>
+    private void RefreshMappingHighlightFromDialog()
+    {
+        if (mappingPicker == null
+            || !TryReadTileMeters(out double tileMeters)
+            || !TryDouble(offsetUBox.Text, out double offsetU) || !TryDouble(offsetVBox.Text, out double offsetV)
+            || !TryDouble(scaleUBox.Text, out double scaleU) || !TryDouble(scaleVBox.Text, out double scaleV)
+            || !TryDouble(rotationBox.Text, out double rotation)
+            || wrapUBox.SelectedItem is not TextureAddressMode wrapU || wrapVBox.SelectedItem is not TextureAddressMode wrapV)
+        {
+            mappingPicker?.SetSelected(null);
+            return;
+        }
+        ComposerTextureSlotModel slot = new(
+            MaterialTextureSlot.BaseColor, string.Empty, null, null,
+            offsetU, offsetV, scaleU, scaleV, rotation, wrapU, wrapV);
+        mappingPicker.SetSelected(MatchMappingPreset(SelectedProjectionMode, tileMeters, slot));
+    }
+
+    /// <summary>Highlights the mapping preset matching the selected slot, if any.</summary>
+    private void SyncMappingHighlight()
+    {
+        if (mappingPicker == null || currentModel == null || mappingSlotBox.SelectedItem is not TextureSlotChoice choice)
+            return;
+        ComposerTextureSlotModel slot = currentModel.TextureSlot(choice.Slot);
+        mappingPicker.SetSelected(MappingPresets.All.FirstOrDefault(p =>
+            p.BoxProjection == SelectedProjectionMode
+            && Nearly(currentModel.TextureTileMeters, p.TileMeters)
+            && Nearly(slot.OffsetU, p.OffsetU) && Nearly(slot.OffsetV, p.OffsetV)
+            && Nearly(slot.ScaleU, p.ScaleU) && Nearly(slot.ScaleV, p.ScaleV)
+            && Nearly(slot.RotationDegrees, p.RotationDegrees)
+            && slot.WrapU == p.WrapU && slot.WrapV == p.WrapV));
     }
 
     private bool SelectedProjectionMode =>
@@ -986,10 +1225,131 @@ internal sealed class MaterialEditorWindow : Window
     {
         if (presetBox.SelectedItem is not MaterialPreset preset)
         {
-            presetSummary.Text = string.Empty;
+            presetSummary.Text = "Custom values — the current material differs from every library preset.";
             return;
         }
         presetSummary.Text = $"{preset.Summary}  Metallic {preset.Material.Metallic:0.##}, roughness {preset.Material.Roughness:0.##}.";
+    }
+
+    /// <summary>Finds the library preset matching the model's governed values, or null when it deviates.</summary>
+    internal static MaterialPreset? FindMatchingPreset(ComposerMaterialModel model) =>
+        FindMatchingPreset(model.BaseColor, model.DirectProperties);
+
+    /// <summary>Finds the library preset matching the given dialog values, or null when they deviate.</summary>
+    internal static MaterialPreset? FindMatchingPreset(Vec3 baseColor, ComposerMaterialProperties properties)
+    {
+        foreach (MaterialPreset preset in MaterialPresetLibrary.Common)
+        {
+            if (MatchesPreset(baseColor, properties, preset.Material))
+                return preset;
+        }
+        return null;
+    }
+
+    /// <summary>Compares every preset-governed value. Textures, light links, and double-sided rendering are preserved rather than governed, so they never break a match.</summary>
+    private static bool MatchesPreset(Vec3 baseColor, ComposerMaterialProperties properties, Material material)
+    {
+        return Nearly(baseColor, material.Color)
+            && Nearly(properties.Metallic, material.Metallic)
+            && Nearly(properties.Roughness, material.Roughness)
+            && Nearly(properties.Transmission, material.Transmission)
+            && Nearly(properties.Alpha, material.Alpha)
+            && Nearly(properties.Emission, material.Emission)
+            && Nearly(properties.EmissionColor, material.EmissionColor)
+            && properties.AlphaMode == material.AlphaMode
+            && Nearly(properties.AlphaCutoff, material.AlphaCutoff)
+            && Nearly(properties.Ior, material.Ior)
+            && Nearly(properties.Thickness, material.Thickness)
+            && Nearly(properties.AttenuationColor, material.AttenuationColor)
+            && Nearly(properties.AttenuationDistance, material.AttenuationDistance)
+            && Nearly(properties.Clearcoat, material.Clearcoat)
+            && Nearly(properties.ClearcoatRoughness, material.ClearcoatRoughness)
+            && Nearly(properties.NormalScale, material.NormalScale)
+            && Nearly(properties.OcclusionStrength, material.OcclusionStrength)
+            && Nearly(properties.Specular, material.Specular)
+            && Nearly(properties.SpecularColor, material.SpecularColor)
+            && Nearly(properties.SheenColor, material.SheenColor)
+            && Nearly(properties.SheenRoughness, material.SheenRoughness)
+            && Nearly(properties.Anisotropy, material.Anisotropy)
+            && Nearly(properties.AnisotropyRotation, material.AnisotropyRotation)
+            && Nearly(properties.Iridescence, material.Iridescence)
+            && Nearly(properties.IridescenceIor, material.IridescenceIor)
+            && Nearly(properties.IridescenceThicknessMinimum, material.IridescenceThicknessMinimum)
+            && Nearly(properties.IridescenceThicknessMaximum, material.IridescenceThicknessMaximum);
+    }
+
+    /// <summary>Compares two doubles within preset-matching tolerance.</summary>
+    private static bool Nearly(double a, double b) => Math.Abs(a - b) <= 1e-9;
+
+    /// <summary>Compares two colors channel by channel within preset-matching tolerance.</summary>
+    private static bool Nearly(Vec3 a, Vec3 b) => Nearly(a.X, b.X) && Nearly(a.Y, b.Y) && Nearly(a.Z, b.Z);
+
+    /// <summary>Finds the finish preset matching the given values, or null.</summary>
+    internal static FinishPreset? MatchFinishPreset(double metallic, double roughness) =>
+        FinishPresets.All.FirstOrDefault(p => Nearly(metallic, p.Metallic) && Nearly(roughness, p.Roughness));
+
+    /// <summary>Finds the alpha preset matching the given values, or null.</summary>
+    internal static AlphaPreset? MatchAlphaPreset(MaterialAlphaMode mode, double alpha, double cutoff) =>
+        AlphaPresets.All.FirstOrDefault(p => p.AlphaMode == mode && Nearly(alpha, p.Alpha) && Nearly(cutoff, p.AlphaCutoff));
+
+    /// <summary>Finds the glow preset matching the given values, or null.</summary>
+    internal static GlowPreset? MatchGlowPreset(double emission, Vec3 color) =>
+        GlowPresets.All.FirstOrDefault(p => Nearly(emission, p.Emission) && Nearly(color, p.EmissionColor));
+
+    /// <summary>Finds the glass preset matching the given values, or null.</summary>
+    internal static GlassPreset? MatchGlassPreset(double transmission, double thickness, Vec3 attenuationColor, double attenuationDistance, double ior) =>
+        GlassPresets.All.FirstOrDefault(p =>
+            Nearly(transmission, p.Transmission) && Nearly(thickness, p.Thickness)
+            && Nearly(attenuationColor, p.AttenuationColor) && Nearly(attenuationDistance, p.AttenuationDistance)
+            && Nearly(ior, p.Ior));
+
+    /// <summary>Finds the detail-effect preset matching the given values, or null.</summary>
+    internal static DetailEffectPreset? MatchDetailEffectPreset(ComposerMaterialProperties properties) =>
+        DetailEffectPresets.All.FirstOrDefault(p =>
+            Nearly(properties.NormalScale, p.NormalScale) && Nearly(properties.OcclusionStrength, p.OcclusionStrength)
+            && Nearly(properties.Specular, p.Specular) && Nearly(properties.SpecularColor, p.SpecularColor)
+            && Nearly(properties.SheenColor, p.SheenColor) && Nearly(properties.SheenRoughness, p.SheenRoughness)
+            && Nearly(properties.Anisotropy, p.Anisotropy) && Nearly(properties.AnisotropyRotation, p.AnisotropyRotation)
+            && Nearly(properties.Iridescence, p.Iridescence) && Nearly(properties.IridescenceIor, p.IridescenceIor)
+            && Nearly(properties.IridescenceThicknessMinimum, p.IridescenceThicknessMinimum)
+            && Nearly(properties.IridescenceThicknessMaximum, p.IridescenceThicknessMaximum));
+
+    /// <summary>Finds the color preset matching the given color, or null.</summary>
+    internal static ColorPreset? MatchColorPreset(Vec3 color) =>
+        ColorPresets.All.FirstOrDefault(p => Nearly(color, p.Color));
+
+    /// <summary>Finds the mapping preset matching the given slot state, or null.</summary>
+    internal static MappingPreset? MatchMappingPreset(bool boxProjection, double tileMeters, ComposerTextureSlotModel slot) =>
+        MappingPresets.All.FirstOrDefault(p =>
+            p.BoxProjection == boxProjection && Nearly(tileMeters, p.TileMeters)
+            && Nearly(slot.OffsetU, p.OffsetU) && Nearly(slot.OffsetV, p.OffsetV)
+            && Nearly(slot.ScaleU, p.ScaleU) && Nearly(slot.ScaleV, p.ScaleV)
+            && Nearly(slot.RotationDegrees, p.RotationDegrees)
+            && slot.WrapU == p.WrapU && slot.WrapV == p.WrapV);
+
+    /// <summary>Selects the preset matching the loaded model, or unassigned when it deviates.</summary>
+    private void SyncPresetSelection(ComposerMaterialModel model) =>
+        SelectPresetOrUnassigned(FindMatchingPreset(model));
+
+    /// <summary>Selects the preset matching the current dialog values, or unassigned when they deviate.</summary>
+    private void SyncPresetSelectionFromDialog()
+    {
+        if (!TryReadColor(out Vec3 color) || !TryReadMaterialProperties(out ComposerMaterialProperties? properties, out _))
+        {
+            presetBox.SelectedItem = null;
+            return;
+        }
+        SelectPresetOrUnassigned(FindMatchingPreset(color, properties!));
+    }
+
+    /// <summary>Selects the given preset, resetting the category filter when it would hide the match.</summary>
+    private void SelectPresetOrUnassigned(MaterialPreset? match)
+    {
+        if (match != null
+            && presetBox.ItemsSource is System.Collections.IEnumerable items
+            && !items.Cast<object>().Contains(match))
+            categoryBox.SelectedIndex = 0;
+        presetBox.SelectedItem = match;
     }
 
     /// <summary>Reads and validates the entered material properties from the editor controls.</summary>

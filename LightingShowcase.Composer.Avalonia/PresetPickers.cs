@@ -1,15 +1,21 @@
 // Text-button preset pickers for the scalar material preset libraries. Each
 // picker follows the ColorPresetPicker pattern (buttons in a WrapPanel with a
 // Picked event); hosts write the picked values into their editors so
-// validation and apply paths stay unchanged.
+// validation and apply paths stay unchanged. The selected button stays
+// highlighted until hosts select another preset or clear the selection.
 using Avalonia.Controls;
 using Avalonia.Layout;
+using Avalonia.Media;
 
 namespace LightingShowcase.Composer;
 
 /// <summary>WrapPanel of text buttons raising a typed event when a preset is picked.</summary>
-internal abstract class PresetPicker<TPreset> : WrapPanel
+internal abstract class PresetPicker<TPreset> : WrapPanel where TPreset : notnull
 {
+    private static readonly SolidColorBrush SelectedBorderBrush = new(Color.FromRgb(0x2B, 0x88, 0xD8));
+
+    private readonly Dictionary<TPreset, (Button Button, string Label)> buttons = new();
+
     public event Action<TPreset>? PresetPicked;
 
     protected PresetPicker(IEnumerable<TPreset> presets, Func<TPreset, string> label, Func<TPreset, string> tip)
@@ -18,15 +24,37 @@ internal abstract class PresetPicker<TPreset> : WrapPanel
         foreach (TPreset preset in presets)
         {
             TPreset captured = preset;
+            string text = label(captured);
             Button button = new()
             {
-                Content = label(captured),
+                Content = text,
                 Margin = new Avalonia.Thickness(2),
                 Padding = new Avalonia.Thickness(8, 4)
             };
             ToolTip.SetTip(button, tip(captured));
             button.Click += (_, _) => PresetPicked?.Invoke(captured);
             Children.Add(button);
+            buttons[captured] = (button, text);
+        }
+    }
+
+    /// <summary>Highlights the given preset, or clears the highlight when null.</summary>
+    public void SetSelected(TPreset? preset)
+    {
+        foreach ((TPreset key, (Button button, string label)) in buttons)
+        {
+            if (preset != null && key.Equals(preset))
+            {
+                button.Content = new TextBlock { Text = label, FontWeight = FontWeight.Bold };
+                button.BorderBrush = SelectedBorderBrush;
+                button.BorderThickness = new Avalonia.Thickness(2);
+            }
+            else
+            {
+                button.Content = label;
+                button.ClearValue(Button.BorderBrushProperty);
+                button.ClearValue(Button.BorderThicknessProperty);
+            }
         }
     }
 }

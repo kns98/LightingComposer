@@ -37,7 +37,7 @@ public sealed class MaterialDefinition
     public double Clearcoat { get; set; }
     public double ClearcoatRoughness { get; set; }
     public bool ClearcoatUsesTransmissionTexture { get; set; }
-    public bool DoubleSided { get; set; }
+    public bool DoubleSided { get; set; } = true;
     public double Specular { get; set; } = 1.0;
     public Vec3 SpecularColor { get; set; } = new(1, 1, 1);
     public string? SpecularTextureId { get; set; }

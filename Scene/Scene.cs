@@ -19,6 +19,7 @@ public sealed class Scene
     public List<Triangle> Triangles { get; } = new();
     public List<SceneLight> Lights { get; } = new();
     public List<SceneObjectGroup> ObjectGroups { get; } = new();
+    public List<SceneMaterialEntry> MaterialLibrary { get; } = new();
 
     private readonly SceneMaterials materials = new();
     private BvhNode? bvhRoot;
@@ -183,11 +184,26 @@ public sealed class Scene
         Triangles.Clear();
         Lights.Clear();
         ObjectGroups.Clear();
+        MaterialLibrary.Clear();
         activeGroups.Clear();
         nextGroupId = 1;
         InvalidateAccelerationStructure();
         Description = "Empty scene";
         Interlocked.Increment(ref revision);
+    }
+
+    /// <summary>Adds a named material to the scene library. Names must be unique ignoring case.</summary>
+    public SceneMaterialEntry AddMaterialToLibrary(string name, Material material)
+    {
+        if (material == null) throw new ArgumentNullException(nameof(material));
+        if (string.IsNullOrWhiteSpace(name)) throw new ArgumentException("A material name is required.", nameof(name));
+        string trimmed = name.Trim();
+        if (trimmed.Length > 120) throw new ArgumentException("Material names are limited to 120 characters.", nameof(name));
+        if (MaterialLibrary.Any(entry => string.Equals(entry.Name, trimmed, StringComparison.OrdinalIgnoreCase)))
+            throw new ArgumentException($"A saved material named '{trimmed}' already exists.", nameof(name));
+        SceneMaterialEntry entry = new(trimmed, material);
+        MaterialLibrary.Add(entry);
+        return entry;
     }
 
     /// <summary>Begins a recursive scene object group. Nested calls attach completed children to the active parent.</summary>
