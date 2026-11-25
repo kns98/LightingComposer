@@ -49,6 +49,7 @@ internal sealed partial class ComposerSceneSession : IDisposable
     private readonly ComposerEditHistory editHistory = new();
     private ShadowRasterRenderer.PreviewCache? rasterCache;
     private int? selectedObjectId;
+    private readonly HashSet<int> selectedObjectIds = new();
     private int? selectedTriangleGroupId;
     private int? selectedTriangleIndex;
     private Aabb? selectedOverlayBounds;
@@ -269,18 +270,39 @@ internal sealed partial class ComposerSceneSession : IDisposable
     }
 
     /// <summary>Selects the given object and returns true when the selection changed.</summary>
-    public bool SetSelectedObject(int? id)
+    public bool SetSelectedObject(int? id) =>
+        SetSelectedObjects(id.HasValue ? new[] { id.Value } : Array.Empty<int>(), id);
+
+    /// <summary>
+    /// Selects the given object set with the given active object and returns true
+    /// when the selection changed. The active object drives the gizmo and the
+    /// inspector; the full set drives multi-object commands and viewport cues.
+    /// </summary>
+    public bool SetSelectedObjects(IEnumerable<int> ids, int? activeId)
     {
+        ArgumentNullException.ThrowIfNull(ids);
         sceneGate.Wait();
         try
         {
-            int? normalized = id.HasValue && scene.GroupById(id.Value) != null ? id : null;
-            bool changed = selectedObjectId != normalized || selectedTriangleIndex.HasValue || selectedMeshSelection.HasValue;
+            HashSet<int> normalized = ids.Where(id => scene.GroupById(id) != null).ToHashSet();
+            int? normalizedActive = activeId.HasValue && normalized.Contains(activeId.Value) ? activeId : null;
+            if (activeId.HasValue && scene.GroupById(activeId.Value) != null)
+            {
+                normalized.Add(activeId.Value);
+                normalizedActive = activeId;
+            }
+            bool changed = selectedObjectId != normalizedActive ||
+                           !selectedObjectIds.SetEquals(normalized) ||
+                           selectedTriangleIndex.HasValue ||
+                           selectedMeshSelection.HasValue;
             if (!changed)
                 return false;
 
-            selectedObjectId = normalized;
-            if (normalized.HasValue)
+            selectedObjectId = normalizedActive;
+            selectedObjectIds.Clear();
+            foreach (int id in normalized)
+                selectedObjectIds.Add(id);
+            if (normalizedActive.HasValue)
                 selectedLightIndex = null;
             selectedTriangleGroupId = null;
             selectedTriangleIndex = null;
@@ -299,6 +321,61 @@ internal sealed partial class ComposerSceneSession : IDisposable
         {
             sceneGate.Release();
         }
+    }
+
+    /// <summary>
+    /// Returns the given ids without descendants of other given ids. Batch edits
+    /// run on these topmost objects only so nested pairs are not applied twice.
+    /// </summary>
+    public IReadOnlyList<int> GetTopmostSelection(IEnumerable<int> ids)
+    {
+        ArgumentNullException.ThrowIfNull(ids);
+        sceneGate.Wait();
+        try
+        {
+            return TopmostSelectionCore(ids);
+        }
+        finally
+        {
+            sceneGate.Release();
+        }
+    }
+
+    /// <summary>Collapses the tracked selection set onto the active object. The caller must hold the scene lock.</summary>
+    private void SyncSelectionSetWithActive()
+    {
+        selectedObjectIds.Clear();
+        if (selectedObjectId.HasValue)
+            selectedObjectIds.Add(selectedObjectId.Value);
+    }
+
+    /// <summary>Filters the given ids to topmost objects. The caller must hold the scene lock.</summary>
+    private IReadOnlyList<int> TopmostSelectionCore(IEnumerable<int> ids)
+    {
+        int[] distinct = ids.Distinct().ToArray();
+        Dictionary<int, SceneObjectGroup> groups = new();
+        foreach (int id in distinct)
+        {
+            SceneObjectGroup? group = scene.GroupById(id);
+            if (group != null)
+                groups[id] = group;
+        }
+        List<int> topmost = new(groups.Count);
+        foreach ((int id, SceneObjectGroup group) in groups)
+        {
+            bool nested = false;
+            for (SceneObjectGroup? parent = group.Parent; parent != null; parent = parent.Parent)
+            {
+                if (groups.ContainsKey(parent.Id))
+                {
+                    nested = true;
+                    break;
+                }
+            }
+            if (!nested)
+                topmost.Add(id);
+        }
+        return topmost;
     }
 
     /// <summary>
@@ -321,6 +398,7 @@ internal sealed partial class ComposerSceneSession : IDisposable
                 return false;
 
             selectedObjectId = groupId;
+            SyncSelectionSetWithActive();
             selectedTriangleGroupId = groupId;
             selectedTriangleIndex = localTriangleIndex;
             selectionMode = ComposerSelectionMode.Face;
@@ -521,84 +599,18 @@ internal sealed partial class ComposerSceneSession : IDisposable
         Vec3 rotationRadians,
         Vec3 scale)
     {
-        ValidateFinite(position, nameof(position));
-        ValidateFinite(rotationRadians, nameof(rotationRadians));
-        ValidateFinite(scale, nameof(scale));
-        if (scale.X <= 0 || scale.Y <= 0 || scale.Z <= 0)
-            throw new ArgumentOutOfRangeException(nameof(scale), "Scale values must be greater than zero.");
+        ValidateTransform(position, rotationRadians, scale);
 
         sceneGate.Wait();
         try
         {
-            SceneObjectGroup? selectedGroup = scene.GroupById(id);
-            if (selectedGroup == null)
-                return false;
-
-            string beforeName = selectedGroup.Name;
-            bool beforeVisible = selectedGroup.Visible;
-            string afterName = string.IsNullOrWhiteSpace(name) ? beforeName : name.Trim();
-
-            if (selectedGroup.HasParametricPrimitive && selectedGroup.Children.Count == 0)
+            if (!TryUpdateObjectCore(id, name, visible, position, rotationRadians, scale, out IComposerEditCommand? command) ||
+                command == null)
             {
-                // A modeless parameter window may have an active preview batch.
-                // Finish that batch before changing the hidden authored transform
-                // so closing the dialog later cannot restore pre-transform geometry.
-                if (primitiveParameterPreview?.GroupId == selectedGroup.Id)
-                    CommitPrimitiveParameterEditCore(selectedGroup.Id);
-
-                KeyValuePair<string, double>[] beforeParameters = selectedGroup.PrimitiveParameters.ToArray();
-                Vec3 fixedPivot = selectedGroup.Pivot;
-                if (!ObjectLibraryRegistry.AccumulateParametricTransform(
-                        selectedGroup, fixedPivot, position, rotationRadians, scale) ||
-                    !scene.RebuildParametricObject(selectedGroup))
-                {
-                    return false;
-                }
-
-                selectedGroup.Name = afterName;
-                selectedGroup.Visible = visible;
-                Scene.RecalculatePivotsToRoot(selectedGroup.Parent);
-                scene.RebuildWorldGeometry();
-                meshTopologyByGroup.Remove(selectedGroup.Id);
-                RebuildSelectionOverlayCache();
-
-                editHistory.PushApplied(new ParametricTransformEditCommand(
-                    selectedGroup.Id,
-                    beforeParameters,
-                    selectedGroup.PrimitiveParameters,
-                    beforeName,
-                    afterName,
-                    beforeVisible,
-                    visible));
-
-                ScenePath = null;
-                RefreshRendererCachesAfterGeometryBake(CancellationToken.None);
-                return true;
+                return false;
             }
 
-            // Ordinary meshes retain the original bake-to-geometry workflow.
-            selectedGroup.BakeCurrentTransform();
-            BakedGeometryState beforeGeometry = BakedGeometryState.Capture(selectedGroup);
-            Vec3 meshFixedPivot = selectedGroup.Pivot;
-            selectedGroup.BakeTransform(position, rotationRadians, scale);
-            selectedGroup.Name = afterName;
-            selectedGroup.Visible = visible;
-            Scene.RecalculatePivotsToRoot(selectedGroup.Parent);
-            scene.RebuildWorldGeometry();
-            RebuildSelectionOverlayCache();
-
-            editHistory.PushApplied(new BakedTransformEditCommand(
-                selectedGroup.Id,
-                beforeGeometry,
-                meshFixedPivot,
-                position,
-                rotationRadians,
-                scale,
-                beforeName,
-                afterName,
-                beforeVisible,
-                visible));
-
+            editHistory.PushApplied(command);
             ScenePath = null;
             RefreshRendererCachesAfterGeometryBake(CancellationToken.None);
             return true;
@@ -607,6 +619,152 @@ internal sealed partial class ComposerSceneSession : IDisposable
         {
             sceneGate.Release();
         }
+    }
+
+    /// <summary>
+    /// Bakes the given visibility and transform into every topmost object in the
+    /// set — each about its own pivot — and records one undo step. Names are
+    /// preserved; renaming stays a single-object operation. Returns how many
+    /// objects were updated.
+    /// </summary>
+    public int UpdateObjects(
+        IEnumerable<int> ids,
+        bool visible,
+        Vec3 position,
+        Vec3 rotationRadians,
+        Vec3 scale)
+    {
+        ArgumentNullException.ThrowIfNull(ids);
+        ValidateTransform(position, rotationRadians, scale);
+
+        sceneGate.Wait();
+        try
+        {
+            IReadOnlyList<int> topmost = TopmostSelectionCore(ids);
+            List<IComposerEditCommand> commands = new(topmost.Count);
+            List<int> applied = new(topmost.Count);
+            foreach (int id in topmost)
+            {
+                if (TryUpdateObjectCore(id, string.Empty, visible, position, rotationRadians, scale, out IComposerEditCommand? command) &&
+                    command != null)
+                {
+                    commands.Add(command);
+                    applied.Add(id);
+                }
+            }
+            if (commands.Count == 0)
+                return 0;
+
+            editHistory.PushApplied(SingleOrBatch(
+                $"Transform {applied.Count} objects",
+                commands,
+                applied[0]));
+            ScenePath = null;
+            RefreshRendererCachesAfterGeometryBake(CancellationToken.None);
+            return applied.Count;
+        }
+        finally
+        {
+            sceneGate.Release();
+        }
+    }
+
+    /// <summary>
+    /// Bakes one object transform without touching undo history. The caller must
+    /// hold the scene lock and push the returned command when it is not null.
+    /// </summary>
+    private bool TryUpdateObjectCore(
+        int id,
+        string name,
+        bool visible,
+        Vec3 position,
+        Vec3 rotationRadians,
+        Vec3 scale,
+        out IComposerEditCommand? command)
+    {
+        command = null;
+        SceneObjectGroup? selectedGroup = scene.GroupById(id);
+        if (selectedGroup == null)
+            return false;
+
+        string beforeName = selectedGroup.Name;
+        bool beforeVisible = selectedGroup.Visible;
+        string afterName = string.IsNullOrWhiteSpace(name) ? beforeName : name.Trim();
+
+        if (selectedGroup.HasParametricPrimitive && selectedGroup.Children.Count == 0)
+        {
+            // A modeless parameter window may have an active preview batch.
+            // Finish that batch before changing the hidden authored transform
+            // so closing the dialog later cannot restore pre-transform geometry.
+            if (primitiveParameterPreview?.GroupId == selectedGroup.Id)
+                CommitPrimitiveParameterEditCore(selectedGroup.Id);
+
+            KeyValuePair<string, double>[] beforeParameters = selectedGroup.PrimitiveParameters.ToArray();
+            Vec3 fixedPivot = selectedGroup.Pivot;
+            if (!ObjectLibraryRegistry.AccumulateParametricTransform(
+                    selectedGroup, fixedPivot, position, rotationRadians, scale) ||
+                !scene.RebuildParametricObject(selectedGroup))
+            {
+                return false;
+            }
+
+            selectedGroup.Name = afterName;
+            selectedGroup.Visible = visible;
+            Scene.RecalculatePivotsToRoot(selectedGroup.Parent);
+            scene.RebuildWorldGeometry();
+            meshTopologyByGroup.Remove(selectedGroup.Id);
+            RebuildSelectionOverlayCache();
+
+            command = new ParametricTransformEditCommand(
+                selectedGroup.Id,
+                beforeParameters,
+                selectedGroup.PrimitiveParameters,
+                beforeName,
+                afterName,
+                beforeVisible,
+                visible);
+            return true;
+        }
+
+        // Ordinary meshes retain the original bake-to-geometry workflow.
+        selectedGroup.BakeCurrentTransform();
+        BakedGeometryState beforeGeometry = BakedGeometryState.Capture(selectedGroup);
+        Vec3 meshFixedPivot = selectedGroup.Pivot;
+        selectedGroup.BakeTransform(position, rotationRadians, scale);
+        selectedGroup.Name = afterName;
+        selectedGroup.Visible = visible;
+        Scene.RecalculatePivotsToRoot(selectedGroup.Parent);
+        scene.RebuildWorldGeometry();
+        RebuildSelectionOverlayCache();
+
+        command = new BakedTransformEditCommand(
+            selectedGroup.Id,
+            beforeGeometry,
+            meshFixedPivot,
+            position,
+            rotationRadians,
+            scale,
+            beforeName,
+            afterName,
+            beforeVisible,
+            visible);
+        return true;
+    }
+
+    /// <summary>Returns the single command unwrapped, or one batch command for several children.</summary>
+    private static IComposerEditCommand SingleOrBatch(string batchDescription, IReadOnlyList<IComposerEditCommand> commands, int selectionId) =>
+        commands.Count == 1
+            ? commands[0]
+            : new CompositeEditCommand(batchDescription, commands, selectionId, selectionId);
+
+    /// <summary>Throws when a transform vector is non-finite or a scale component is not positive.</summary>
+    private static void ValidateTransform(Vec3 position, Vec3 rotationRadians, Vec3 scale)
+    {
+        ValidateFinite(position, nameof(position));
+        ValidateFinite(rotationRadians, nameof(rotationRadians));
+        ValidateFinite(scale, nameof(scale));
+        if (scale.X <= 0 || scale.Y <= 0 || scale.Z <= 0)
+            throw new ArgumentOutOfRangeException(nameof(scale), "Scale values must be greater than zero.");
     }
 
     /// <summary>
@@ -619,11 +777,7 @@ internal sealed partial class ComposerSceneSession : IDisposable
         Vec3 rotationRadians,
         Vec3 scale)
     {
-        ValidateFinite(position, nameof(position));
-        ValidateFinite(rotationRadians, nameof(rotationRadians));
-        ValidateFinite(scale, nameof(scale));
-        if (scale.X <= 0 || scale.Y <= 0 || scale.Z <= 0)
-            throw new ArgumentOutOfRangeException(nameof(scale), "Scale values must be greater than zero.");
+        ValidateTransform(position, rotationRadians, scale);
 
         sceneGate.Wait();
         try
@@ -641,6 +795,42 @@ internal sealed partial class ComposerSceneSession : IDisposable
             target.Scale = scale;
             ScenePath = null;
             return true;
+        }
+        finally
+        {
+            sceneGate.Release();
+        }
+    }
+
+    /// <summary>
+    /// Updates temporary gizmo transform metadata on every given object. Each
+    /// caller supplies per-object values so shared drag deltas combine with
+    /// each object's own starting transform. Returns how many were updated.
+    /// </summary>
+    public int UpdateTransformTargets(IEnumerable<(int Id, Vec3 Position, Vec3 RotationRadians, Vec3 Scale)> targets)
+    {
+        ArgumentNullException.ThrowIfNull(targets);
+        (int Id, Vec3 Position, Vec3 RotationRadians, Vec3 Scale)[] items = targets.ToArray();
+        foreach ((_, Vec3 position, Vec3 rotationRadians, Vec3 scale) in items)
+            ValidateTransform(position, rotationRadians, scale);
+
+        sceneGate.Wait();
+        try
+        {
+            int updated = 0;
+            foreach ((int id, Vec3 position, Vec3 rotationRadians, Vec3 scale) in items)
+            {
+                SceneObjectGroup? target = scene.GroupById(id);
+                if (target == null)
+                    continue;
+                target.Position = position;
+                target.Rotation = rotationRadians;
+                target.Scale = scale;
+                updated++;
+            }
+            if (updated > 0)
+                ScenePath = null;
+            return updated;
         }
         finally
         {
@@ -668,68 +858,45 @@ internal sealed partial class ComposerSceneSession : IDisposable
         }
     }
 
+    /// <summary>Resets the pending gizmo transform on every given object. Returns how many were reset.</summary>
+    public int CancelPendingTransforms(IEnumerable<int> ids)
+    {
+        ArgumentNullException.ThrowIfNull(ids);
+        sceneGate.Wait();
+        try
+        {
+            int reset = 0;
+            foreach (int id in ids.Distinct())
+            {
+                SceneObjectGroup? target = scene.GroupById(id);
+                if (target == null)
+                    continue;
+                target.Position = Vec3.Zero;
+                target.Rotation = Vec3.Zero;
+                target.Scale = new Vec3(1, 1, 1);
+                reset++;
+            }
+            return reset;
+        }
+        finally
+        {
+            sceneGate.Release();
+        }
+    }
+
     /// <summary>Bakes the current gizmo preview into geometry and records one undo step.</summary>
     public bool CommitPendingTransform(int selectedId)
     {
         sceneGate.Wait();
         try
         {
-            SceneObjectGroup? target = scene.GroupById(selectedId);
-            if (target == null)
+            CommitOutcome outcome = TryCommitPendingTransformCore(selectedId, out IComposerEditCommand? command);
+            if (outcome is CommitOutcome.Missing or CommitOutcome.Failed)
                 return false;
-
-            Vec3 position = target.Position;
-            Vec3 rotation = target.Rotation;
-            Vec3 scale = target.Scale;
-            if (IsIdentityTransform(position, rotation, scale))
+            if (outcome == CommitOutcome.Identity || command == null)
                 return true;
 
-            Vec3 fixedPivot = target.Pivot;
-            if (target.HasParametricPrimitive && target.Children.Count == 0)
-            {
-                if (primitiveParameterPreview?.GroupId == target.Id)
-                    CommitPrimitiveParameterEditCore(target.Id);
-
-                KeyValuePair<string, double>[] beforeParameters = target.PrimitiveParameters.ToArray();
-                if (!ObjectLibraryRegistry.AccumulateParametricTransform(target, fixedPivot, position, rotation, scale) ||
-                    !scene.RebuildParametricObject(target))
-                {
-                    return false;
-                }
-
-                Scene.RecalculatePivotsToRoot(target.Parent);
-                scene.RebuildWorldGeometry();
-                meshTopologyByGroup.Remove(target.Id);
-                RebuildSelectionOverlayCache();
-                editHistory.PushApplied(new ParametricTransformEditCommand(
-                    target.Id,
-                    beforeParameters,
-                    target.PrimitiveParameters,
-                    target.Name,
-                    target.Name,
-                    target.Visible,
-                    target.Visible));
-                ScenePath = null;
-                RefreshRendererCachesAfterGeometryBake(CancellationToken.None);
-                return true;
-            }
-
-            BakedGeometryState beforeGeometry = BakedGeometryState.Capture(target);
-            target.BakeCurrentTransform();
-            Scene.RecalculatePivotsToRoot(target.Parent);
-            scene.RebuildWorldGeometry();
-            RebuildSelectionOverlayCache();
-            editHistory.PushApplied(new BakedTransformEditCommand(
-                target.Id,
-                beforeGeometry,
-                fixedPivot,
-                position,
-                rotation,
-                scale,
-                target.Name,
-                target.Name,
-                target.Visible,
-                target.Visible));
+            editHistory.PushApplied(command);
             ScenePath = null;
             RefreshRendererCachesAfterGeometryBake(CancellationToken.None);
             return true;
@@ -738,6 +905,119 @@ internal sealed partial class ComposerSceneSession : IDisposable
         {
             sceneGate.Release();
         }
+    }
+
+    /// <summary>
+    /// Bakes the current gizmo preview on every topmost object in the set and
+    /// records one undo step. Identity previews are skipped. Returns how many
+    /// objects were committed.
+    /// </summary>
+    public int CommitPendingTransforms(IEnumerable<int> ids)
+    {
+        ArgumentNullException.ThrowIfNull(ids);
+        sceneGate.Wait();
+        try
+        {
+            IReadOnlyList<int> topmost = TopmostSelectionCore(ids);
+            List<IComposerEditCommand> commands = new(topmost.Count);
+            List<int> applied = new(topmost.Count);
+            foreach (int id in topmost)
+            {
+                if (TryCommitPendingTransformCore(id, out IComposerEditCommand? command) == CommitOutcome.Committed &&
+                    command != null)
+                {
+                    commands.Add(command);
+                    applied.Add(id);
+                }
+            }
+            if (commands.Count == 0)
+                return 0;
+
+            editHistory.PushApplied(SingleOrBatch(
+                $"Transform {applied.Count} objects",
+                commands,
+                applied[0]));
+            ScenePath = null;
+            RefreshRendererCachesAfterGeometryBake(CancellationToken.None);
+            return applied.Count;
+        }
+        finally
+        {
+            sceneGate.Release();
+        }
+    }
+
+    private enum CommitOutcome
+    {
+        Missing,
+        Identity,
+        Committed,
+        Failed
+    }
+
+    /// <summary>
+    /// Bakes one pending gizmo preview without touching undo history. The caller
+    /// must hold the scene lock and push the returned command when the outcome
+    /// is committed.
+    /// </summary>
+    private CommitOutcome TryCommitPendingTransformCore(int selectedId, out IComposerEditCommand? command)
+    {
+        command = null;
+        SceneObjectGroup? target = scene.GroupById(selectedId);
+        if (target == null)
+            return CommitOutcome.Missing;
+
+        Vec3 position = target.Position;
+        Vec3 rotation = target.Rotation;
+        Vec3 scale = target.Scale;
+        if (IsIdentityTransform(position, rotation, scale))
+            return CommitOutcome.Identity;
+
+        Vec3 fixedPivot = target.Pivot;
+        if (target.HasParametricPrimitive && target.Children.Count == 0)
+        {
+            if (primitiveParameterPreview?.GroupId == target.Id)
+                CommitPrimitiveParameterEditCore(target.Id);
+
+            KeyValuePair<string, double>[] beforeParameters = target.PrimitiveParameters.ToArray();
+            if (!ObjectLibraryRegistry.AccumulateParametricTransform(target, fixedPivot, position, rotation, scale) ||
+                !scene.RebuildParametricObject(target))
+            {
+                return CommitOutcome.Failed;
+            }
+
+            Scene.RecalculatePivotsToRoot(target.Parent);
+            scene.RebuildWorldGeometry();
+            meshTopologyByGroup.Remove(target.Id);
+            RebuildSelectionOverlayCache();
+            command = new ParametricTransformEditCommand(
+                target.Id,
+                beforeParameters,
+                target.PrimitiveParameters,
+                target.Name,
+                target.Name,
+                target.Visible,
+                target.Visible);
+            return CommitOutcome.Committed;
+        }
+
+        BakedGeometryState beforeGeometry = BakedGeometryState.Capture(target);
+        target.BakeCurrentTransform();
+        Scene.RecalculatePivotsToRoot(target.Parent);
+        scene.RebuildWorldGeometry();
+        RebuildSelectionOverlayCache();
+        command = new BakedTransformEditCommand(
+            target.Id,
+            beforeGeometry,
+            fixedPivot,
+            position,
+            rotation,
+            scale,
+            target.Name,
+            target.Name,
+            target.Visible,
+            target.Visible);
+        return CommitOutcome.Committed;
     }
 
     /// <summary>Resets the transform of the given object to identity and refreshes the render caches.</summary>
@@ -750,9 +1030,7 @@ internal sealed partial class ComposerSceneSession : IDisposable
             if (group == null)
                 return false;
 
-            group.Position = Vec3.Zero;
-            group.Rotation = Vec3.Zero;
-            group.Scale = new Vec3(1, 1, 1);
+            ResetTransformCore(group);
             scene.RebuildWorldGeometry();
             RebuildSelectionOverlayCache();
             ScenePath = null;
@@ -763,6 +1041,44 @@ internal sealed partial class ComposerSceneSession : IDisposable
         {
             sceneGate.Release();
         }
+    }
+
+    /// <summary>Resets the transform of every given object to identity. Returns how many were reset.</summary>
+    public int ResetObjectTransforms(IEnumerable<int> ids)
+    {
+        ArgumentNullException.ThrowIfNull(ids);
+        sceneGate.Wait();
+        try
+        {
+            int reset = 0;
+            foreach (int id in ids.Distinct())
+            {
+                SceneObjectGroup? group = scene.GroupById(id);
+                if (group == null)
+                    continue;
+                ResetTransformCore(group);
+                reset++;
+            }
+            if (reset == 0)
+                return 0;
+            scene.RebuildWorldGeometry();
+            RebuildSelectionOverlayCache();
+            ScenePath = null;
+            RefreshRendererCachesAfterGeometryBake(CancellationToken.None);
+            return reset;
+        }
+        finally
+        {
+            sceneGate.Release();
+        }
+    }
+
+    /// <summary>Resets one group transform to identity. The caller must hold the scene lock.</summary>
+    private static void ResetTransformCore(SceneObjectGroup group)
+    {
+        group.Position = Vec3.Zero;
+        group.Rotation = Vec3.Zero;
+        group.Scale = new Vec3(1, 1, 1);
     }
 
     /// <summary>Returns true when the given objects can be grouped.</summary>
@@ -793,6 +1109,7 @@ internal sealed partial class ComposerSceneSession : IDisposable
             SceneSnapshot after = scene.CreateSnapshot();
             editHistory.PushApplied(new SceneSnapshotEditCommand("Group objects", before, after, selectedIds.FirstOrDefault(), parent.Id));
             selectedObjectId = parent.Id;
+            SyncSelectionSetWithActive();
             selectedTriangleGroupId = null;
             selectedTriangleIndex = null;
             selectedMeshSelection = null;
@@ -854,6 +1171,9 @@ internal sealed partial class ComposerSceneSession : IDisposable
             int? preferred = promotedIds.Count > 0 ? promotedIds[0] : null;
             editHistory.PushApplied(new SceneSnapshotEditCommand("Ungroup objects", before, after, targets[0], preferred));
             selectedObjectId = preferred;
+            selectedObjectIds.Clear();
+            foreach (int promotedId in promotedIds)
+                selectedObjectIds.Add(promotedId);
             selectedTriangleGroupId = null;
             selectedTriangleIndex = null;
             selectedMeshSelection = null;
@@ -900,6 +1220,7 @@ internal sealed partial class ComposerSceneSession : IDisposable
             editHistory.PushApplied(new SceneSnapshotEditCommand("Ungroup", before, after, id, preferred));
             if (selectedObjectId == id)
                 selectedObjectId = preferred;
+            SyncSelectionSetWithActive();
             selectedTriangleGroupId = null;
             selectedTriangleIndex = null;
             RebuildSelectionOverlayCache();
@@ -922,6 +1243,7 @@ internal sealed partial class ComposerSceneSession : IDisposable
             bool fullRendererInvalidation = editHistory.UndoRequiresFullRendererInvalidation;
             int? preferred = editHistory.Undo(scene);
             selectedObjectId = preferred.HasValue && scene.GroupById(preferred.Value) != null ? preferred : null;
+            SyncSelectionSetWithActive();
             lightMoveBefore = null;
             lightMoveIndex = null;
             if (selectedLightIndex is int undoLight && (undoLight < 0 || undoLight >= scene.Lights.Count))
@@ -960,6 +1282,7 @@ internal sealed partial class ComposerSceneSession : IDisposable
             bool fullRendererInvalidation = editHistory.RedoRequiresFullRendererInvalidation;
             int? preferred = editHistory.Redo(scene);
             selectedObjectId = preferred.HasValue && scene.GroupById(preferred.Value) != null ? preferred : null;
+            SyncSelectionSetWithActive();
             lightMoveBefore = null;
             lightMoveIndex = null;
             if (selectedLightIndex is int redoLight && (redoLight < 0 || redoLight >= scene.Lights.Count))
@@ -1007,6 +1330,33 @@ internal sealed partial class ComposerSceneSession : IDisposable
         }
     }
 
+    /// <summary>
+    /// Duplicates every topmost object in the set and returns the new object
+    /// ids. Descendants of other selected objects are skipped because the
+    /// topmost clone already contains them.
+    /// </summary>
+    public IReadOnlyList<int> DuplicateObjects(IEnumerable<int> ids)
+    {
+        ArgumentNullException.ThrowIfNull(ids);
+        sceneGate.Wait();
+        try
+        {
+            List<int> created = new();
+            foreach (int id in TopmostSelectionCore(ids))
+                created.Add(scene.DuplicateGroup(id).Id);
+            if (created.Count == 0)
+                return created;
+            editHistory.Clear();
+            ScenePath = null;
+            InvalidateRendererCaches();
+            return created;
+        }
+        finally
+        {
+            sceneGate.Release();
+        }
+    }
+
     /// <summary>Deletes the given object and returns true when it existed.</summary>
     public bool DeleteObject(int id)
     {
@@ -1035,6 +1385,44 @@ internal sealed partial class ComposerSceneSession : IDisposable
         }
     }
 
+    /// <summary>Deletes every topmost object in the set. Returns how many were deleted.</summary>
+    public int DeleteObjects(IEnumerable<int> ids)
+    {
+        ArgumentNullException.ThrowIfNull(ids);
+        sceneGate.Wait();
+        try
+        {
+            IReadOnlyList<int> topmost = TopmostSelectionCore(ids);
+            int deleted = 0;
+            bool deletingSelection = false;
+            foreach (int id in topmost)
+            {
+                SceneObjectGroup? group = scene.GroupById(id);
+                if (group == null)
+                    continue;
+                if (!deletingSelection && selectedObjectIds.Count > 0 &&
+                    (selectedObjectIds.Contains(id) || selectedObjectIds.Any(group.ContainsDescendant)))
+                    deletingSelection = true;
+                scene.DeleteGroup(id);
+                deleted++;
+            }
+            if (deleted == 0)
+                return 0;
+            editHistory.Clear();
+            if (deletingSelection)
+                ClearSelectionState();
+            else
+                RebuildSelectionOverlayCache();
+            ScenePath = null;
+            InvalidateRendererCaches();
+            return deleted;
+        }
+        finally
+        {
+            sceneGate.Release();
+        }
+    }
+
     /// <summary>Moves the session camera to frame the given object.</summary>
     public bool FrameObject(int id)
     {
@@ -1045,6 +1433,51 @@ internal sealed partial class ComposerSceneSession : IDisposable
             if (group == null)
                 return false;
             Camera.Frame(group.GetWorldBounds(includeHidden: true));
+            return true;
+        }
+        finally
+        {
+            sceneGate.Release();
+        }
+    }
+
+    /// <summary>Moves the session camera to frame the union of the given objects.</summary>
+    public bool FrameObjects(IEnumerable<int> ids)
+    {
+        ArgumentNullException.ThrowIfNull(ids);
+        sceneGate.Wait();
+        try
+        {
+            bool hasBounds = false;
+            Vec3 min = Vec3.Zero;
+            Vec3 max = Vec3.Zero;
+            foreach (int id in ids.Distinct())
+            {
+                SceneObjectGroup? group = scene.GroupById(id);
+                if (group == null)
+                    continue;
+                Aabb bounds = group.GetWorldBounds(includeHidden: true);
+                if (!hasBounds)
+                {
+                    min = bounds.Min;
+                    max = bounds.Max;
+                    hasBounds = true;
+                }
+                else
+                {
+                    min = new Vec3(
+                        Math.Min(min.X, bounds.Min.X),
+                        Math.Min(min.Y, bounds.Min.Y),
+                        Math.Min(min.Z, bounds.Min.Z));
+                    max = new Vec3(
+                        Math.Max(max.X, bounds.Max.X),
+                        Math.Max(max.Y, bounds.Max.Y),
+                        Math.Max(max.Z, bounds.Max.Z));
+                }
+            }
+            if (!hasBounds)
+                return false;
+            Camera.Frame(new Aabb(min, max));
             return true;
         }
         finally
@@ -1208,9 +1641,11 @@ internal sealed partial class ComposerSceneSession : IDisposable
             }
             else if (TryGetSelectionOverlayForRender(out Aabb overlayBounds, out _))
             {
-                // Object mode uses the transform gizmo as the sole selection cue.
-                // Do not restore bounds or a sampled triangle wireframe when a drag
-                // finishes; those extra outlines obscure the shaded result.
+                // Object mode uses the transform gizmo as the sole cue for the
+                // active object. Do not restore bounds or a sampled triangle
+                // wireframe for it when a drag finishes; those extra outlines
+                // obscure the shaded result. Non-active multi-selection members
+                // have no gizmo, so they each get a plain bounds box instead.
                 ComposerOverlayRenderer.DrawSelection(
                     image,
                     camera,
@@ -1218,6 +1653,7 @@ internal sealed partial class ComposerSceneSession : IDisposable
                     selectedTriangles: null,
                     gizmoMode: gizmoMode,
                     drawBounds: false);
+                DrawMultiSelectionMemberBounds(image, camera);
             }
 
             if (showLightMarkers)
@@ -1304,6 +1740,25 @@ private static RenderImage RenderVulkanCompute(
             target.Position,
             target.Rotation,
             target.Scale);
+    }
+
+    /// <summary>Draws bounds boxes for non-active multi-selection members. The caller must hold the scene lock.</summary>
+    private void DrawMultiSelectionMemberBounds(RenderImage image, CameraDefinition camera)
+    {
+        if (selectedObjectIds.Count <= 1)
+            return;
+        foreach (int id in selectedObjectIds)
+        {
+            if (id == selectedObjectId)
+                continue;
+            SceneObjectGroup? group = scene.GroupById(id);
+            if (group == null)
+                continue;
+            Aabb bounds = group.GetWorldBounds(includeHidden: true);
+            if (!IsIdentityTransform(group.Position, group.Rotation, group.Scale))
+                bounds = TransformBounds(bounds, group);
+            ComposerOverlayRenderer.DrawSelectionBounds(image, camera, bounds);
+        }
     }
 
     /// <summary>Gets the selection bounds and triangles for rendering, applying any pending gizmo transform.</summary>
@@ -1409,6 +1864,7 @@ private static RenderImage RenderVulkanCompute(
     private void ClearSelectionState()
     {
         selectedObjectId = null;
+        selectedObjectIds.Clear();
         selectedLightIndex = null;
         lightMoveBefore = null;
         lightMoveIndex = null;

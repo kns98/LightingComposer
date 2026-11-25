@@ -33,8 +33,8 @@ internal sealed class ComposerDialogController : IDisposable
 
     /// <summary>Returns true when the primitive parameters window is open for the given object.</summary>
     public bool HasPrimitiveEditorFor(int objectId) => primitiveParametersWindow?.ObjectId == objectId;
-    /// <summary>Returns true when the material editor window is open for the given object.</summary>
-    public bool HasMaterialEditorFor(int objectId) => materialEditorWindow?.ObjectId == objectId;
+    /// <summary>Returns true when the material editor window targets exactly the given object ids.</summary>
+    public bool HasMaterialEditorForTargets(IEnumerable<int> ids) => materialEditorWindow?.TargetsMatch(ids) == true;
 
     /// <summary>Rebases the open primitive parameters window after an external transform.</summary>
     public void RebasePrimitiveAfterExternalTransform(int objectId)
@@ -119,9 +119,9 @@ internal sealed class ComposerDialogController : IDisposable
         setStatus($"Editing {model.PrimitiveName} parameters. All length values are meters (m).");
     }
 
-    /// <summary>Opens the material editor window for the given object, reusing the open window when it already targets that object.</summary>
+    /// <summary>Opens the material editor window for the given target objects, reusing the open window when it already targets them.</summary>
     public void OpenMaterialEditor(
-        int objectId,
+        IReadOnlyList<int> targetIds,
         Action forceObjectMode,
         Action<string> setStatus,
         Action markModified,
@@ -130,9 +130,13 @@ internal sealed class ComposerDialogController : IDisposable
         Action refreshHistory,
         Action<int> refreshTree)
     {
+        int[] ordered = targetIds?.Distinct().ToArray() ?? Array.Empty<int>();
+        if (ordered.Length == 0)
+            return;
+        int objectId = ordered[0];
         if (materialEditorWindow != null)
         {
-            if (materialEditorWindow.ObjectId == objectId)
+            if (materialEditorWindow.TargetsMatch(ordered))
             {
                 materialEditorWindow.Activate();
                 return;
@@ -166,10 +170,13 @@ internal sealed class ComposerDialogController : IDisposable
             {
                 if (ReferenceEquals(materialEditorWindow, dialog))
                     materialEditorWindow = null;
-            });
+            },
+            targetIds: ordered);
         materialEditorWindow = dialog;
         dialog.Show(owner);
-        setStatus("Material editor opened. Presets, direct PBR properties, exact RGB/hex color, and image textures apply to the selected object.");
+        setStatus(ordered.Length > 1
+            ? $"Material editor opened for {ordered.Length} objects. Presets, direct PBR properties, exact RGB/hex color, and image textures apply to every selected object."
+            : "Material editor opened. Presets, direct PBR properties, exact RGB/hex color, and image textures apply to the selected object.");
     }
 
 

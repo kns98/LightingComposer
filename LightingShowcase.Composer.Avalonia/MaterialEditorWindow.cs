@@ -38,6 +38,7 @@ internal sealed class MaterialEditorWindow : Window
 
     private readonly ComposerSceneSession session;
     private readonly int objectId;
+    private readonly int[] targetIds;
     private readonly Action onMaterialChanged;
     private readonly Action onClosed;
     private readonly ComboBox presetBox;
@@ -47,6 +48,7 @@ internal sealed class MaterialEditorWindow : Window
     private readonly TextBox greenBox;
     private readonly TextBox blueBox;
     private readonly Border colorSwatch;
+    private ColorSpectrumPicker? spectrumPicker;
 
     private readonly TextBox metallicBox;
     private readonly TextBox roughnessBox;
@@ -95,19 +97,33 @@ internal sealed class MaterialEditorWindow : Window
 
     public int ObjectId => objectId;
 
+    /// <summary>Returns every object id this editor applies changes to, primary first.</summary>
+    public IReadOnlyList<int> TargetObjectIds => targetIds;
+
+    /// <summary>Returns true when this editor already targets exactly the given object ids.</summary>
+    public bool TargetsMatch(IEnumerable<int> ids) =>
+        targetIds.Length == ids.Count() && targetIds.All(ids.Contains);
+
     /// <summary>Creates a modeless material editor window for the given material model.</summary>
     public MaterialEditorWindow(
         ComposerSceneSession session,
         ComposerMaterialModel model,
         Action onMaterialChanged,
-        Action onClosed)
+        Action onClosed,
+        IEnumerable<int>? targetIds = null)
     {
         this.session = session ?? throw new ArgumentNullException(nameof(session));
         this.onMaterialChanged = onMaterialChanged ?? (() => { });
         this.onClosed = onClosed ?? (() => { });
         objectId = model.ObjectId;
+        int[] requested = targetIds?.Distinct().ToArray() ?? Array.Empty<int>();
+        this.targetIds = requested.Length == 0
+            ? new[] { objectId }
+            : requested.Contains(objectId)
+                ? new[] { objectId }.Concat(requested.Where(id => id != objectId)).ToArray()
+                : new[] { objectId }.Concat(requested).ToArray();
 
-        Title = $"Material — {model.ObjectName}";
+        Title = TargetTitle(model.ObjectName);
         Width = 620;
         Height = 900;
         MinWidth = 500;
@@ -205,7 +221,9 @@ internal sealed class MaterialEditorWindow : Window
         materialDetails = new TextBlock { TextWrapping = TextWrapping.Wrap, Opacity = 0.74, FontSize = 12 };
         statusText = new TextBlock
         {
-            Text = "Material changes apply to the selected object and its child meshes.",
+            Text = this.targetIds.Length > 1
+                ? $"Material changes apply to all {this.targetIds.Length} selected objects. Shown values come from {model.ObjectName}."
+                : "Material changes apply to the selected object and its child meshes.",
             TextWrapping = TextWrapping.Wrap,
             Opacity = 0.76,
             FontSize = 12
@@ -230,10 +248,73 @@ internal sealed class MaterialEditorWindow : Window
                 SetColorEditors(color);
         };
 
+        // Tooltips go on before layout so row builders can mirror each editor
+        // tooltip onto its label. The spectrum picker is tipped inline where
+        // it is created because it does not exist until BuildContent runs.
+        ApplyTooltips();
         Content = BuildContent();
         LoadModel(model);
         UpdatePresetSummary();
         Closed += (_, _) => this.onClosed();
+    }
+
+    /// <summary>Sets a tooltip on the given control and returns it for inline use.</summary>
+    private static T Tip<T>(T control, string text) where T : Control
+    {
+        ToolTip.SetTip(control, text);
+        return control;
+    }
+
+    /// <summary>Attaches detailed help tooltips to every editor control.</summary>
+    private void ApplyTooltips()
+    {
+        Tip(presetBox, "Library preset picker. Choose a starting material (metal, plastic, glass, …) and press Apply preset. The summary line shows its metallic and roughness values. Presets rewrite PBR response values but preserve the base color and assigned texture maps.");
+        Tip(hexBox, "Base color as a hex triplet such as #C8A060. Press Enter or leave the box to sync the RGB editors and pickers below, then press Apply color to write it to the material.");
+        Tip(redBox, "Red channel 0–255. Syncs with the hex box and pickers; press Apply color to write the combined color.");
+        Tip(greenBox, "Green channel 0–255. Syncs with the hex box and pickers; press Apply color to write the combined color.");
+        Tip(blueBox, "Blue channel 0–255. Syncs with the hex box and pickers; press Apply color to write the combined color.");
+        Tip(colorSwatch, "Preview of the base color currently entered. It updates as you type or pick; press Apply color to write it to the material.");
+        Tip(metallicBox, "Metallic factor 0–1. 0 behaves as a dielectric (plastic, wood) with colored diffuse response; 1 behaves as a metal with tinted reflections and almost no diffuse. Values between blend the two.");
+        Tip(roughnessBox, "Surface roughness 0.02–1. Low values give sharp mirror-like reflections; high values spread reflections into a soft matte response. The 0.02 minimum keeps specular math stable.");
+        Tip(transmissionBox, "Transmission factor 0–1. 0 is fully opaque; 1 passes light through the surface, using thickness, attenuation, and IOR for glass-like refraction.");
+        Tip(opacityBox, "Opacity (alpha) 0–1. 1 is fully opaque; lower values fade the surface when Alpha mode is Blend, or cut pixels out when it is Mask.");
+        Tip(iorBox, "Index of refraction 1–2.333. Controls how much transmitted light bends: 1 means no bending, 1.5 is about glass, and higher values bend more. Only affects transmissive materials.");
+        Tip(emissionBox, "Emission strength 0–100000. 0 emits no light; higher values make the surface glow with the emission color and add light to the render.");
+        Tip(emissionColorBox, "Emission color as a hex triplet such as #FFFFFF. Tints the light the surface emits; emission strength scales its brightness.");
+        Tip(thicknessBox, "Refraction thickness in meters (0 or more). Simulates how far transmitted light travels inside the material for absorption and volume tinting.");
+        Tip(attenuationColorBox, "Attenuation color as a hex triplet such as #FFFFFF. Tints transmitted light over distance — the deep color seen through thick glass or liquid.");
+        Tip(attenuationDistanceBox, "Attenuation distance in meters (0 or more). Distance over which transmitted light falls toward the attenuation color; larger values absorb less.");
+        Tip(clearcoatBox, "Clearcoat layer strength 0–1. Adds a glossy lacquer coat over the base material, like car paint or polished wood.");
+        Tip(clearcoatRoughnessBox, "Clearcoat layer roughness 0–1. Low values give a sharp showroom shine on the coat; high values dull it.");
+        Tip(normalScaleBox, "Normal-map strength −8–8. Scales the bump detail sampled from the normal map; negative values invert the relief.");
+        Tip(occlusionStrengthBox, "Ambient-occlusion strength 0–1. Scales how much the occlusion map darkens crevices and contact areas.");
+        Tip(specularBox, "Specular intensity 0–1. Scales dielectric reflectivity; use together with specular color for fine highlight control.");
+        Tip(specularColorBox, "Specular tint as a hex triplet such as #FFFFFF. Tints dielectric reflections; metals ignore it in favor of the base color.");
+        Tip(sheenColorBox, "Sheen tint as a hex triplet. Colors the soft fabric-like retroreflection layer on cloth, velvet, and fuzzy surfaces.");
+        Tip(sheenRoughnessBox, "Sheen roughness 0–1. Low values give a tight silky highlight; high values spread the sheen broadly.");
+        Tip(anisotropyBox, "Anisotropy strength 0–1. Stretches highlights along one direction for brushed metal, hair, and satin.");
+        Tip(anisotropyRotationBox, "Anisotropy direction in radians. Rotates the stretched-highlight direction around the surface normal.");
+        Tip(iridescenceBox, "Iridescence strength 0–1. Adds thin-film rainbow interference like soap bubbles and oil slicks.");
+        Tip(iridescenceIorBox, "Iridescence film IOR (1 or more). Refractive index of the thin film; shifts which rainbow hues appear.");
+        Tip(iridescenceThicknessMinBox, "Minimum film thickness in nanometers. Thinner films shift the interference toward violet and blue.");
+        Tip(iridescenceThicknessMaxBox, "Maximum film thickness in nanometers. Thicker films shift the interference toward red; min and max define the range across the surface.");
+        Tip(alphaModeBox, "Alpha mode. Opaque ignores opacity, Mask discards pixels below the cutoff, and Blend fades smoothly using opacity.");
+        Tip(alphaCutoffBox, "Alpha cutoff 0–1 for Mask mode. Pixels with opacity below this value are discarded; used for cutout foliage and grilles.");
+        Tip(doubleSidedBox, "Render both sides. When checked, back faces are drawn too, so open or single-sided geometry stays visible from behind.");
+        foreach ((MaterialTextureSlot slot, TextBox pathBox) in texturePathBoxes)
+            Tip(pathBox, $"{ComposerSceneSession.TextureSlotLabel(slot)} texture display. Shows the image file currently assigned to this slot, or the empty watermark when none is assigned. Use Browse to assign one and Clear to remove it.");
+        Tip(mappingSlotBox, "Mapping target. Chooses which texture slot the UV source, tile size, offset, scale, rotation, and wrap modes below apply to.");
+        Tip(projectionModeBox, "UV source. Authored/current UVs keep the coordinates stored on the mesh; box projection regenerates the shared UV channel with real-world meter tiling.");
+        Tip(uvSetBox, "UV set. Composer currently keeps one UV channel per mesh; per-face editing and multiple stored sets belong in the future UV Editor.");
+        Tip(tileMetersBox, "Box tile size in meters. World-space size of one texture repeat when box projection is active; smaller values repeat the image more often.");
+        Tip(offsetUBox, "Offset U. Shifts the image along the U axis in UV units; 1.0 moves a full tile.");
+        Tip(offsetVBox, "Offset V. Shifts the image along the V axis in UV units; 1.0 moves a full tile.");
+        Tip(scaleUBox, "Scale U. Multiplies U coordinates; values above 1 repeat the image and values below 1 zoom into it. Must be finite and non-zero.");
+        Tip(scaleVBox, "Scale V. Multiplies V coordinates; values above 1 repeat the image and values below 1 zoom into it. Must be finite and non-zero.");
+        Tip(rotationBox, "Rotation in degrees. Spins the target slot image around the UV origin.");
+        Tip(wrapUBox, "Wrap U. Chooses what happens outside 0–1: Repeat tiles the image, mirrored variants flip each tile, Clamp stretches the edge pixels.");
+        Tip(wrapVBox, "Wrap V. Chooses what happens outside 0–1: Repeat tiles the image, mirrored variants flip each tile, Clamp stretches the edge pixels.");
+        Tip(materialDetails, "Current material summary for the primary object: base color, key PBR values, and how many texture maps are assigned.");
     }
 
     /// <summary>Reloads the editor controls from the current scene material.</summary>
@@ -269,7 +350,7 @@ internal sealed class MaterialEditorWindow : Window
         stack.Children.Add(Heading("Library preset"));
         Grid presetRow = new() { ColumnDefinitions = new ColumnDefinitions("*,Auto"), ColumnSpacing = 8 };
         presetRow.Children.Add(presetBox);
-        Button applyPreset = NewButton("Apply preset");
+        Button applyPreset = Tip(NewButton("Apply preset"), "Applies the selected library preset to every targeted object. Base color and texture maps are preserved; only the PBR response values change. One undo step covers all targeted objects.");
         applyPreset.Click += async (_, _) => await ApplyPresetAsync();
         presetRow.Children.Add(applyPreset);
         Grid.SetColumn(applyPreset, 1);
@@ -281,7 +362,7 @@ internal sealed class MaterialEditorWindow : Window
         colorTop.Children.Add(colorSwatch);
         colorTop.Children.Add(hexBox);
         Grid.SetColumn(hexBox, 1);
-        Button applyColor = NewButton("Apply color");
+        Button applyColor = Tip(NewButton("Apply color"), "Writes the entered base color to every targeted object, replacing each object's previous base color. Textures and PBR properties are untouched. One undo step covers all targeted objects.");
         applyColor.HorizontalAlignment = HorizontalAlignment.Right;
         applyColor.Click += async (_, _) => await ApplyColorAsync();
         colorTop.Children.Add(applyColor);
@@ -293,6 +374,13 @@ internal sealed class MaterialEditorWindow : Window
         AddRgb(rgb, "G", greenBox, 2);
         AddRgb(rgb, "B", blueBox, 4);
         stack.Children.Add(rgb);
+        spectrumPicker = Tip(new ColorSpectrumPicker { Name = "MaterialSpectrum" }, "Spectrum color picker. Click or drag to choose a hue; the choice fills the hex and RGB editors above. Press Apply color to write it to the material.");
+        spectrumPicker.ColorPicked += color =>
+            SetColorEditors(new Vec3(color.R / 255.0, color.G / 255.0, color.B / 255.0));
+        stack.Children.Add(spectrumPicker);
+        ColorPresetPicker presetPicker = Tip(new ColorPresetPicker { Name = "MaterialPresets" }, "Named color preset library. Click a swatch to load its color into the hex and RGB editors above, then press Apply color to write it to the material.");
+        presetPicker.PresetPicked += preset => SetColorEditors(preset.Color);
+        stack.Children.Add(presetPicker);
 
         stack.Children.Add(Heading("Direct material properties"));
         stack.Children.Add(new TextBlock
@@ -318,7 +406,7 @@ internal sealed class MaterialEditorWindow : Window
         stack.Children.Add(TwoPropertyRow("Iridescence min (nm)", iridescenceThicknessMinBox, "Iridescence max (nm)", iridescenceThicknessMaxBox));
         stack.Children.Add(TwoPropertyRow("Alpha mode", alphaModeBox, "Alpha cutoff (0–1)", alphaCutoffBox));
         stack.Children.Add(doubleSidedBox);
-        Button applyProperties = NewButton("Apply properties");
+        Button applyProperties = Tip(NewButton("Apply properties"), "Writes every direct property above to all targeted objects, preserving each object's base color and texture maps. One undo step covers all targeted objects.");
         applyProperties.HorizontalAlignment = HorizontalAlignment.Right;
         applyProperties.Click += async (_, _) => await ApplyPropertiesAsync();
         stack.Children.Add(applyProperties);
@@ -343,7 +431,7 @@ internal sealed class MaterialEditorWindow : Window
         stack.Children.Add(TwoPropertyRow("Scale U", scaleUBox, "Scale V", scaleVBox));
         stack.Children.Add(LabeledControl("Rotation (degrees)", rotationBox));
         stack.Children.Add(TwoPropertyRow("Wrap U", wrapUBox, "Wrap V", wrapVBox));
-        Button applyMapping = NewButton("Apply mapping");
+        Button applyMapping = Tip(NewButton("Apply mapping"), "Applies the UV source plus offset, scale, rotation, and wrap modes to the target slot on every targeted object. One undo step covers all targeted objects.");
         applyMapping.HorizontalAlignment = HorizontalAlignment.Right;
         applyMapping.Click += async (_, _) => await ApplyTextureMappingAsync();
         stack.Children.Add(applyMapping);
@@ -359,7 +447,7 @@ internal sealed class MaterialEditorWindow : Window
         stack.Children.Add(materialDetails);
         stack.Children.Add(statusText);
 
-        Button close = NewButton("Close");
+        Button close = Tip(NewButton("Close"), "Closes the material editor. Changes were already applied when you pressed each Apply button; nothing is lost by closing.");
         close.HorizontalAlignment = HorizontalAlignment.Right;
         close.Click += (_, _) => Close();
         stack.Children.Add(close);
@@ -381,7 +469,7 @@ internal sealed class MaterialEditorWindow : Window
         if (presetBox.SelectedItem is not MaterialPreset preset)
             return;
         await RunEditAsync(
-            () => session.ApplyMaterialPreset(objectId, preset),
+            () => session.ApplyMaterialPreset(targetIds, preset) > 0,
             $"Applied {preset.Category} — {preset.Name}. Direct-property fields were refreshed; assigned textures were preserved.");
     }
 
@@ -393,7 +481,7 @@ internal sealed class MaterialEditorWindow : Window
             statusText.Text = "Enter RGB values from 0 to 255 or a hex color such as #C8A060.";
             return;
         }
-        await RunEditAsync(() => session.SetObjectBaseColor(objectId, color), $"Base color set to {ToHex(color)}.");
+        await RunEditAsync(() => session.SetObjectBaseColor(targetIds, color) > 0, $"Base color set to {ToHex(color)}.");
     }
 
     /// <summary>Applies the entered PBR properties to the edited object.</summary>
@@ -406,7 +494,7 @@ internal sealed class MaterialEditorWindow : Window
         }
 
         await RunEditAsync(
-            () => session.SetObjectMaterialProperties(objectId, properties!),
+            () => session.SetObjectMaterialProperties(targetIds, properties!) > 0,
             "Direct material properties applied. Base color and texture maps were preserved.");
     }
 
@@ -446,7 +534,7 @@ internal sealed class MaterialEditorWindow : Window
 
         bool boxProjection = SelectedProjectionMode;
         await RunEditAsync(
-            () => session.SetObjectTexture(objectId, slot, path, tileMeters, boxProjection),
+            () => session.SetObjectTexture(targetIds, slot, path, tileMeters, boxProjection) > 0,
             boxProjection
                 ? $"{ComposerSceneSession.TextureSlotLabel(slot)} texture {Path.GetFileName(path)} applied with {tileMeters:0.######} m box tiling."
                 : $"{ComposerSceneSession.TextureSlotLabel(slot)} texture {Path.GetFileName(path)} applied using current/authored UVs.");
@@ -456,7 +544,7 @@ internal sealed class MaterialEditorWindow : Window
     private async Task ClearTextureAsync(MaterialTextureSlot slot)
     {
         await RunEditAsync(
-            () => session.ClearObjectTexture(objectId, slot),
+            () => session.ClearObjectTexture(targetIds, slot) > 0,
             $"{ComposerSceneSession.TextureSlotLabel(slot)} texture cleared.");
     }
 
@@ -503,7 +591,7 @@ internal sealed class MaterialEditorWindow : Window
         bool boxProjection = SelectedProjectionMode;
         await RunEditAsync(
             () => session.SetObjectTextureMappingAndProjection(
-                objectId,
+                targetIds,
                 choice.Slot,
                 tileMeters,
                 boxProjection,
@@ -513,7 +601,7 @@ internal sealed class MaterialEditorWindow : Window
                 scaleV,
                 rotationDegrees,
                 wrapU,
-                wrapV),
+                wrapV) > 0,
             $"{choice.Label} mapping applied: offset ({offsetU:0.###}, {offsetV:0.###}), scale ({scaleU:0.###}, {scaleV:0.###}), rotation {rotationDegrees:0.###}°."
         );
     }
@@ -544,11 +632,17 @@ internal sealed class MaterialEditorWindow : Window
         }
     }
 
+    /// <summary>Builds the window title for the primary object and any extra targets.</summary>
+    private string TargetTitle(string primaryName) =>
+        targetIds.Length > 1 ? $"Material — {primaryName} (+{targetIds.Length - 1} more)" : $"Material — {primaryName}";
+
     /// <summary>Loads the editor controls and material summary from the given material model.</summary>
     private void LoadModel(ComposerMaterialModel model)
     {
-        Title = $"Material — {model.ObjectName}";
+        Title = TargetTitle(model.ObjectName);
         SetColorEditors(model.BaseColor);
+        if (spectrumPicker != null)
+            spectrumPicker.Color = Color.FromRgb(ToByte(model.BaseColor.X), ToByte(model.BaseColor.Y), ToByte(model.BaseColor.Z));
         metallicBox.Text = Format(model.Metallic);
         roughnessBox.Text = Format(model.Roughness);
         transmissionBox.Text = Format(model.Transmission);
@@ -617,19 +711,21 @@ internal sealed class MaterialEditorWindow : Window
             ColumnDefinitions = new ColumnDefinitions("150,*,Auto,Auto"),
             ColumnSpacing = 8
         };
-        row.Children.Add(new TextBlock
+        TextBox pathBox = texturePathBoxes[slot];
+        TextBlock slotLabel = new()
         {
             Text = ComposerSceneSession.TextureSlotLabel(slot),
             VerticalAlignment = VerticalAlignment.Center
-        });
-        TextBox pathBox = texturePathBoxes[slot];
+        };
+        MirrorTip(pathBox, slotLabel);
+        row.Children.Add(slotLabel);
         row.Children.Add(pathBox);
         Grid.SetColumn(pathBox, 1);
-        Button browse = NewButton("Browse…");
+        Button browse = Tip(NewButton("Browse…"), $"Assigns an image file to the {ComposerSceneSession.TextureSlotLabel(slot)} slot on every targeted object. The image is decoded once and shared; later per-slot mapping edits stay independent per object.");
         browse.Click += async (_, _) => await BrowseTextureAsync(slot);
         row.Children.Add(browse);
         Grid.SetColumn(browse, 2);
-        Button clear = NewButton("Clear");
+        Button clear = Tip(NewButton("Clear"), $"Removes the {ComposerSceneSession.TextureSlotLabel(slot)} texture from every targeted object, returning the slot to a plain value.");
         clear.Click += async (_, _) => await ClearTextureAsync(slot);
         row.Children.Add(clear);
         Grid.SetColumn(clear, 3);
@@ -841,10 +937,19 @@ internal sealed class MaterialEditorWindow : Window
     private static void AddRgb(Grid grid, string label, Control editor, int column)
     {
         TextBlock text = new() { Text = label, VerticalAlignment = VerticalAlignment.Center };
+        MirrorTip(editor, text);
         grid.Children.Add(text);
         Grid.SetColumn(text, column);
         grid.Children.Add(editor);
         Grid.SetColumn(editor, column + 1);
+    }
+
+    /// <summary>Copies the editor tooltip onto its label so hovering either shows the same help.</summary>
+    private static void MirrorTip(Control editor, TextBlock label)
+    {
+        object? tip = ToolTip.GetTip(editor);
+        if (tip != null)
+            ToolTip.SetTip(label, tip);
     }
 
     /// <summary>Creates a section heading with the given text.</summary>
@@ -859,7 +964,9 @@ internal sealed class MaterialEditorWindow : Window
     private static Control LabeledControl(string label, Control control)
     {
         Grid row = new() { ColumnDefinitions = new ColumnDefinitions("*,Auto"), ColumnSpacing = 10 };
-        row.Children.Add(new TextBlock { Text = label, VerticalAlignment = VerticalAlignment.Center });
+        TextBlock text = new() { Text = label, VerticalAlignment = VerticalAlignment.Center };
+        MirrorTip(control, text);
+        row.Children.Add(text);
         row.Children.Add(control);
         Grid.SetColumn(control, 1);
         return row;
@@ -873,10 +980,13 @@ internal sealed class MaterialEditorWindow : Window
             ColumnDefinitions = new ColumnDefinitions("*,Auto,16,*,Auto"),
             ColumnSpacing = 8
         };
-        row.Children.Add(new TextBlock { Text = leftLabel, VerticalAlignment = VerticalAlignment.Center });
+        TextBlock leftText = new() { Text = leftLabel, VerticalAlignment = VerticalAlignment.Center };
+        MirrorTip(left, leftText);
+        row.Children.Add(leftText);
         row.Children.Add(left);
         Grid.SetColumn(left, 1);
         TextBlock rightText = new() { Text = rightLabel, VerticalAlignment = VerticalAlignment.Center };
+        MirrorTip(right, rightText);
         row.Children.Add(rightText);
         Grid.SetColumn(rightText, 3);
         row.Children.Add(right);

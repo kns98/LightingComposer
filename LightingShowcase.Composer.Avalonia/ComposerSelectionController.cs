@@ -180,10 +180,15 @@ internal sealed class ComposerSelectionController
         trianglePageOffsets.Remove(id);
     }
 
-    /// <summary>Frames the active object in the viewport and requests a render.</summary>
+    /// <summary>Frames the active object or the whole multi-selection in the viewport and requests a render.</summary>
     public void FrameSelected()
     {
-        if (selectedObjectId is not int id || !session.FrameObject(id))
+        if (selectedObjectId is not int id)
+            return;
+        bool framed = selectedObjectIds.Count > 1
+            ? session.FrameObjects(selectedObjectIds)
+            : session.FrameObject(id);
+        if (!framed)
             return;
         _ = renderer.RequestRenderAsync(interactive: false);
     }
@@ -233,7 +238,7 @@ internal sealed class ComposerSelectionController
             {
                 selectedTriangleGroupId = null;
                 selectedTriangleIndex = null;
-                session.SetSelectedObject(selectedObjectId);
+                session.SetSelectedObjects(selectedObjectIds, selectedObjectId);
             }
         }
 
@@ -448,10 +453,14 @@ internal sealed class ComposerSelectionController
     /// <summary>Enables or disables inspector controls and action buttons for the current selection.</summary>
     public void SetInspectorEnabled(bool enabled)
     {
-        nameBox.IsEnabled = enabled;
+        // Renaming and procedural parameters stay single-object: a shared name
+        // box would overwrite every selected name with the active one, and two
+        // primitives rarely share editable dimensions.
+        bool singleSelection = selectedObjectIds.Count <= 1;
+        nameBox.IsEnabled = enabled && singleSelection;
         visibleBox.IsEnabled = enabled;
-        parametersButton.IsEnabled = enabled && selectedObjectId is int parameterId && session.CanEditPrimitiveParameters(parameterId);
-        materialButton.IsEnabled = enabled && selectedObjectId is int materialId && session.GetMaterialModel(materialId) != null;
+        parametersButton.IsEnabled = enabled && singleSelection && selectedObjectId is int parameterId && session.CanEditPrimitiveParameters(parameterId);
+        materialButton.IsEnabled = enabled && AllSelectedHaveMaterials();
         foreach (TextBox box in new[]
                  {
                      positionX, positionY, positionZ,
@@ -462,7 +471,7 @@ internal sealed class ComposerSelectionController
         applyButton.IsEnabled = enabled;
         frameButton.IsEnabled = enabled;
         resetTransformButton.IsEnabled = enabled;
-        duplicateButton.IsEnabled = enabled && selectedObjectIds.Count <= 1;
+        duplicateButton.IsEnabled = enabled;
         groupButton.IsEnabled = enabled && !renderer.IsRendering && selectedObjectIds.Count >= 2 && session.CanGroupObjects(selectedObjectIds);
         IEnumerable<int> ungroupTargets = selectedObjectIds.Count > 0
             ? selectedObjectIds
@@ -470,6 +479,19 @@ internal sealed class ComposerSelectionController
         ungroupButton.IsEnabled = enabled && session.CanUngroupObjects(ungroupTargets);
         deleteButton.IsEnabled = enabled;
         menu.SyncEnabledState();
+    }
+
+    /// <summary>Returns true when every selected object exposes an editable material model.</summary>
+    private bool AllSelectedHaveMaterials()
+    {
+        if (selectedObjectId is not int _ || selectedObjectIds.Count == 0)
+            return false;
+        foreach (int id in selectedObjectIds)
+        {
+            if (session.GetMaterialModel(id) == null)
+                return false;
+        }
+        return true;
     }
 
     /// <summary>Clears viewport selection and refreshes the tree and status text.</summary>
@@ -523,11 +545,11 @@ internal sealed class ComposerSelectionController
 
         if (!dialogs.HasPrimitiveEditorFor(activeId))
             dialogs.ClosePrimitiveParameters();
-        if (!dialogs.HasMaterialEditorFor(activeId))
+        if (!dialogs.HasMaterialEditorForTargets(selectedObjectIds))
             dialogs.CloseMaterialEditor();
         selectMode(ComposerSelectionMode.Object);
         ClearVirtualTriangleSelection();
-        session.SetSelectedObject(activeId);
+        session.SetSelectedObjects(selectedObjectIds, activeId);
         dialogs.RefreshLightEditor();
         RefreshObjectTree(activeId);
         statusText.Text = selectedObjectIds.Count > 1

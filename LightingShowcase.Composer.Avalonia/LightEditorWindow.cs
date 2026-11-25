@@ -44,6 +44,7 @@ internal sealed class LightEditorWindow : Window
     private readonly ComboBox aimObjectBox;
     private readonly Button aimObjectButton;
     private readonly TextBox colorHexBox;
+    private ColorSpectrumPicker? spectrumPicker;
     private readonly TextBox intensityBox;
     private readonly TextBox rangeBox;
     private readonly TextBox innerConeBox;
@@ -252,6 +253,13 @@ internal sealed class LightEditorWindow : Window
         stack.Children.Add(Labeled("Aim at object", aimRow));
 
         stack.Children.Add(Labeled("Color", colorHexBox));
+        spectrumPicker = new ColorSpectrumPicker { Name = "LightSpectrum" };
+        spectrumPicker.ColorPicked += color =>
+            colorHexBox.Text = ToHex(new Vec3(color.R / 255.0, color.G / 255.0, color.B / 255.0));
+        stack.Children.Add(spectrumPicker);
+        ColorPresetPicker presetPicker = new() { Name = "LightPresets" };
+        presetPicker.PresetPicked += preset => colorHexBox.Text = ToHex(preset.Color);
+        stack.Children.Add(presetPicker);
         stack.Children.Add(Labeled("Intensity", intensityBox));
         stack.Children.Add(Labeled("Range (m; 0 = unlimited)", rangeBox));
         stack.Children.Add(Heading("Spot cone (degrees)"));
@@ -447,6 +455,8 @@ internal sealed class LightEditorWindow : Window
             SetVec(positionX, positionY, positionZ, Vec3.Zero);
             SetVec(directionX, directionY, directionZ, new Vec3(0.0, -1.0, 0.0));
             colorHexBox.Text = "#FFFFFF";
+            if (spectrumPicker != null)
+                spectrumPicker.Color = Color.FromRgb(255, 255, 255);
             intensityBox.Text = "0";
             rangeBox.Text = "0";
             innerConeBox.Text = "0";
@@ -465,6 +475,11 @@ internal sealed class LightEditorWindow : Window
         Vec3 displayedDirection = NormalizeDirectionForEditor(model.Direction, model.Kind);
         SetVec(directionX, directionY, directionZ, displayedDirection);
         colorHexBox.Text = ToHex(model.Color);
+        if (spectrumPicker != null)
+            spectrumPicker.Color = Color.FromRgb(
+                (byte)Math.Clamp((int)Math.Round(model.Color.X * 255.0), 0, 255),
+                (byte)Math.Clamp((int)Math.Round(model.Color.Y * 255.0), 0, 255),
+                (byte)Math.Clamp((int)Math.Round(model.Color.Z * 255.0), 0, 255));
         intensityBox.Text = Format(model.Intensity);
         rangeBox.Text = Format(model.Range);
         innerConeBox.Text = Format(model.InnerConeAngle * 180.0 / Math.PI);

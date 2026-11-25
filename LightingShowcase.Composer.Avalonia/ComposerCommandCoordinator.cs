@@ -419,22 +419,29 @@ internal sealed class ComposerCommandCoordinator
         }
     }
 
-    /// <summary>Duplicates the active object and refreshes the tree and render.</summary>
+    /// <summary>Duplicates the selected objects and selects the new copies.</summary>
     public async Task DuplicateSelectedAsync()
     {
         dialogs.CloseEditors();
         if (selection.ActiveObjectId is not int id)
             return;
 
+        int[] ids = selection.SelectedObjectIds.Count > 0 ? selection.SelectedObjectIds.ToArray() : new[] { id };
         renderer.CancelCurrentRender();
-        setBusy(true, "Duplicating object…");
+        setBusy(true, ids.Length > 1 ? $"Duplicating {ids.Length} objects…" : "Duplicating object…");
         try
         {
-            int? duplicateId = await sceneCommands.DuplicateAsync(id);
+            IReadOnlyList<int> duplicateIds = ids.Length > 1
+                ? await sceneCommands.DuplicateManyAsync(ids)
+                : await DuplicateSingleAsListAsync(ids[0]);
             pathText.Text = "Untitled composition (modified)";
             selection.ClearVirtualTriangleSelection();
-            selection.RefreshObjectTree(duplicateId);
-            statusText.Text = $"Duplicated object — {session.ObjectCount:N0} objects, {session.TriangleCount:N0} triangles.";
+            if (duplicateIds.Count > 0)
+                selection.SetMultipleSelection(duplicateIds, duplicateIds[0]);
+            selection.RefreshObjectTree(duplicateIds.Count > 0 ? duplicateIds[0] : null);
+            statusText.Text = duplicateIds.Count > 1
+                ? $"Duplicated {duplicateIds.Count} objects — {session.ObjectCount:N0} objects, {session.TriangleCount:N0} triangles."
+                : $"Duplicated object — {session.ObjectCount:N0} objects, {session.TriangleCount:N0} triangles.";
             await renderer.RequestRenderAsync(interactive: false);
         }
         catch (Exception ex)
@@ -447,19 +454,31 @@ internal sealed class ComposerCommandCoordinator
         }
     }
 
-    /// <summary>Deletes the active object and refreshes the tree and render.</summary>
+    /// <summary>Duplicates one object and returns its new id as a list.</summary>
+    private async Task<IReadOnlyList<int>> DuplicateSingleAsListAsync(int id)
+    {
+        int? duplicateId = await sceneCommands.DuplicateAsync(id);
+        return duplicateId.HasValue ? new[] { duplicateId.Value } : Array.Empty<int>();
+    }
+
+    /// <summary>Deletes the selected objects and refreshes the tree and render.</summary>
     public async Task DeleteSelectedAsync()
     {
         dialogs.CloseEditors();
         if (selection.ActiveObjectId is not int id)
             return;
 
+        int[] ids = selection.SelectedObjectIds.Count > 0 ? selection.SelectedObjectIds.ToArray() : new[] { id };
         renderer.CancelCurrentRender();
-        await sceneCommands.DeleteAsync(id);
+        int deleted = ids.Length > 1
+            ? await sceneCommands.DeleteManyAsync(ids)
+            : (await sceneCommands.DeleteAsync(ids[0]) ? 1 : 0);
         selection.SetSingleSelection(null);
         pathText.Text = "Untitled composition (modified)";
         selection.RefreshObjectTree();
-        statusText.Text = $"Deleted object — {session.ObjectCount:N0} objects, {session.TriangleCount:N0} triangles.";
+        statusText.Text = deleted > 1
+            ? $"Deleted {deleted} objects — {session.ObjectCount:N0} objects, {session.TriangleCount:N0} triangles."
+            : $"Deleted object — {session.ObjectCount:N0} objects, {session.TriangleCount:N0} triangles.";
         if (session.HasRenderableScene)
             await renderer.RequestRenderAsync(interactive: false);
         else

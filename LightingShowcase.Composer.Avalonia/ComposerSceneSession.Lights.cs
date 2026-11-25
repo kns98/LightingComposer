@@ -101,6 +101,7 @@ internal sealed partial class ComposerSceneSession
             if (normalized.HasValue)
             {
                 selectedObjectId = null;
+                selectedObjectIds.Clear();
                 selectedTriangleGroupId = null;
                 selectedTriangleIndex = null;
                 selectedMeshSelection = null;
@@ -173,6 +174,7 @@ internal sealed partial class ComposerSceneSession
 
             selectedLightIndex = scene.Lights.Count - 1;
             selectedObjectId = null;
+            selectedObjectIds.Clear();
             RebuildSelectionOverlayCache();
             CommitLightCollectionEdit($"Add {kind.ToString().ToLowerInvariant()} light", before);
             return selectedLightIndex.Value;

@@ -20,11 +20,29 @@ namespace LightingShowcase.Composer;
 /// </summary>
 internal sealed class ComposerTransformController
 {
+    private sealed class GizmoDragTarget
+    {
+        /// <summary>Captures one drag target with its starting transform.</summary>
+        public GizmoDragTarget(int id, Vec3 startPosition, Vec3 startRotation, Vec3 startScale)
+        {
+            Id = id;
+            StartPosition = startPosition;
+            StartRotation = startRotation;
+            StartScale = startScale;
+        }
+
+        public int Id { get; }
+        public Vec3 StartPosition { get; }
+        public Vec3 StartRotation { get; }
+        public Vec3 StartScale { get; }
+    }
+
     private sealed class GizmoDragState
     {
         /// <summary>Captures the starting selection, transform, and gizmo hit for a drag.</summary>
         public GizmoDragState(
             int selectedId,
+            IReadOnlyList<GizmoDragTarget> targets,
             ComposerGizmoMode mode,
             ComposerGizmoAxis axis,
             Point startImagePoint,
@@ -35,6 +53,7 @@ internal sealed class ComposerTransformController
             bool meshComponent = false)
         {
             SelectedId = selectedId;
+            Targets = targets;
             Mode = mode;
             Axis = axis;
             StartPosition = startPosition;
@@ -54,12 +73,14 @@ internal sealed class ComposerTransformController
         }
 
         public int SelectedId { get; }
+        public IReadOnlyList<GizmoDragTarget> Targets { get; }
         public bool MeshComponent { get; }
         public ComposerGizmoMode Mode { get; }
         public ComposerGizmoAxis Axis { get; }
         public Vec3 StartPosition { get; }
         public Vec3 StartRotation { get; }
         public Vec3 StartScale { get; }
+        public bool Touched { get; set; }
         public double ScreenDirectionX { get; }
         public double ScreenDirectionY { get; }
         public double WorldUnitsPerPixel { get; }
@@ -185,6 +206,15 @@ internal sealed class ComposerTransformController
         if (selection.ActiveObjectId is not int id)
             return;
 
+        if (selection.SelectedObjectIds.Count > 1)
+            await ApplyInspectorMultiAsync(selection.SelectedObjectIds.ToArray(), id);
+        else
+            await ApplyInspectorSingleAsync(id);
+    }
+
+    /// <summary>Applies the inspector name, visibility, and transform values to one object.</summary>
+    private async Task ApplyInspectorSingleAsync(int id)
+    {
         dialogs.ClosePrimitiveParameters();
         try
         {
@@ -220,11 +250,7 @@ internal sealed class ComposerTransformController
             if (beforeEvidence != null && afterEvidence.SceneRevision <= beforeEvidence.SceneRevision)
                 throw new InvalidOperationException("The scene revision did not advance after the transform.");
 
-            bool nonIdentity = request.Position.Length() > 1e-12 ||
-                               request.RotationRadians.Length() > 1e-12 ||
-                               Math.Abs(request.Scale.X - 1.0) > 1e-12 ||
-                               Math.Abs(request.Scale.Y - 1.0) > 1e-12 ||
-                               Math.Abs(request.Scale.Z - 1.0) > 1e-12;
+            bool nonIdentity = IsNonIdentityRequest(request);
             if (nonIdentity && beforeEvidence != null && beforeEvidence.WorldGeometryHash == afterEvidence.WorldGeometryHash)
                 throw new InvalidOperationException("The underlying triangle geometry did not change.");
 
@@ -248,25 +274,118 @@ internal sealed class ComposerTransformController
         }
     }
 
+    /// <summary>
+    /// Applies the inspector visibility and transform values to every topmost
+    /// object in the set. Each object keeps its own name; renaming stays a
+    /// single-object operation.
+    /// </summary>
+    private async Task ApplyInspectorMultiAsync(int[] ids, int activeId)
+    {
+        dialogs.ClosePrimitiveParameters();
+        try
+        {
+            ComposerTransformRequest request = ComposerTransformRequest.Parse(
+                positionX.Text, positionY.Text, positionZ.Text,
+                rotationX.Text, rotationY.Text, rotationZ.Text,
+                scaleX.Text, scaleY.Text, scaleZ.Text);
+            bool visible = visibleBox.IsChecked ?? true;
+            IReadOnlyList<int> topmost = session.GetTopmostSelection(ids);
+            if (topmost.Count == 0)
+                throw new InvalidOperationException("The selected scene nodes no longer exist.");
+
+            Dictionary<int, ComposerModelEvidence> beforeEvidence = topmost
+                .Select(id => session.GetModelEvidence(id))
+                .OfType<ComposerModelEvidence>()
+                .ToDictionary(evidence => evidence.ObjectId);
+            long beforeRevision = beforeEvidence.TryGetValue(activeId, out ComposerModelEvidence? activeBefore)
+                ? activeBefore.SceneRevision
+                : beforeEvidence.Values.First().SceneRevision;
+            await renderer.StopCurrentRenderAsync();
+            setBusy(true, $"Baking transform into {topmost.Count} objects…");
+            int updated = await Task.Run(
+                () => session.UpdateObjects(ids, visible, request.Position, request.RotationRadians, request.Scale),
+                lifetimeToken);
+            if (updated == 0)
+                throw new InvalidOperationException("The selected scene nodes no longer exist.");
+
+            pathText.Text = "Untitled composition (modified)";
+            bool geometryChanged = false;
+            foreach (int id in topmost)
+            {
+                ComposerObjectState? appliedState = session.GetObjectState(id);
+                if (appliedState == null)
+                    continue;
+                if (!NearlyEqual(appliedState.Position, Vec3.Zero) ||
+                    !NearlyEqual(appliedState.Rotation, Vec3.Zero) ||
+                    !NearlyEqual(appliedState.Scale, new Vec3(1, 1, 1)))
+                {
+                    throw new InvalidOperationException("The transform was not fully baked into geometry.");
+                }
+                if (beforeEvidence.TryGetValue(id, out ComposerModelEvidence? before) &&
+                    session.GetModelEvidence(id) is ComposerModelEvidence after &&
+                    before.WorldGeometryHash != after.WorldGeometryHash)
+                {
+                    geometryChanged = true;
+                }
+            }
+
+            ComposerModelEvidence? afterActiveEvidence = session.GetModelEvidence(activeId);
+            if (afterActiveEvidence != null && afterActiveEvidence.SceneRevision <= beforeRevision)
+                throw new InvalidOperationException("The scene revision did not advance after the transform.");
+            if (IsNonIdentityRequest(request) && !geometryChanged)
+                throw new InvalidOperationException("The underlying triangle geometry did not change.");
+
+            selection.ClearVirtualTriangleSelection();
+            selection.RefreshObjectTree(activeId);
+            ClearTransformTextBoxes();
+            updateHistory();
+            bool retainedParameters = topmost.All(session.CanEditPrimitiveParameters);
+            string countSuffix = updated < topmost.Count ? $"{updated} of {topmost.Count} objects" : $"{updated} objects";
+            statusText.Text = retainedParameters
+                ? $"Applied transform to {countSuffix}; procedural parameters were preserved. {session.LastGeometryRefreshDetails}"
+                : $"Baked transform into {countSuffix}. {session.LastGeometryRefreshDetails}";
+            await renderer.RequestRenderAsync(interactive: false);
+        }
+        catch (Exception ex)
+        {
+            reportFailure("Transform update failed", ex);
+        }
+        finally
+        {
+            setBusy(false, null);
+        }
+    }
+
+    /// <summary>Returns true when the transform request changes position, rotation, or scale.</summary>
+    private static bool IsNonIdentityRequest(ComposerTransformRequest request) =>
+        request.Position.Length() > 1e-12 ||
+        request.RotationRadians.Length() > 1e-12 ||
+        Math.Abs(request.Scale.X - 1.0) > 1e-12 ||
+        Math.Abs(request.Scale.Y - 1.0) > 1e-12 ||
+        Math.Abs(request.Scale.Z - 1.0) > 1e-12;
+
     /// <summary>Resets the selected node transform to identity.</summary>
     public async Task ResetSelectedTransformAsync()
     {
         if (selection.ActiveObjectId is not int id)
             return;
 
+        int[] ids = selection.SelectedObjectIds.Count > 1 ? selection.SelectedObjectIds.ToArray() : new[] { id };
         await renderer.StopCurrentRenderAsync();
-        setBusy(true, "Resetting the selected node transform…");
+        setBusy(true, ids.Length > 1 ? $"Resetting {ids.Length} node transforms…" : "Resetting the selected node transform…");
         try
         {
-            bool reset = await Task.Run(() => session.ResetObjectTransform(id), lifetimeToken);
-            if (!reset)
+            int reset = await Task.Run(
+                () => ids.Length > 1 ? session.ResetObjectTransforms(ids) : (session.ResetObjectTransform(id) ? 1 : 0),
+                lifetimeToken);
+            if (reset == 0)
                 throw new InvalidOperationException("The selected scene node no longer exists.");
 
             selection.ClearVirtualTriangleSelection();
             selection.RefreshObjectTree(id);
             selection.LoadInspectorFromSelection();
             pathText.Text = "Untitled composition (modified)";
-            statusText.Text = "Selected node transform reset.";
+            statusText.Text = ids.Length > 1 ? $"Reset transforms on {reset} objects." : "Selected node transform reset.";
             await renderer.RequestRenderAsync(interactive: false);
         }
         catch (Exception ex)
@@ -310,8 +429,36 @@ internal sealed class ComposerTransformController
             return false;
         }
 
+        // Object-mode drags move the whole multi-selection: the active gizmo is
+        // the handle, and its deltas apply to every topmost object about each
+        // object's own pivot. Mesh-component drags stay single-target.
+        List<GizmoDragTarget> targets = new();
+        if (!meshComponent)
+        {
+            IReadOnlyList<int> topmost = session.GetTopmostSelection(selection.SelectedObjectIds);
+            List<int> ordered = new(topmost.Count + 1) { selectedId };
+            foreach (int id in topmost)
+            {
+                if (id != selectedId)
+                    ordered.Add(id);
+            }
+            foreach (int id in ordered)
+            {
+                ComposerObjectState? targetState = id == selectedId ? state : session.GetTransformTargetState(id);
+                if (targetState != null)
+                    targets.Add(new GizmoDragTarget(id, targetState.Position, targetState.Rotation, targetState.Scale));
+            }
+            if (targets.Count == 0 || targets[0].Id != selectedId)
+                return false;
+        }
+        else
+        {
+            targets.Add(new GizmoDragTarget(selectedId, Vec3.Zero, Vec3.Zero, new Vec3(1, 1, 1)));
+        }
+
         drag = new GizmoDragState(
             selectedId,
+            targets,
             mode,
             hit.Axis,
             imagePoint,
@@ -322,7 +469,9 @@ internal sealed class ComposerTransformController
             meshComponent);
         statusText.Text = meshComponent
             ? $"Moving selected {selectedSelectionMode().ToString().ToLowerInvariant()} on {hit.Axis}…"
-            : $"Dragging {hit.Axis} {mode.ToString().ToLowerInvariant()} gizmo…";
+            : targets.Count > 1
+                ? $"Dragging {hit.Axis} {mode.ToString().ToLowerInvariant()} gizmo on {targets.Count} objects; release to bake each about its own pivot…"
+                : $"Dragging {hit.Axis} {mode.ToString().ToLowerInvariant()} gizmo…";
         return true;
     }
 
@@ -414,9 +563,21 @@ internal sealed class ComposerTransformController
             }
         }
 
-        bool updated = current.MeshComponent
-            ? session.UpdateMeshElementMovePreview(current.SelectedId, updatedPosition)
-            : session.UpdateTransformTarget(current.SelectedId, updatedPosition, updatedRotation, updatedScale);
+        bool updated;
+        if (current.MeshComponent)
+        {
+            updated = session.UpdateMeshElementMovePreview(current.SelectedId, updatedPosition);
+        }
+        else
+        {
+            if (!NearlyEqual(updatedPosition, current.StartPosition) ||
+                !NearlyEqual(updatedRotation, current.StartRotation) ||
+                !NearlyEqual(updatedScale, current.StartScale))
+            {
+                current.Touched = true;
+            }
+            updated = ApplyDragPreviewToTargets(current, updatedPosition, updatedRotation, updatedScale) > 0;
+        }
         if (!updated)
         {
             drag = null;
@@ -448,6 +609,36 @@ internal sealed class ComposerTransformController
         }
     }
 
+    /// <summary>
+    /// Applies the active drag values to every drag target. Position and rotation
+    /// deltas are added to each target's own start; scale applies as a factor of
+    /// the active start so differently scaled objects grow proportionally.
+    /// </summary>
+    private int ApplyDragPreviewToTargets(GizmoDragState current, Vec3 updatedPosition, Vec3 updatedRotation, Vec3 updatedScale)
+    {
+        Vec3 positionDelta = updatedPosition - current.StartPosition;
+        Vec3 rotationDelta = updatedRotation - current.StartRotation;
+        Vec3 scaleFactor = new(
+            DivideOrOne(updatedScale.X, current.StartScale.X),
+            DivideOrOne(updatedScale.Y, current.StartScale.Y),
+            DivideOrOne(updatedScale.Z, current.StartScale.Z));
+        (int Id, Vec3 Position, Vec3 RotationRadians, Vec3 Scale)[] previews = current.Targets
+            .Select(target => (
+                target.Id,
+                target.StartPosition + positionDelta,
+                target.StartRotation + rotationDelta,
+                new Vec3(
+                    target.StartScale.X * scaleFactor.X,
+                    target.StartScale.Y * scaleFactor.Y,
+                    target.StartScale.Z * scaleFactor.Z)))
+            .ToArray();
+        return session.UpdateTransformTargets(previews);
+    }
+
+    /// <summary>Divides two scale components, returning one when the divisor is not positive.</summary>
+    private static double DivideOrOne(double value, double divisor) =>
+        divisor > 0.0 && double.IsFinite(value) && double.IsFinite(divisor) ? value / divisor : 1.0;
+
     /// <summary>Commits the active gizmo drag and bakes its transform.</summary>
     public async Task<bool> CommitActiveDragAsync(Point releasePoint, KeyModifiers modifiers)
     {
@@ -460,19 +651,23 @@ internal sealed class ComposerTransformController
             return true;
 
         int commitId = current.SelectedId;
+        int[] targetIds = current.Targets.Select(target => target.Id).ToArray();
         ComposerGizmoMode committedMode = current.Mode;
         bool meshComponent = current.MeshComponent;
+        bool touched = current.Touched;
         drag = null;
 
         await renderer.StopCurrentRenderAsync();
-        bool committed = await Task.Run(
+        int committedCount = await Task.Run(
             () => meshComponent
-                ? session.CommitMeshElementMove(commitId)
-                : session.CommitPendingTransform(commitId),
+                ? (session.CommitMeshElementMove(commitId) ? 1 : 0)
+                : session.CommitPendingTransforms(targetIds),
             lifetimeToken);
-        if (!committed)
+        if (committedCount == 0 && (meshComponent || touched))
         {
-            statusText.Text = "The transform target no longer exists.";
+            statusText.Text = targetIds.Length > 1 && !meshComponent
+                ? "The transform targets no longer exist."
+                : "The transform target no longer exists.";
             return true;
         }
 
@@ -481,7 +676,7 @@ internal sealed class ComposerTransformController
             selection.ClearVirtualTriangleSelection();
             ClearTransformTextBoxes();
         }
-        bool retainedParameters = !meshComponent && session.CanEditPrimitiveParameters(commitId);
+        bool retainedParameters = !meshComponent && targetIds.All(session.CanEditPrimitiveParameters);
         if (retainedParameters)
             dialogs.RebasePrimitiveAfterExternalTransform(commitId);
 
@@ -490,9 +685,13 @@ internal sealed class ComposerTransformController
         pathText.Text = "Untitled composition (modified)";
         statusText.Text = meshComponent
             ? $"Moved the selected {selectedSelectionMode().ToString().ToLowerInvariant()} and baked shared welded vertices once. {session.LastGeometryRefreshDetails}"
-            : retainedParameters
-                ? $"Applied {committedMode.ToString().ToLowerInvariant()} transform; procedural parameters were preserved. {session.LastGeometryRefreshDetails}"
-                : $"Baked {committedMode.ToString().ToLowerInvariant()} transform into mesh geometry. {session.LastGeometryRefreshDetails}";
+            : targetIds.Length > 1
+                ? retainedParameters
+                    ? $"Applied {committedMode.ToString().ToLowerInvariant()} transform to {committedCount} objects; procedural parameters were preserved. {session.LastGeometryRefreshDetails}"
+                    : $"Baked {committedMode.ToString().ToLowerInvariant()} transform into {committedCount} objects. {session.LastGeometryRefreshDetails}"
+                : retainedParameters
+                    ? $"Applied {committedMode.ToString().ToLowerInvariant()} transform; procedural parameters were preserved. {session.LastGeometryRefreshDetails}"
+                    : $"Baked {committedMode.ToString().ToLowerInvariant()} transform into mesh geometry. {session.LastGeometryRefreshDetails}";
         await renderer.RequestRenderAsync(interactive: false);
         return true;
     }
@@ -508,7 +707,7 @@ internal sealed class ComposerTransformController
             session.CancelMeshElementMovePreview(current.SelectedId);
         else
         {
-            session.CancelPendingTransform(current.SelectedId);
+            session.CancelPendingTransforms(current.Targets.Select(target => target.Id));
             selection.LoadInspectorFromSelection();
         }
         drag = null;

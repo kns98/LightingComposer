@@ -273,6 +273,46 @@ internal sealed class GeometryStateEditCommand : IComposerEditCommand
 }
 
 /// <summary>Deep snapshot command used only for topology-changing edits such as ungroup/delete.</summary>
+/// <summary>
+/// Undo record for one multi-selection batch. Child commands each target a
+/// different topmost object, so undo walks them in reverse and redo in order.
+/// </summary>
+internal sealed class CompositeEditCommand : IComposerEditCommand
+{
+    private readonly IReadOnlyList<IComposerEditCommand> commands;
+
+    /// <summary>Initializes a new batch command with its description, children, and selection targets.</summary>
+    public CompositeEditCommand(
+        string description,
+        IEnumerable<IComposerEditCommand> commands,
+        int? undoSelectionId,
+        int? redoSelectionId)
+    {
+        Description = description ?? throw new ArgumentNullException(nameof(description));
+        this.commands = commands?.ToArray() ?? throw new ArgumentNullException(nameof(commands));
+        if (this.commands.Count == 0)
+            throw new ArgumentException("A batch command needs at least one child command.", nameof(commands));
+        UndoSelectionId = undoSelectionId;
+        RedoSelectionId = redoSelectionId;
+    }
+
+    public string Description { get; }
+    public int? UndoSelectionId { get; }
+    public int? RedoSelectionId { get; }
+    /// <summary>Reverts every child command in reverse order.</summary>
+    public void Undo(Scene scene)
+    {
+        for (int i = commands.Count - 1; i >= 0; i--)
+            commands[i].Undo(scene);
+    }
+    /// <summary>Reapplies every child command in forward order.</summary>
+    public void Redo(Scene scene)
+    {
+        for (int i = 0; i < commands.Count; i++)
+            commands[i].Redo(scene);
+    }
+}
+
 internal sealed class SceneSnapshotEditCommand : IComposerEditCommand
 {
     private readonly SceneSnapshot before;

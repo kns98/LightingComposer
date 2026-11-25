@@ -825,10 +825,18 @@ private async Task OpenRenderSettingsAsync()
                 {
                     if (SelectedSelectionMode == ComposerSelectionMode.Object)
                     {
-                        session.SetSelectedLight(null);
-                        selectionController.DeselectObjectFromViewport();
-                        dialogController.RefreshLightEditor();
-                        await renderController.RequestRenderAsync(interactive: false);
+                        if (e.KeyModifiers.HasFlag(KeyModifiers.Control))
+                        {
+                            if (selectionController.SelectedObjectCount > 0)
+                                statusText.Text = $"Selection preserved ({selectionController.SelectedObjectCount} objects).";
+                        }
+                        else
+                        {
+                            session.SetSelectedLight(null);
+                            selectionController.DeselectObjectFromViewport();
+                            dialogController.RefreshLightEditor();
+                            await renderController.RequestRenderAsync(interactive: false);
+                        }
                     }
                 }
                 else
@@ -850,7 +858,7 @@ private async Task OpenRenderSettingsAsync()
                         }
                         else
                         {
-                            session.SetSelectedLight(null);
+                            bool preserve = e.KeyModifiers.HasFlag(KeyModifiers.Control);
                             int? hitId = await Task.Run(() => session.PickObject(
                                 camera,
                                 normalizedX,
@@ -859,12 +867,20 @@ private async Task OpenRenderSettingsAsync()
                                 renderController.LastRenderHeight));
                             if (hitId.HasValue)
                             {
-                                selectionController.SelectObject(hitId.Value, e.KeyModifiers.HasFlag(KeyModifiers.Control));
+                                selectionController.SelectObject(hitId.Value, preserve);
+                            }
+                            else if (preserve)
+                            {
+                                // Ctrl-click on empty space preserves the selection so a
+                                // multi-selection survives stray clicks; plain clicks clear.
+                                if (selectionController.SelectedObjectCount > 0)
+                                    statusText.Text = $"Selection preserved ({selectionController.SelectedObjectCount} objects).";
                             }
                             else
                             {
                                 // A normal viewport click on empty space clears object/light
                                 // selection, matching common DCC viewport behavior.
+                                session.SetSelectedLight(null);
                                 selectionController.DeselectObjectFromViewport();
                                 dialogController.RefreshLightEditor();
                                 await renderController.RequestRenderAsync(interactive: false);
@@ -1211,14 +1227,21 @@ private async Task OpenRenderSettingsAsync()
             objectId => selectionController.RefreshObjectTree(objectId));
     }
 
-    /// <summary>Opens the material editor dialog for the active object.</summary>
+    /// <summary>Opens the material editor dialog for the active object or the whole multi-selection.</summary>
     private void OpenMaterialEditor()
     {
         if (selectionController.ActiveObjectId is not int id)
             return;
 
+        List<int> targets = new() { id };
+        foreach (int selected in selectionController.SelectedObjectIds)
+        {
+            if (selected != id)
+                targets.Add(selected);
+        }
+
         dialogController.OpenMaterialEditor(
-            id,
+            targets,
             () => selectionModeBox.SelectedIndex = 0,
             message => statusText.Text = message,
             () => pathText.Text = "Untitled composition (modified)",

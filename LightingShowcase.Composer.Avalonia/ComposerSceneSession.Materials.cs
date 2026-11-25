@@ -197,11 +197,35 @@ internal sealed partial class ComposerSceneSession
         return ApplyMaterialEdit(id, $"Apply material: {preset.Name}", group => group.ApplyMaterialPreset(preset.Material));
     }
 
+    /// <summary>Applies the given preset to every topmost object in the set. Returns how many were updated.</summary>
+    public int ApplyMaterialPreset(IEnumerable<int> ids, MaterialPreset preset)
+    {
+        ArgumentNullException.ThrowIfNull(ids);
+        ArgumentNullException.ThrowIfNull(preset);
+        return ApplyMaterialEditMany(
+            ids,
+            $"Apply material: {preset.Name}",
+            count => $"Apply material: {preset.Name} ({count} objects)",
+            group => group.ApplyMaterialPreset(preset.Material));
+    }
+
     /// <summary>Sets the base color of the object with the given id.</summary>
     public bool SetObjectBaseColor(int id, Vec3 color)
     {
         ValidateColor(color);
         return ApplyMaterialEdit(id, "Set base color", group => group.ApplyBaseColor(color));
+    }
+
+    /// <summary>Sets the base color of every topmost object in the set. Returns how many were updated.</summary>
+    public int SetObjectBaseColor(IEnumerable<int> ids, Vec3 color)
+    {
+        ArgumentNullException.ThrowIfNull(ids);
+        ValidateColor(color);
+        return ApplyMaterialEditMany(
+            ids,
+            "Set base color",
+            count => $"Set base color ({count} objects)",
+            group => group.ApplyBaseColor(color));
     }
 
     /// <summary>
@@ -215,52 +239,73 @@ internal sealed partial class ComposerSceneSession
         ValidateMaterialProperties(properties);
 
         return ApplyMaterialEdit(id, "Set material properties", group =>
-            group.ApplyMaterialProperties(material => new Material(
-                material.Color,
-                properties.Emission,
-                material.LightId,
-                material.Texture,
-                properties.EmissionColor,
-                material.EmissiveTexture,
-                properties.Alpha,
-                properties.AlphaMode == MaterialAlphaMode.Blend,
-                properties.Metallic,
-                properties.Roughness,
-                properties.Transmission,
-                material.MetallicRoughnessTexture,
-                material.NormalTexture,
-                material.OcclusionTexture,
-                properties.NormalScale,
-                properties.OcclusionStrength,
-                properties.AlphaMode,
-                properties.AlphaCutoff,
-                properties.DoubleSided,
-                material.TransmissionTexture,
-                properties.Ior,
-                properties.Thickness,
-                properties.AttenuationColor,
-                properties.AttenuationDistance,
-                properties.Clearcoat,
-                properties.ClearcoatRoughness,
-                material.ClearcoatUsesTransmissionTexture,
-                properties.Specular,
-                properties.SpecularColor,
-                material.SpecularTexture,
-                material.SpecularColorTexture,
-                properties.SheenColor,
-                properties.SheenRoughness,
-                material.SheenColorTexture,
-                material.SheenRoughnessTexture,
-                properties.Anisotropy,
-                properties.AnisotropyRotation,
-                material.AnisotropyTexture,
-                properties.Iridescence,
-                properties.IridescenceIor,
-                properties.IridescenceThicknessMinimum,
-                properties.IridescenceThicknessMaximum,
-                material.IridescenceTexture,
-                material.IridescenceThicknessTexture)));
+            group.ApplyMaterialProperties(MaterialPropertiesFunc(properties)));
     }
+
+    /// <summary>
+    /// Applies explicit PBR/material values to every topmost object in the set
+    /// while preserving each triangle's base color and texture maps. Returns
+    /// how many objects were updated.
+    /// </summary>
+    public int SetObjectMaterialProperties(IEnumerable<int> ids, ComposerMaterialProperties properties)
+    {
+        ArgumentNullException.ThrowIfNull(ids);
+        ArgumentNullException.ThrowIfNull(properties);
+        ValidateMaterialProperties(properties);
+
+        return ApplyMaterialEditMany(
+            ids,
+            "Set material properties",
+            count => $"Set material properties ({count} objects)",
+            group => group.ApplyMaterialProperties(MaterialPropertiesFunc(properties)));
+    }
+
+    /// <summary>Builds the per-material mapping that overwrites direct PBR values but keeps colors and textures.</summary>
+    private static Func<Material, Material> MaterialPropertiesFunc(ComposerMaterialProperties properties) => material => new Material(
+        material.Color,
+        properties.Emission,
+        material.LightId,
+        material.Texture,
+        properties.EmissionColor,
+        material.EmissiveTexture,
+        properties.Alpha,
+        properties.AlphaMode == MaterialAlphaMode.Blend,
+        properties.Metallic,
+        properties.Roughness,
+        properties.Transmission,
+        material.MetallicRoughnessTexture,
+        material.NormalTexture,
+        material.OcclusionTexture,
+        properties.NormalScale,
+        properties.OcclusionStrength,
+        properties.AlphaMode,
+        properties.AlphaCutoff,
+        properties.DoubleSided,
+        material.TransmissionTexture,
+        properties.Ior,
+        properties.Thickness,
+        properties.AttenuationColor,
+        properties.AttenuationDistance,
+        properties.Clearcoat,
+        properties.ClearcoatRoughness,
+        material.ClearcoatUsesTransmissionTexture,
+        properties.Specular,
+        properties.SpecularColor,
+        material.SpecularTexture,
+        material.SpecularColorTexture,
+        properties.SheenColor,
+        properties.SheenRoughness,
+        material.SheenColorTexture,
+        material.SheenRoughnessTexture,
+        properties.Anisotropy,
+        properties.AnisotropyRotation,
+        material.AnisotropyTexture,
+        properties.Iridescence,
+        properties.IridescenceIor,
+        properties.IridescenceThicknessMinimum,
+        properties.IridescenceThicknessMaximum,
+        material.IridescenceTexture,
+        material.IridescenceThicknessTexture);
 
     /// <summary>Assigns the image at the given path to the base-color texture of the object with the given id.</summary>
     public bool SetObjectTexture(int id, string path, double tileMeters, bool boxProjection) =>
@@ -287,16 +332,46 @@ internal sealed partial class ComposerSceneSession
         return ApplyMaterialEdit(
             id,
             $"Set {TextureSlotLabel(slot)} texture: {Path.GetFileName(path)}",
-            group =>
-            {
-                if (!boxProjection)
-                {
-                    group.SetTextureProjectionMode(tileMeters, boxProjection: false);
-                    if (group.HasParametricPrimitive && group.Children.Count == 0)
-                        scene.RebuildPrimitiveShadowGeometry(group);
-                }
-                group.ApplyTexture(slot, texture, tileMeters, boxProjection);
-            });
+            group => ApplyDecodedTexture(group, slot, texture, tileMeters, boxProjection));
+    }
+
+    /// <summary>Assigns an image file to one PBR texture input on every topmost object in the set.</summary>
+    public int SetObjectTexture(
+        IEnumerable<int> ids,
+        MaterialTextureSlot slot,
+        string path,
+        double tileMeters,
+        bool boxProjection)
+    {
+        ArgumentNullException.ThrowIfNull(ids);
+        if (string.IsNullOrWhiteSpace(path))
+            throw new ArgumentException("Select an image texture file.", nameof(path));
+        if (!double.IsFinite(tileMeters) || tileMeters <= 1e-6)
+            throw new ArgumentOutOfRangeException(nameof(tileMeters), "Texture tile size must be greater than zero meters.");
+        if (!Enum.IsDefined(typeof(MaterialTextureSlot), slot))
+            throw new ArgumentOutOfRangeException(nameof(slot));
+
+        // Decode once before taking the scene lock; TextureMap is immutable so
+        // every object in the batch can safely share the decoded pixels.
+        TextureMap texture = TextureMap.FromFile(path);
+        string fileName = Path.GetFileName(path);
+        return ApplyMaterialEditMany(
+            ids,
+            $"Set {TextureSlotLabel(slot)} texture: {fileName}",
+            count => $"Set {TextureSlotLabel(slot)} texture: {fileName} ({count} objects)",
+            group => ApplyDecodedTexture(group, slot, texture, tileMeters, boxProjection));
+    }
+
+    /// <summary>Applies one decoded texture to one group. The caller must hold the scene lock.</summary>
+    private void ApplyDecodedTexture(SceneObjectGroup group, MaterialTextureSlot slot, TextureMap texture, double tileMeters, bool boxProjection)
+    {
+        if (!boxProjection)
+        {
+            group.SetTextureProjectionMode(tileMeters, boxProjection: false);
+            if (group.HasParametricPrimitive && group.Children.Count == 0)
+                scene.RebuildPrimitiveShadowGeometry(group);
+        }
+        group.ApplyTexture(slot, texture, tileMeters, boxProjection);
     }
 
     /// <summary>Clears the base-color texture of the object with the given id.</summary>
@@ -308,6 +383,19 @@ internal sealed partial class ComposerSceneSession
         if (!Enum.IsDefined(typeof(MaterialTextureSlot), slot))
             throw new ArgumentOutOfRangeException(nameof(slot));
         return ApplyMaterialEdit(id, $"Clear {TextureSlotLabel(slot)} texture", group => group.ClearTexture(slot));
+    }
+
+    /// <summary>Clears the given texture slot on every topmost object in the set. Returns how many were updated.</summary>
+    public int ClearObjectTexture(IEnumerable<int> ids, MaterialTextureSlot slot)
+    {
+        ArgumentNullException.ThrowIfNull(ids);
+        if (!Enum.IsDefined(typeof(MaterialTextureSlot), slot))
+            throw new ArgumentOutOfRangeException(nameof(slot));
+        return ApplyMaterialEditMany(
+            ids,
+            $"Clear {TextureSlotLabel(slot)} texture",
+            count => $"Clear {TextureSlotLabel(slot)} texture ({count} objects)",
+            group => group.ClearTexture(slot));
     }
 
     /// <summary>
@@ -380,21 +468,60 @@ internal sealed partial class ComposerSceneSession
         return ApplyMaterialEdit(
             id,
             $"Map {TextureSlotLabel(slot)} texture",
-            group =>
-            {
-                group.SetTextureProjectionMode(tileMeters, boxProjection);
-                if (!boxProjection && group.HasParametricPrimitive && group.Children.Count == 0)
-                    scene.RebuildPrimitiveShadowGeometry(group);
-                group.ApplyTextureMapping(
-                    slot,
-                    offsetU,
-                    offsetV,
-                    scaleU,
-                    scaleV,
-                    rotationDegrees * Math.PI / 180.0,
-                    wrapU,
-                    wrapV);
-            });
+            group => ApplyTextureMappingCore(group, slot, tileMeters, boxProjection, offsetU, offsetV, scaleU, scaleV, rotationDegrees, wrapU, wrapV));
+    }
+
+    /// <summary>Applies the UV projection mode and the per-slot mapping transform to the given texture slot on every topmost object in the set.</summary>
+    public int SetObjectTextureMappingAndProjection(
+        IEnumerable<int> ids,
+        MaterialTextureSlot slot,
+        double tileMeters,
+        bool boxProjection,
+        double offsetU,
+        double offsetV,
+        double scaleU,
+        double scaleV,
+        double rotationDegrees,
+        TextureAddressMode wrapU,
+        TextureAddressMode wrapV)
+    {
+        ArgumentNullException.ThrowIfNull(ids);
+        if (!double.IsFinite(tileMeters) || tileMeters <= 1e-6)
+            throw new ArgumentOutOfRangeException(nameof(tileMeters), "Texture tile size must be greater than zero meters.");
+        ValidateTextureMapping(offsetU, offsetV, scaleU, scaleV, rotationDegrees, wrapU, wrapV);
+        return ApplyMaterialEditMany(
+            ids,
+            $"Map {TextureSlotLabel(slot)} texture",
+            count => $"Map {TextureSlotLabel(slot)} texture ({count} objects)",
+            group => ApplyTextureMappingCore(group, slot, tileMeters, boxProjection, offsetU, offsetV, scaleU, scaleV, rotationDegrees, wrapU, wrapV));
+    }
+
+    /// <summary>Applies one projection mode plus mapping transform to one group. The caller must hold the scene lock.</summary>
+    private void ApplyTextureMappingCore(
+        SceneObjectGroup group,
+        MaterialTextureSlot slot,
+        double tileMeters,
+        bool boxProjection,
+        double offsetU,
+        double offsetV,
+        double scaleU,
+        double scaleV,
+        double rotationDegrees,
+        TextureAddressMode wrapU,
+        TextureAddressMode wrapV)
+    {
+        group.SetTextureProjectionMode(tileMeters, boxProjection);
+        if (!boxProjection && group.HasParametricPrimitive && group.Children.Count == 0)
+            scene.RebuildPrimitiveShadowGeometry(group);
+        group.ApplyTextureMapping(
+            slot,
+            offsetU,
+            offsetV,
+            scaleU,
+            scaleV,
+            rotationDegrees * Math.PI / 180.0,
+            wrapU,
+            wrapV);
     }
 
     /// <summary>Applies a material change to the given object, then records it as an undoable edit.</summary>
@@ -403,24 +530,10 @@ internal sealed partial class ComposerSceneSession
         sceneGate.Wait();
         try
         {
-            SceneObjectGroup? group = scene.GroupById(id);
-            if (group == null || group.FirstMaterialOrDefault() == null)
+            if (!TryApplyMaterialEditCore(id, description, apply, out IComposerEditCommand? command) || command == null)
                 return false;
 
-            // A modeless procedural-parameter editor can hold a geometry baseline.
-            // Commit it before a material mutation so closing that window later
-            // cannot restore stale pre-material triangles.
-            if (primitiveParameterPreview?.GroupId == id)
-                CommitPrimitiveParameterEditCore(id);
-
-            BakedGeometryState before = BakedGeometryState.Capture(group);
-            apply(group);
-            BakedGeometryState after = BakedGeometryState.Capture(group);
-
-            scene.RebuildWorldGeometry();
-            meshTopologyByGroup.Clear();
-            RebuildSelectionOverlayCache();
-            editHistory.PushApplied(new GeometryStateEditCommand(description, id, before, after));
+            editHistory.PushApplied(command);
             ScenePath = null;
 
             // Material/texture tables are part of the prepared raster/compute scene;
@@ -432,6 +545,71 @@ internal sealed partial class ComposerSceneSession
         {
             sceneGate.Release();
         }
+    }
+
+    /// <summary>
+    /// Applies a material change to every topmost object in the set and records
+    /// one undo step. Returns how many objects were updated.
+    /// </summary>
+    private int ApplyMaterialEditMany(IEnumerable<int> ids, string singleDescription, Func<int, string> batchDescription, Action<SceneObjectGroup> apply)
+    {
+        sceneGate.Wait();
+        try
+        {
+            IReadOnlyList<int> topmost = TopmostSelectionCore(ids);
+            List<IComposerEditCommand> commands = new(topmost.Count);
+            List<int> applied = new(topmost.Count);
+            foreach (int id in topmost)
+            {
+                if (TryApplyMaterialEditCore(id, singleDescription, apply, out IComposerEditCommand? command) && command != null)
+                {
+                    commands.Add(command);
+                    applied.Add(id);
+                }
+            }
+            if (commands.Count == 0)
+                return 0;
+
+            editHistory.PushApplied(SingleOrBatch(batchDescription(applied.Count), commands, applied[0]));
+            ScenePath = null;
+
+            // Material/texture tables are part of the prepared raster/compute scene;
+            // topology is unchanged, but these renderer resources must be rebuilt.
+            InvalidateRendererCaches();
+            return applied.Count;
+        }
+        finally
+        {
+            sceneGate.Release();
+        }
+    }
+
+    /// <summary>
+    /// Applies one material change without touching undo history. The caller must
+    /// hold the scene lock and push the returned command when it is not null.
+    /// </summary>
+    private bool TryApplyMaterialEditCore(int id, string description, Action<SceneObjectGroup> apply, out IComposerEditCommand? command)
+    {
+        command = null;
+        SceneObjectGroup? group = scene.GroupById(id);
+        if (group == null || group.FirstMaterialOrDefault() == null)
+            return false;
+
+        // A modeless procedural-parameter editor can hold a geometry baseline.
+        // Commit it before a material mutation so closing that window later
+        // cannot restore stale pre-material triangles.
+        if (primitiveParameterPreview?.GroupId == id)
+            CommitPrimitiveParameterEditCore(id);
+
+        BakedGeometryState before = BakedGeometryState.Capture(group);
+        apply(group);
+        BakedGeometryState after = BakedGeometryState.Capture(group);
+
+        scene.RebuildWorldGeometry();
+        meshTopologyByGroup.Clear();
+        RebuildSelectionOverlayCache();
+        command = new GeometryStateEditCommand(description, id, before, after);
+        return true;
     }
 
     /// <summary>Creates a texture-slot model for the given slot, converting the stored rotation to degrees.</summary>

@@ -74,6 +74,19 @@ internal static class ComposerOverlayRenderer
         ProjectedPoint YEnd,
         ProjectedPoint ZEnd);
 
+    /// <summary>Draws a bounds box with no gizmo for a non-active multi-selection member.</summary>
+    public static void DrawSelectionBounds(RenderImage image, CameraDefinition camera, Aabb bounds)
+    {
+        if (image == null) throw new ArgumentNullException(nameof(image));
+        if (camera == null) throw new ArgumentNullException(nameof(camera));
+
+        Vec3 center = (bounds.Min + bounds.Max) * 0.5;
+        Vec3 extent = bounds.Max - bounds.Min;
+        if (!IsFinite(center) || !IsFinite(extent))
+            return;
+        DrawBounds(image, camera, bounds);
+    }
+
     /// <summary>Draws selection bounds, mesh highlights, and the active transform gizmo.</summary>
     public static void DrawSelection(
         RenderImage image,

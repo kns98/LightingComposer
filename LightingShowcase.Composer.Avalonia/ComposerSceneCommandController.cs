@@ -44,4 +44,10 @@ internal sealed class ComposerSceneCommandController
     public Task<int?> DuplicateAsync(int id) => Task.Run(() => session.DuplicateObject(id), lifetimeToken);
     /// <summary>Deletes the given object and returns true when it existed.</summary>
     public Task<bool> DeleteAsync(int id) => Task.Run(() => session.DeleteObject(id), lifetimeToken);
+    /// <summary>Duplicates the given objects and returns the new object ids.</summary>
+    public Task<IReadOnlyList<int>> DuplicateManyAsync(IEnumerable<int> ids) =>
+        Task.Run(() => session.DuplicateObjects(ids), lifetimeToken);
+    /// <summary>Deletes the given objects and returns how many were deleted.</summary>
+    public Task<int> DeleteManyAsync(IEnumerable<int> ids) =>
+        Task.Run(() => session.DeleteObjects(ids), lifetimeToken);
 }

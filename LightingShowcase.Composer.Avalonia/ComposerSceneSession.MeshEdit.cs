@@ -166,6 +166,7 @@ internal sealed partial class ComposerSceneSession
                 group.Id));
 
             selectedObjectId = group.Id;
+            SyncSelectionSetWithActive();
             selectedMeshSelection = null;
             hoveredMeshSelection = null;
             meshHoverVisible = true;
@@ -255,6 +256,7 @@ internal sealed partial class ComposerSceneSession
 
             selectionMode = mode;
             selectedObjectId = selection.GroupId;
+            SyncSelectionSetWithActive();
             selectedMeshSelection = selection;
             hoveredMeshSelection = null;
             meshHoverVisible = true;
