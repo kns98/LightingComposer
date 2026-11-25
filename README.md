@@ -24,6 +24,8 @@ Official [KhronosGroup glTF sample models](https://github.com/KhronosGroup/glTF-
 
 Model licenses: StainedGlassLamp under CC-BY 4.0 (Wayfair); ToyCar public domain (CC0).
 
+Texture licenses: the `textures/` material library ships CC0 1K maps from Poly Haven (brick, concrete, wood, marble, denim, metal); see `textures/TEXTURES_LICENSES.md` for per-file credits.
+
 ### Render times
 
 AMD Ryzen 3 7320U (8 threads), AMD Radeon integrated graphics, 8 GB RAM, Windows 11, .NET 10. Steady-state time per frame (median; first frame excluded as one-time scene upload).

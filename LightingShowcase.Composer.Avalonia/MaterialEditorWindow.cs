@@ -124,9 +124,9 @@ internal sealed class MaterialEditorWindow : Window
                 : new[] { objectId }.Concat(requested).ToArray();
 
         Title = TargetTitle(model.ObjectName);
-        Width = 620;
+        Width = 660;
         Height = 900;
-        MinWidth = 500;
+        MinWidth = 560;
         MinHeight = 560;
         CanResize = true;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
@@ -268,7 +268,7 @@ internal sealed class MaterialEditorWindow : Window
     /// <summary>Attaches detailed help tooltips to every editor control.</summary>
     private void ApplyTooltips()
     {
-        Tip(presetBox, "Library preset picker. Choose a starting material (metal, plastic, glass, …) and press Apply preset. The summary line shows its metallic and roughness values. Presets rewrite PBR response values but preserve the base color and assigned texture maps.");
+        Tip(presetBox, "Library preset picker. Choose a starting material (metal, plastic, glass, …) and press Apply preset. The summary line shows its metallic and roughness values. Applying a preset overwrites the base color and resets extended PBR values to the preset; assigned texture maps and the light link are preserved.");
         Tip(hexBox, "Base color as a hex triplet such as #C8A060. Press Enter or leave the box to sync the RGB editors and pickers below, then press Apply color to write it to the material.");
         Tip(redBox, "Red channel 0–255. Syncs with the hex box and pickers; press Apply color to write the combined color.");
         Tip(greenBox, "Green channel 0–255. Syncs with the hex box and pickers; press Apply color to write the combined color.");
@@ -330,33 +330,128 @@ internal sealed class MaterialEditorWindow : Window
         statusText.Text = message;
     }
 
-    /// <summary>Builds the editor window content with preset, color, property, texture, and mapping sections.</summary>
+    /// <summary>Builds the tabbed editor content with a persistent header and footer.</summary>
     private Control BuildContent()
     {
-        StackPanel stack = new() { Spacing = 12 };
-        stack.Children.Add(new TextBlock
+        Grid layout = new()
+        {
+            RowDefinitions = new RowDefinitions("Auto,*,Auto"),
+            RowSpacing = 8
+        };
+
+        StackPanel header = new() { Spacing = 6 };
+        header.Children.Add(new TextBlock
         {
             Text = "Material",
             FontSize = 20,
             FontWeight = FontWeight.SemiBold
         });
-        stack.Children.Add(new TextBlock
+        header.Children.Add(new TextBlock
         {
             Text = "Choose a library preset as a starting point, then override its PBR properties directly. Base color and image texture remain independent controls.",
             TextWrapping = TextWrapping.Wrap,
             Opacity = 0.78
         });
+        layout.Children.Add(header);
 
+        TabControl tabs = new() { Name = "MaterialTabs" };
+        tabs.Items.Add(new TabItem { Header = "Library", Content = TabScroll(BuildLibraryTab()) });
+        tabs.Items.Add(new TabItem { Header = "Color", Content = TabScroll(BuildColorTab()) });
+        tabs.Items.Add(new TabItem { Header = "Surface", Content = TabScroll(BuildSurfaceTab()) });
+        tabs.Items.Add(new TabItem { Header = "Light & Volume", Content = TabScroll(BuildLightVolumeTab()) });
+        tabs.Items.Add(new TabItem { Header = "Detail", Content = TabScroll(BuildDetailTab()) });
+        tabs.Items.Add(new TabItem { Header = "Textures", Content = TabScroll(BuildTexturesTab()) });
+        tabs.Items.Add(new TabItem { Header = "Mapping", Content = TabScroll(BuildMappingTab()) });
+        tabs.SelectedIndex = 0;
+        layout.Children.Add(tabs);
+        Grid.SetRow(tabs, 1);
+
+        StackPanel footer = new() { Spacing = 6 };
+        footer.Children.Add(Heading("Current material"));
+        footer.Children.Add(materialDetails);
+        footer.Children.Add(statusText);
+        Button close = Tip(NewButton("Close"), "Closes the material editor. Changes were already applied when you pressed each Apply button; nothing is lost by closing.");
+        close.HorizontalAlignment = HorizontalAlignment.Right;
+        close.Click += (_, _) => Close();
+        footer.Children.Add(close);
+        layout.Children.Add(footer);
+        Grid.SetRow(footer, 2);
+
+        return new Border
+        {
+            Padding = new Thickness(16),
+            Child = layout
+        };
+    }
+
+    /// <summary>Creates a tab-page stack with the standard section spacing.</summary>
+    private static StackPanel NewTabStack() => new() { Spacing = 12 };
+
+    /// <summary>Wraps tab content in a vertical scroll viewer.</summary>
+    private static Control TabScroll(Control content) => new ScrollViewer
+    {
+        Content = content,
+        VerticalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto
+    };
+
+    /// <summary>Creates a labeled preset-picker section for a property tab.</summary>
+    private static Control PresetSection(string label, Control picker)
+    {
+        StackPanel section = new() { Spacing = 4 };
+        section.Children.Add(new TextBlock { Text = label, Opacity = 0.72, FontSize = 12 });
+        section.Children.Add(picker);
+        return section;
+    }
+
+    /// <summary>Builds the Library tab with its category filter and preset picker.</summary>
+    private Control BuildLibraryTab()
+    {
+        StackPanel stack = NewTabStack();
         stack.Children.Add(Heading("Library preset"));
+        string[] categories = MaterialPresetLibrary.Common
+            .Select(static p => p.Category)
+            .Distinct(StringComparer.Ordinal)
+            .OrderBy(static c => c, StringComparer.Ordinal)
+            .ToArray();
+        ComboBox categoryBox = new()
+        {
+            ItemsSource = new[] { "All categories" }.Concat(categories).ToArray(),
+            SelectedIndex = 0,
+            MinWidth = 200,
+            HorizontalAlignment = HorizontalAlignment.Left
+        };
+        Tip(categoryBox, "Filters the library preset list to one material category.");
+        categoryBox.SelectionChanged += (_, _) =>
+        {
+            string? category = categoryBox.SelectedItem as string;
+            presetBox.ItemsSource = MaterialPresetLibrary.Common
+                .Where(p => category == "All categories" || p.Category == category)
+                .ToArray();
+            presetBox.SelectedIndex = 0;
+        };
+        stack.Children.Add(LabeledControl("Category", categoryBox));
         Grid presetRow = new() { ColumnDefinitions = new ColumnDefinitions("*,Auto"), ColumnSpacing = 8 };
         presetRow.Children.Add(presetBox);
-        Button applyPreset = Tip(NewButton("Apply preset"), "Applies the selected library preset to every targeted object. Base color and texture maps are preserved; only the PBR response values change. One undo step covers all targeted objects.");
+        Button applyPreset = Tip(NewButton("Apply preset"), "Applies the selected library preset to every targeted object. Base color is overwritten and extended PBR values reset to the preset; texture maps are preserved. One undo step covers all targeted objects.");
         applyPreset.Click += async (_, _) => await ApplyPresetAsync();
         presetRow.Children.Add(applyPreset);
         Grid.SetColumn(applyPreset, 1);
         stack.Children.Add(presetRow);
         stack.Children.Add(presetSummary);
+        stack.Children.Add(new TextBlock
+        {
+            Text = "Applying a preset overwrites the base color and resets extended PBR values (IOR, clearcoat, sheen, …) to the preset. Texture maps and the light link are preserved.",
+            TextWrapping = TextWrapping.Wrap,
+            Opacity = 0.68,
+            FontSize = 12
+        });
+        return stack;
+    }
 
+    /// <summary>Builds the Color tab with its hex, RGB, spectrum, and swatch editors.</summary>
+    private Control BuildColorTab()
+    {
+        StackPanel stack = NewTabStack();
         stack.Children.Add(Heading("Base color"));
         Grid colorTop = new() { ColumnDefinitions = new ColumnDefinitions("Auto,Auto,*"), ColumnSpacing = 10 };
         colorTop.Children.Add(colorSwatch);
@@ -381,8 +476,23 @@ internal sealed class MaterialEditorWindow : Window
         ColorPresetPicker presetPicker = Tip(new ColorPresetPicker { Name = "MaterialPresets" }, "Named color preset library. Click a swatch to load its color into the hex and RGB editors above, then press Apply color to write it to the material.");
         presetPicker.PresetPicked += preset => SetColorEditors(preset.Color);
         stack.Children.Add(presetPicker);
+        return stack;
+    }
 
-        stack.Children.Add(Heading("Direct material properties"));
+    /// <summary>Creates an Apply button that writes every property tab through the shared validation path.</summary>
+    private Button NewApplyPropertiesButton()
+    {
+        Button applyProperties = Tip(NewButton("Apply properties"), "Writes the direct properties on every property tab (Surface, Light & Volume, Detail) to all targeted objects, preserving each object's base color and texture maps. One undo step covers all targeted objects.");
+        applyProperties.HorizontalAlignment = HorizontalAlignment.Right;
+        applyProperties.Click += async (_, _) => await ApplyPropertiesAsync();
+        return applyProperties;
+    }
+
+    /// <summary>Builds the Surface tab with its finish and alpha presets.</summary>
+    private Control BuildSurfaceTab()
+    {
+        StackPanel stack = NewTabStack();
+        stack.Children.Add(Heading("Surface"));
         stack.Children.Add(new TextBlock
         {
             Text = "Values are written directly to the material used by the raster and ray renderers. 0–1 values use normalized PBR units; thickness and attenuation distance are meters.",
@@ -392,11 +502,58 @@ internal sealed class MaterialEditorWindow : Window
         });
         stack.Children.Add(TwoPropertyRow("Metallic (0–1)", metallicBox, "Roughness (0.02–1)", roughnessBox));
         stack.Children.Add(TwoPropertyRow("Transmission (0–1)", transmissionBox, "Opacity (0–1)", opacityBox));
-        stack.Children.Add(TwoPropertyRow("IOR (1–2.333)", iorBox, "Emission strength", emissionBox));
+        stack.Children.Add(LabeledControl("IOR (1–2.333)", iorBox));
+        stack.Children.Add(TwoPropertyRow("Alpha mode", alphaModeBox, "Alpha cutoff (0–1)", alphaCutoffBox));
+        stack.Children.Add(doubleSidedBox);
+        FinishPresetPicker finishPicker = Tip(new FinishPresetPicker(), "Finish presets. Click one to load its metallic and roughness values into the editors above, then press Apply properties to write them to the material.");
+        finishPicker.PresetPicked += SetFinishEditors;
+        stack.Children.Add(PresetSection("Finish presets", finishPicker));
+        AlphaPresetPicker alphaPicker = Tip(new AlphaPresetPicker(), "Alpha presets. Click one to load its alpha mode, opacity, and cutoff into the editors above, then press Apply properties to write them to the material.");
+        alphaPicker.PresetPicked += SetAlphaEditors;
+        stack.Children.Add(PresetSection("Alpha presets", alphaPicker));
+        stack.Children.Add(NewApplyPropertiesButton());
+        return stack;
+    }
+
+    /// <summary>Builds the Light and Volume tab with its glow and glass presets.</summary>
+    private Control BuildLightVolumeTab()
+    {
+        StackPanel stack = NewTabStack();
+        stack.Children.Add(Heading("Light & Volume"));
+        stack.Children.Add(new TextBlock
+        {
+            Text = "Emission, volume absorption, and clearcoat. Glow and glass presets fill these editors; Apply writes the properties on every tab at once.",
+            TextWrapping = TextWrapping.Wrap,
+            Opacity = 0.68,
+            FontSize = 12
+        });
+        stack.Children.Add(LabeledControl("Emission strength", emissionBox));
         stack.Children.Add(LabeledControl("Emission color", emissionColorBox));
         stack.Children.Add(TwoPropertyRow("Thickness (m)", thicknessBox, "Attenuation distance (m)", attenuationDistanceBox));
         stack.Children.Add(LabeledControl("Attenuation color", attenuationColorBox));
         stack.Children.Add(TwoPropertyRow("Clearcoat (0–1)", clearcoatBox, "Clearcoat roughness (0–1)", clearcoatRoughnessBox));
+        GlowPresetPicker glowPicker = Tip(new GlowPresetPicker(), "Glow presets. Click one to load its emission strength and color into the editors above, then press Apply properties to write them to the material.");
+        glowPicker.PresetPicked += SetGlowEditors;
+        stack.Children.Add(PresetSection("Glow presets", glowPicker));
+        GlassPresetPicker glassPicker = Tip(new GlassPresetPicker(), "Glass presets. Click one to load its transmission, volume, and IOR values into the editors (transmission and IOR live on the Surface tab), then press Apply properties to write them to the material.");
+        glassPicker.PresetPicked += SetGlassEditors;
+        stack.Children.Add(PresetSection("Glass presets", glassPicker));
+        stack.Children.Add(NewApplyPropertiesButton());
+        return stack;
+    }
+
+    /// <summary>Builds the Detail tab with its effect presets.</summary>
+    private Control BuildDetailTab()
+    {
+        StackPanel stack = NewTabStack();
+        stack.Children.Add(Heading("Detail"));
+        stack.Children.Add(new TextBlock
+        {
+            Text = "Normal, occlusion, specular, sheen, anisotropy, and iridescence. Effect presets fill these editors; Apply writes the properties on every tab at once.",
+            TextWrapping = TextWrapping.Wrap,
+            Opacity = 0.68,
+            FontSize = 12
+        });
         stack.Children.Add(TwoPropertyRow("Normal scale (-8–8)", normalScaleBox, "Occlusion strength (0–1)", occlusionStrengthBox));
         stack.Children.Add(TwoPropertyRow("Specular (0–1)", specularBox, "Sheen roughness (0–1)", sheenRoughnessBox));
         stack.Children.Add(LabeledControl("Specular color", specularColorBox));
@@ -404,13 +561,17 @@ internal sealed class MaterialEditorWindow : Window
         stack.Children.Add(TwoPropertyRow("Anisotropy (0–1)", anisotropyBox, "Anisotropy rotation (rad)", anisotropyRotationBox));
         stack.Children.Add(TwoPropertyRow("Iridescence (0–1)", iridescenceBox, "Iridescence IOR (≥1)", iridescenceIorBox));
         stack.Children.Add(TwoPropertyRow("Iridescence min (nm)", iridescenceThicknessMinBox, "Iridescence max (nm)", iridescenceThicknessMaxBox));
-        stack.Children.Add(TwoPropertyRow("Alpha mode", alphaModeBox, "Alpha cutoff (0–1)", alphaCutoffBox));
-        stack.Children.Add(doubleSidedBox);
-        Button applyProperties = Tip(NewButton("Apply properties"), "Writes every direct property above to all targeted objects, preserving each object's base color and texture maps. One undo step covers all targeted objects.");
-        applyProperties.HorizontalAlignment = HorizontalAlignment.Right;
-        applyProperties.Click += async (_, _) => await ApplyPropertiesAsync();
-        stack.Children.Add(applyProperties);
+        DetailEffectPresetPicker detailPicker = Tip(new DetailEffectPresetPicker(), "Effect presets. Click one to load its detail values into the editors above, then press Apply properties to write them to the material.");
+        detailPicker.PresetPicked += SetDetailEffectEditors;
+        stack.Children.Add(PresetSection("Effect presets", detailPicker));
+        stack.Children.Add(NewApplyPropertiesButton());
+        return stack;
+    }
 
+    /// <summary>Builds the Textures tab with its slot rows and built-in texture library.</summary>
+    private Control BuildTexturesTab()
+    {
+        StackPanel stack = NewTabStack();
         stack.Children.Add(Heading("Texture maps"));
         stack.Children.Add(new TextBlock
         {
@@ -421,7 +582,24 @@ internal sealed class MaterialEditorWindow : Window
         });
         foreach (MaterialTextureSlot slot in Enum.GetValues<MaterialTextureSlot>())
             stack.Children.Add(BuildTextureSlotRow(slot));
+        stack.Children.Add(Heading("Texture library"));
+        stack.Children.Add(new TextBlock
+        {
+            Text = "Built-in CC0 starter images (Poly Haven, 1K). Pick a material, map, and target slot, then apply — the same decode, undo, and mapping path as Browse.",
+            TextWrapping = TextWrapping.Wrap,
+            Opacity = 0.68,
+            FontSize = 12
+        });
+        TexturePresetPicker texturePicker = new();
+        texturePicker.PresetApplied += ApplyTexturePresetAsync;
+        stack.Children.Add(texturePicker);
+        return stack;
+    }
 
+    /// <summary>Builds the Mapping tab with its UV controls and mapping presets.</summary>
+    private Control BuildMappingTab()
+    {
+        StackPanel stack = NewTabStack();
         stack.Children.Add(Heading("Texture mapping"));
         stack.Children.Add(LabeledControl("Mapping target", mappingSlotBox));
         stack.Children.Add(LabeledControl("UV source", projectionModeBox));
@@ -431,6 +609,9 @@ internal sealed class MaterialEditorWindow : Window
         stack.Children.Add(TwoPropertyRow("Scale U", scaleUBox, "Scale V", scaleVBox));
         stack.Children.Add(LabeledControl("Rotation (degrees)", rotationBox));
         stack.Children.Add(TwoPropertyRow("Wrap U", wrapUBox, "Wrap V", wrapVBox));
+        MappingPresetPicker mappingPicker = Tip(new MappingPresetPicker(), "Mapping presets. Click one to load its UV source, tile size, transform, and wrap modes into the editors above, then press Apply mapping to write them to the target slot.");
+        mappingPicker.PresetPicked += SetMappingEditors;
+        stack.Children.Add(PresetSection("Mapping presets", mappingPicker));
         Button applyMapping = Tip(NewButton("Apply mapping"), "Applies the UV source plus offset, scale, rotation, and wrap modes to the target slot on every targeted object. One undo step covers all targeted objects.");
         applyMapping.HorizontalAlignment = HorizontalAlignment.Right;
         applyMapping.Click += async (_, _) => await ApplyTextureMappingAsync();
@@ -442,25 +623,7 @@ internal sealed class MaterialEditorWindow : Window
             Opacity = 0.68,
             FontSize = 12
         });
-
-        stack.Children.Add(Heading("Current material"));
-        stack.Children.Add(materialDetails);
-        stack.Children.Add(statusText);
-
-        Button close = Tip(NewButton("Close"), "Closes the material editor. Changes were already applied when you pressed each Apply button; nothing is lost by closing.");
-        close.HorizontalAlignment = HorizontalAlignment.Right;
-        close.Click += (_, _) => Close();
-        stack.Children.Add(close);
-
-        return new Border
-        {
-            Padding = new Thickness(16),
-            Child = new ScrollViewer
-            {
-                Content = stack,
-                VerticalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto
-            }
-        };
+        return stack;
     }
 
     /// <summary>Applies the selected library preset to the edited object.</summary>
@@ -470,7 +633,7 @@ internal sealed class MaterialEditorWindow : Window
             return;
         await RunEditAsync(
             () => session.ApplyMaterialPreset(targetIds, preset) > 0,
-            $"Applied {preset.Category} — {preset.Name}. Direct-property fields were refreshed; assigned textures were preserved.");
+            $"Applied {preset.Category} — {preset.Name}. Base color overwritten and direct-property fields refreshed; assigned textures were preserved.");
     }
 
     /// <summary>Applies the entered base color to the edited object.</summary>
@@ -604,6 +767,92 @@ internal sealed class MaterialEditorWindow : Window
                 wrapV) > 0,
             $"{choice.Label} mapping applied: offset ({offsetU:0.###}, {offsetV:0.###}), scale ({scaleU:0.###}, {scaleV:0.###}), rotation {rotationDegrees:0.###}°."
         );
+    }
+
+    /// <summary>Loads a finish preset into the Surface-tab metallic and roughness editors.</summary>
+    private void SetFinishEditors(FinishPreset preset)
+    {
+        metallicBox.Text = Format(preset.Metallic);
+        roughnessBox.Text = Format(preset.Roughness);
+    }
+
+    /// <summary>Loads an alpha preset into the Surface-tab alpha editors.</summary>
+    private void SetAlphaEditors(AlphaPreset preset)
+    {
+        alphaModeBox.SelectedItem = preset.AlphaMode;
+        opacityBox.Text = Format(preset.Alpha);
+        alphaCutoffBox.Text = Format(preset.AlphaCutoff);
+    }
+
+    /// <summary>Loads a glow preset into the emission editors.</summary>
+    private void SetGlowEditors(GlowPreset preset)
+    {
+        emissionBox.Text = Format(preset.Emission);
+        emissionColorBox.Text = ToHex(preset.EmissionColor);
+    }
+
+    /// <summary>Loads a glass preset into the transmission, volume, and IOR editors.</summary>
+    private void SetGlassEditors(GlassPreset preset)
+    {
+        transmissionBox.Text = Format(preset.Transmission);
+        thicknessBox.Text = Format(preset.Thickness);
+        attenuationColorBox.Text = ToHex(preset.AttenuationColor);
+        attenuationDistanceBox.Text = Format(preset.AttenuationDistance);
+        iorBox.Text = Format(preset.Ior);
+    }
+
+    /// <summary>Loads a detail-effect preset into the Detail-tab editors.</summary>
+    private void SetDetailEffectEditors(DetailEffectPreset preset)
+    {
+        normalScaleBox.Text = Format(preset.NormalScale);
+        occlusionStrengthBox.Text = Format(preset.OcclusionStrength);
+        specularBox.Text = Format(preset.Specular);
+        specularColorBox.Text = ToHex(preset.SpecularColor);
+        sheenColorBox.Text = ToHex(preset.SheenColor);
+        sheenRoughnessBox.Text = Format(preset.SheenRoughness);
+        anisotropyBox.Text = Format(preset.Anisotropy);
+        anisotropyRotationBox.Text = Format(preset.AnisotropyRotation);
+        iridescenceBox.Text = Format(preset.Iridescence);
+        iridescenceIorBox.Text = Format(preset.IridescenceIor);
+        iridescenceThicknessMinBox.Text = Format(preset.IridescenceThicknessMinimum);
+        iridescenceThicknessMaxBox.Text = Format(preset.IridescenceThicknessMaximum);
+    }
+
+    /// <summary>Loads a mapping preset into the Mapping-tab editors.</summary>
+    private void SetMappingEditors(MappingPreset preset)
+    {
+        projectionModeBox.SelectedIndex = preset.BoxProjection ? 1 : 0;
+        tileMetersBox.Text = Format(preset.TileMeters);
+        offsetUBox.Text = Format(preset.OffsetU);
+        offsetVBox.Text = Format(preset.OffsetV);
+        scaleUBox.Text = Format(preset.ScaleU);
+        scaleVBox.Text = Format(preset.ScaleV);
+        rotationBox.Text = Format(preset.RotationDegrees);
+        wrapUBox.SelectedItem = preset.WrapU;
+        wrapVBox.SelectedItem = preset.WrapV;
+    }
+
+    /// <summary>Applies a built-in library image to the given texture slot.</summary>
+    private async Task ApplyTexturePresetAsync(TexturePreset preset, MaterialTextureSlot slot, string mapFile)
+    {
+        string? path = TexturePresetLibrary.ResolvePath(mapFile);
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            statusText.Text = $"Library texture {Path.GetFileName(mapFile)} is missing from the install.";
+            return;
+        }
+        if (!TryReadTileMeters(out double tileMeters))
+        {
+            statusText.Text = "Texture tile size must be a number greater than zero meters.";
+            return;
+        }
+
+        bool boxProjection = SelectedProjectionMode;
+        await RunEditAsync(
+            () => session.SetObjectTexture(targetIds, slot, path, tileMeters, boxProjection) > 0,
+            boxProjection
+                ? $"{ComposerSceneSession.TextureSlotLabel(slot)} library texture {preset.Name} applied with {tileMeters:0.######} m box tiling."
+                : $"{ComposerSceneSession.TextureSlotLabel(slot)} library texture {preset.Name} applied using current/authored UVs.");
     }
 
     /// <summary>Runs a scene edit on a background thread and refreshes the editor when it succeeds.</summary>

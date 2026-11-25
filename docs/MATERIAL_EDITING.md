@@ -2,11 +2,15 @@
 
 Lighting Composer exposes material editing from **Inspector → Material…**. The editor is modeless and closable, and targets the currently selected object/subtree. Library presets are optional starting points: the underlying renderer-backed material values and image maps can also be entered directly.
 
+The editor is organized into **Library**, **Color**, **Surface**, **Light & Volume**, **Detail**, **Textures**, and **Mapping** tabs. The current-material summary, status line, and **Close** button stay in a persistent footer below the tabs so apply feedback is always visible.
+
 ## Material library and direct properties
 
-The built-in PBR preset library is defined by `MaterialPresetLibrary.Common` and includes metals, paint, plastics, glass, stone, organic materials, liquids, and emissive surfaces. Applying a preset changes scalar/PBR appearance values while retaining image maps already assigned to the current material.
+The built-in PBR preset library is defined by `MaterialPresetLibrary.Common` and includes metals, paint, plastics, glass, stone, organic materials, liquids, emissive surfaces, ceramics, gems, paper, food, and nature materials. The **Library** tab offers a category filter over these categories. Applying a preset overwrites the base color and resets extended PBR values (IOR, clearcoat, sheen, anisotropy, iridescence, …) to the preset, while retaining image maps already assigned to the current material and its light link.
 
-The floating editor exposes metallic, roughness, transmission, opacity, IOR, emission strength/color, alpha mode/cutoff, double-sided rendering, thickness and attenuation distance in meters, attenuation color, clearcoat, clearcoat roughness, normal scale, and occlusion strength. Press **Apply properties** to create one undoable material edit while preserving base color and all assigned texture maps.
+Direct properties are split across three tabs that share one **Apply properties** button each: **Surface** (metallic, roughness, transmission, opacity, IOR, alpha mode/cutoff, double-sided), **Light & Volume** (emission strength/color, thickness and attenuation distance in meters, attenuation color, clearcoat, clearcoat roughness), and **Detail** (normal scale, occlusion strength, specular and specular color, sheen color and roughness, anisotropy and rotation, iridescence values). Every tab's Apply button validates and writes all three tabs at once, creating one undoable material edit while preserving base color and all assigned texture maps.
+
+Each property tab also has one-click preset rows that fill that tab's editors without applying, so values can be tweaked before pressing Apply: finish and alpha presets on Surface, glow and glass presets on Light & Volume, and effect presets on Detail. The **Color** tab keeps the existing swatch library alongside the hex, RGB, and spectrum editors.
 
 ## Exact base color
 
@@ -14,7 +18,7 @@ Base color can be entered either as `#RRGGBB` or as R/G/B channels from 0 to 255
 
 ## Texture maps
 
-The Material window exposes the renderer-backed PBR image inputs independently:
+The **Textures** tab exposes the renderer-backed PBR image inputs independently:
 
 - Base color
 - Metallic / roughness
@@ -25,9 +29,11 @@ The Material window exposes the renderer-backed PBR image inputs independently:
 
 Each slot has its own **Browse…** and **Clear** controls. The existing managed `TextureMap` decoder accepts PNG, JPEG, BMP, TGA, GIF, PSD, and HDR inputs. Assigning a map preserves every other material property and texture slot.
 
+The same tab also hosts a built-in texture library: six CC0 1K materials (brick, concrete, wood planks, marble, denim, metal), each with albedo, normal, and roughness maps. Pick a material, map, and target slot, then press **Apply to slot** — library images flow through the same decode, undo, and per-slot mapping path as browsed files, and save/load with scenes unchanged. Per-file source credits live in `textures/TEXTURES_LICENSES.md`.
+
 ## Texture mapping
 
-All current `Triangle` objects carry one stored UV channel. The Material window therefore exposes a shared geometry UV source plus a per-texture transform.
+All current `Triangle` objects carry one stored UV channel. The **Mapping** tab therefore exposes a shared geometry UV source plus a per-texture transform, with mapping presets (authored UVs, box sizes, tiling, clamp) that fill the editors without applying.
 
 **UV source**:
 

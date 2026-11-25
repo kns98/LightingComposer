@@ -36,4 +36,10 @@
           Link="Shaders/vulkan_scene_primary.comp"
           CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
+
+  <ItemGroup>
+    <None Include="../textures/*.jpg"
+          Link="textures/%(FileName)%(Extension)"
+          CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>

@@ -133,6 +133,12 @@ public sealed class ChristmasTreeClickTests
         window.Session.SetSelectedObject(id);
         Click(window, FindButton(window, "Material…"));
         Window dialog = await WaitForDialogAsync(window, "Material");
+        Click(dialog, Find<TabItem>(dialog, t => Equals(t.Header?.ToString(), "Color")));
+        await WaitForAsync(() =>
+        {
+            try { FindByName<TextBox>(dialog, "MaterialHex"); return true; }
+            catch (InvalidOperationException) { return false; }
+        }, "color tab content");
         SetText(dialog, FindByName<TextBox>(dialog, "MaterialHex"), hex);
         Click(dialog, FindButton(dialog, "Apply color"));
         dialog.Close();

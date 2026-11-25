@@ -8,7 +8,7 @@ public sealed class ColorPresetTests
     [Fact]
     public void Presets_HaveUniqueNonEmptyNames()
     {
-        Assert.True(ColorPresets.All.Count >= 20);
+        Assert.True(ColorPresets.All.Count >= 40);
         Assert.Equal(ColorPresets.All.Count, ColorPresets.All.Select(static p => p.Name).Distinct(StringComparer.Ordinal).Count());
         foreach (ColorPreset preset in ColorPresets.All)
             Assert.False(string.IsNullOrWhiteSpace(preset.Name));
@@ -30,6 +30,9 @@ public sealed class ColorPresetTests
     [InlineData("White", 1.0, 1.0, 1.0)]
     [InlineData("Black", 0.0, 0.0, 0.0)]
     [InlineData("Gold", 1.0, 0.843, 0.0)]
+    [InlineData("Coral", 1.0, 0.498, 0.314)]
+    [InlineData("Indigo", 0.294, 0.0, 0.510)]
+    [InlineData("Ivory", 1.0, 1.0, 0.941)]
     public void Presets_SpotCheckValues(string name, double r, double g, double b)
     {
         ColorPreset preset = ColorPresets.All.First(p => p.Name == name);
