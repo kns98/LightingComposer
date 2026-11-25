@@ -260,6 +260,7 @@ internal sealed class PrimitiveParametersWindow : Window
             }
         }
 
+        editor.Name = "Param_" + descriptor.Key;
         Grid row = new()
         {
             ColumnDefinitions = new ColumnDefinitions("*,Auto"),

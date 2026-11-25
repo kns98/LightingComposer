@@ -124,7 +124,7 @@ internal sealed class MaterialEditorWindow : Window
         };
         presetSummary = new TextBlock { TextWrapping = TextWrapping.Wrap, Opacity = 0.72, FontSize = 12 };
 
-        hexBox = new TextBox { MinWidth = 105, TextAlignment = TextAlignment.Center };
+        hexBox = new TextBox { Name = "MaterialHex", MinWidth = 105, TextAlignment = TextAlignment.Center };
         redBox = ChannelBox();
         greenBox = ChannelBox();
         blueBox = ChannelBox();

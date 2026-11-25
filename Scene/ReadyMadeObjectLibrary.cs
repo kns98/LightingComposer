@@ -768,9 +768,9 @@ public static class ReadyMadeObjectLibrary
             Vec3 p0 = center + new Vec3(Math.Cos(a0) * radius, 0, Math.Sin(a0) * radius);
             Vec3 p1 = center + new Vec3(Math.Cos(a1) * radius, 0, Math.Sin(a1) * radius);
             if (normalUp)
-                scene.AddTriangle(center, p0, p1, material);
-            else
                 scene.AddTriangle(center, p1, p0, material);
+            else
+                scene.AddTriangle(center, p0, p1, material);
         }
     }
 

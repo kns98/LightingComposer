@@ -27,6 +27,10 @@ internal sealed class ComposerDialogController : IDisposable
         this.session = session;
     }
 
+    /// <summary>Returns the currently open editor dialog, if any.</summary>
+    internal Window? ActiveDialog() =>
+        (Window?)primitiveParametersWindow ?? (Window?)materialEditorWindow ?? (Window?)lightEditorWindow;
+
     /// <summary>Returns true when the primitive parameters window is open for the given object.</summary>
     public bool HasPrimitiveEditorFor(int objectId) => primitiveParametersWindow?.ObjectId == objectId;
     /// <summary>Returns true when the material editor window is open for the given object.</summary>

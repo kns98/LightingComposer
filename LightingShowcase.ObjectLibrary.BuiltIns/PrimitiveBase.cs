@@ -370,8 +370,8 @@ public abstract class PrimitiveBase : IScenePrimitive, IEditablePrimitiveDefinit
                 double u1 = (x + 1) / (double)xSubdivisions;
                 double xa = x0 + width * u0;
                 double xb = x0 + width * u1;
-                addTriangle(new Vec3(xa, center.Y, za), new Vec3(xb, center.Y, za), new Vec3(xb, center.Y, zb), new Vec2(u0, v0), new Vec2(u1, v0), new Vec2(u1, v1), material);
-                addTriangle(new Vec3(xa, center.Y, za), new Vec3(xb, center.Y, zb), new Vec3(xa, center.Y, zb), new Vec2(u0, v0), new Vec2(u1, v1), new Vec2(u0, v1), material);
+                addTriangle(new Vec3(xa, center.Y, za), new Vec3(xb, center.Y, zb), new Vec3(xb, center.Y, za), new Vec2(u0, v0), new Vec2(u1, v1), new Vec2(u1, v0), material);
+                addTriangle(new Vec3(xa, center.Y, za), new Vec3(xa, center.Y, zb), new Vec3(xb, center.Y, zb), new Vec2(u0, v0), new Vec2(u0, v1), new Vec2(u1, v1), material);
             }
         }
     }
@@ -475,8 +475,8 @@ public abstract class PrimitiveBase : IScenePrimitive, IEditablePrimitiveDefinit
             double a1 = 2.0 * Math.PI * (i + 1) / sides;
             Vec3 p0 = center + new Vec3(Math.Cos(a0) * radius, 0, Math.Sin(a0) * radius);
             Vec3 p1 = center + new Vec3(Math.Cos(a1) * radius, 0, Math.Sin(a1) * radius);
-            if (normalUp) EmitTriangle(addTriangle, center, p0, p1, material);
-            else EmitTriangle(addTriangle, center, p1, p0, material);
+            if (normalUp) EmitTriangle(addTriangle, center, p1, p0, material);
+            else EmitTriangle(addTriangle, center, p0, p1, material);
         }
     }
 }

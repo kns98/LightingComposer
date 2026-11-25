@@ -8,3 +8,4 @@
 using System.Runtime.CompilerServices;
 
 [assembly: InternalsVisibleTo("LightingShowcase.Composer.Tests")]
+[assembly: InternalsVisibleTo("LightingShowcase.Composer.UiTests")]

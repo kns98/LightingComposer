@@ -106,6 +106,10 @@ internal sealed class ComposerWindow : Window
     ];
 
     private readonly ComposerSceneSession session = new();
+
+    internal ComposerSceneSession Session => session;
+
+    internal ComposerDialogController Dialogs => dialogController;
     private readonly CancellationTokenSource lifetimeCancellation = new();
     private readonly ComposerRenderController renderController;
     private readonly ComposerDialogController dialogController;
@@ -228,6 +232,7 @@ internal sealed class ComposerWindow : Window
         };
         primitiveBox = new ComboBox
         {
+            Name = "PrimitivePicker",
             ItemsSource = primitiveChoices,
             SelectedIndex = 0,
             MinWidth = 96
@@ -258,14 +263,23 @@ internal sealed class ComposerWindow : Window
         nameBox = NewTextBox();
         visibleBox = new CheckBox { Content = "Visible", IsChecked = true };
         positionX = NumberBox("0");
+        positionX.Name = "PositionX";
         positionY = NumberBox("0");
+        positionY.Name = "PositionY";
         positionZ = NumberBox("0");
+        positionZ.Name = "PositionZ";
         rotationX = NumberBox("0");
+        rotationX.Name = "RotationX";
         rotationY = NumberBox("0");
+        rotationY.Name = "RotationY";
         rotationZ = NumberBox("0");
+        rotationZ.Name = "RotationZ";
         scaleX = NumberBox("1");
+        scaleX.Name = "ScaleX";
         scaleY = NumberBox("1");
+        scaleY.Name = "ScaleY";
         scaleZ = NumberBox("1");
+        scaleZ.Name = "ScaleZ";
 
         image = new Image
         {
@@ -275,6 +289,7 @@ internal sealed class ComposerWindow : Window
         };
         viewport = new Border
         {
+            Name = "Viewport",
             Background = new SolidColorBrush(Color.FromRgb(15, 17, 22)),
             Child = image,
             Focusable = true,
