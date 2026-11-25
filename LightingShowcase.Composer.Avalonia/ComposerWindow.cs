@@ -1298,17 +1298,20 @@ private async Task OpenRenderSettingsAsync()
             e.Handled = true;
             return;
         }
-        if (e.Key == Key.Delete)
+        if (e.Source is not TextBox)
         {
-            _ = DeleteSelectedAsync();
-            e.Handled = true;
-            return;
-        }
-        if (e.Key == Key.F)
-        {
-            FrameSelected();
-            e.Handled = true;
-            return;
+            if (e.Key == Key.Delete)
+            {
+                _ = DeleteSelectedAsync();
+                e.Handled = true;
+                return;
+            }
+            if (e.Key == Key.F)
+            {
+                FrameSelected();
+                e.Handled = true;
+                return;
+            }
         }
 
         if (e.Source is not TextBox && e.KeyModifiers == KeyModifiers.None)
@@ -1360,6 +1363,9 @@ private async Task OpenRenderSettingsAsync()
                 return;
             }
         }
+
+        if (e.Source is TextBox)
+            return;
 
         if (!session.HasRenderableScene)
             return;
