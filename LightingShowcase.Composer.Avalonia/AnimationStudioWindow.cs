@@ -241,6 +241,7 @@ internal sealed class AnimationStudioWindow : Window
         mainPanel.Children.Add(scrubRow);
         mainPanel.Children.Add(new TextBlock
         {
+            Text = "Scrubbing jumps the viewport to each frame's shot camera and poses the live scene; closing restores. Playing previews the movie in the viewport.",
             TextWrapping = TextWrapping.Wrap,
             Opacity = 0.68,
             FontSize = 12
