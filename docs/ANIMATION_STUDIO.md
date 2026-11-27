@@ -12,7 +12,10 @@ to a PNG sequence plus an animated GIF.
   a camera deletes its shots. Cameras also live in the viewport like lights:
   magenta markers with a view-direction tick, click to select, drag the axis
   gizmo to move (position and target travel together), double-click a marker
-  to switch to its view. Camera edits participate in undo.
+  to switch to its view. Camera edits participate in undo. Selection stays in
+  sync three ways: markers, manager list, and object tree clear or follow each
+  other, and studio windows survive selection changes and undo (scrub poses
+  reset on undo; everything closes only when the scene itself is replaced).
 - **Shots** each use one camera for N frames with a move: **Static** holds the
   framing, **Orbit** sweeps a yaw arc in degrees around the shot target, and
   **Push** dollies toward the target (amount is the end radius as a fraction

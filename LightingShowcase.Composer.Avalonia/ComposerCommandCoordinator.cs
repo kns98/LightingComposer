@@ -83,6 +83,7 @@ internal sealed class ComposerCommandCoordinator
     public async Task NewSceneAsync()
     {
         dialogs.CloseEditors();
+        dialogs.CloseStudioWindows();
         renderer.CancelCurrentRender();
         setBusy(true, "Creating a new composition…");
         try
@@ -141,6 +142,7 @@ internal sealed class ComposerCommandCoordinator
     public async Task LoadSceneAsync(string path)
     {
         dialogs.CloseEditors();
+        dialogs.CloseStudioWindows();
         renderer.CancelCurrentRender();
         setBusy(true, $"Loading {Path.GetFileName(path)}…");
         try
@@ -281,6 +283,7 @@ internal sealed class ComposerCommandCoordinator
     public async Task UndoAsync()
     {
         dialogs.CloseEditors();
+        dialogs.InvalidateStudioPose();
         if (!session.CanUndo)
             return;
 
@@ -313,6 +316,7 @@ internal sealed class ComposerCommandCoordinator
     public async Task RedoAsync()
     {
         dialogs.CloseEditors();
+        dialogs.InvalidateStudioPose();
         if (!session.CanRedo)
             return;
 

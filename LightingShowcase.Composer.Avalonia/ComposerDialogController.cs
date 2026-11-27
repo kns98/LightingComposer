@@ -372,11 +372,22 @@ internal sealed class ComposerDialogController : IDisposable
         try { dialog.Close(); } catch { }
     }
 
+    /// <summary>Drops the studio scrub pose snapshot without restoring it.</summary>
+    public void InvalidateStudioPose()
+    {
+        studioWindow?.DropPoseSnapshot();
+    }
+
     /// <summary>Closes the primitive parameters and material editor windows.</summary>
     public void CloseEditors()
     {
         ClosePrimitiveParameters();
         CloseMaterialEditor();
+    }
+
+    /// <summary>Closes the animation studio family windows.</summary>
+    public void CloseStudioWindows()
+    {
         CloseStudioWindow();
         CloseCameraManagerWindow();
         CloseMotionManagerWindow();

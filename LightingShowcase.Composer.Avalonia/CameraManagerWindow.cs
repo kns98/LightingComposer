@@ -26,6 +26,7 @@ internal sealed class CameraManagerWindow : Window
     private readonly Action onClosed;
 
     private readonly ListBox cameraList;
+    private bool syncingSelection;
     private readonly TextBox positionXBox;
     private readonly TextBox positionYBox;
     private readonly TextBox positionZBox;
@@ -57,7 +58,16 @@ internal sealed class CameraManagerWindow : Window
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
 
         cameraList = new ListBox { MinHeight = 200 };
-        cameraList.SelectionChanged += (_, _) => { LoadSelectedTransform(); UpdateStatusForSelection(); };
+        cameraList.SelectionChanged += (_, _) =>
+        {
+            if (syncingSelection)
+                return;
+            if (cameraList.SelectedItem is SceneCamera picked)
+                session.SetSelectedCamera(picked.Id);
+            LoadSelectedTransform();
+            UpdateStatusForSelection();
+            requestPreview();
+        };
         positionXBox = SmallNumberBox();
         positionYBox = SmallNumberBox();
         positionZBox = SmallNumberBox();
@@ -193,8 +203,10 @@ internal sealed class CameraManagerWindow : Window
     {
         IReadOnlyList<SceneCamera> cameras = session.GetStudioState().Cameras;
         int? keep = (cameraList.SelectedItem as SceneCamera)?.Id;
+        syncingSelection = true;
         cameraList.ItemsSource = cameras.ToArray();
         cameraList.SelectedItem = cameras.FirstOrDefault(camera => camera.Id == keep) ?? cameras.FirstOrDefault();
+        syncingSelection = false;
         markersBox.IsChecked = session.ShowCameraMarkers;
     }
 
@@ -202,10 +214,12 @@ internal sealed class CameraManagerWindow : Window
     public void RefreshFromSelection(int? selectedId)
     {
         IReadOnlyList<SceneCamera> cameras = session.GetStudioState().Cameras;
+        syncingSelection = true;
         cameraList.ItemsSource = cameras.ToArray();
         cameraList.SelectedItem = selectedId.HasValue
             ? cameras.FirstOrDefault(camera => camera.Id == selectedId.Value)
             : null;
+        syncingSelection = false;
         LoadSelectedTransform();
         UpdateStatusForSelection();
     }

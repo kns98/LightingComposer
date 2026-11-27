@@ -548,7 +548,9 @@ internal sealed class ComposerSelectionController
         selectMode(ComposerSelectionMode.Object);
         ClearVirtualTriangleSelection();
         session.SetSelectedObjects(selectedObjectIds, activeId);
+        session.SetSelectedCamera(null);
         dialogs.RefreshLightEditor();
+        dialogs.RefreshCameraManager();
         RefreshObjectTree(activeId);
         statusText.Text = selectedObjectIds.Count > 1
             ? $"{selectedObjectIds.Count} objects selected. Ctrl-click toggles selection; Group combines sibling objects."

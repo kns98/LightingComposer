@@ -584,6 +584,12 @@ internal sealed class AnimationStudioWindow : Window
         poseSnapshot = null;
     }
 
+    /// <summary>Drops the scrub pose snapshot so a stale pose is never restored.</summary>
+    public void DropPoseSnapshot()
+    {
+        poseSnapshot = null;
+    }
+
     /// <summary>Toggles timeline playback.</summary>
     private void TogglePlayback()
     {
