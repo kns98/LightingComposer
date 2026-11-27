@@ -29,7 +29,7 @@ public sealed class BinarySceneSaveOptions
 public static class BinarySceneFile
 {
     private const string Magic = "LSCN";
-    private const int Version = 15;
+    private const int Version = 16;
 
     private enum GeometryKind : byte
     {
@@ -256,14 +256,19 @@ public static class BinarySceneFile
             {
                 MotionTrack track = new(reader.ReadInt32());
                 int keyCount = reader.ReadInt32();
+                List<MotionKeyframe> keys = new(keyCount);
                 for (int k = 0; k < keyCount; k++)
                 {
-                    track.AddKey(new MotionKeyframe(
+                    keys.Add(new MotionKeyframe(
                         reader.ReadInt32(),
                         ReadVec3(reader),
                         ReadVec3(reader),
                         ReadVec3(reader)));
                 }
+                if (version == 15)
+                    keys = MotionTrack.ToRelative(keys);
+                foreach (MotionKeyframe key in keys)
+                    track.AddKey(key);
                 scene.MotionTracks.Add(track);
             }
             scene.PruneMotionTracks();

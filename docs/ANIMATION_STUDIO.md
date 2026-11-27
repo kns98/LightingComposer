@@ -21,10 +21,12 @@ to a PNG sequence plus an animated GIF.
   **Push** dollies toward the target (amount is the end radius as a fraction
   of the start radius, so 0.6 pushes to 60%). Moves ease in and out. Shots
   play back to back; a cut hides any change between them.
-- **Motion tracks** keyframe one object's full transform (position, rotation,
-  scale) on **global** movie frames, so motion continues correctly through
-  cuts. Outside the key range the nearest key holds. Rotation interpolates in
-  the same XYZ euler values the Inspector shows; keep arcs under 180 degrees.
+- **Motion tracks** keyframe one object's transform on **global** movie
+  frames, so motion continues correctly through cuts. The first key stores an
+  absolute pose; later keys store position/rotation/scale **deltas from the
+  previous key**, so shifting an early key ripples the motion after it.
+  Outside the key range the nearest key holds. Rotation interpolates in the
+  same XYZ euler values the Inspector shows; keep arcs under 180 degrees.
 - **Movie settings** (fps, size, backend, samples, bounces, exposure, output
   name) travel with the scene. Background, ambient, and shadows follow the
   current viewport options when rendering from the UI.
@@ -32,7 +34,7 @@ to a PNG sequence plus an animated GIF.
 ## Workflow
 
 1. Frame the viewport and define each camera in **Render → Cameras…**, then open the Studio.
-2. Keyframe motion in **Render → Motion…**: pick an object, pose it in the main window, enter a frame, and Capture. The car in the sample drives this way.
+2. Keyframe motion in **Render → Motion…**: pick an object, pose it in the main window, enter a frame, and Capture. Capturing preserves the trajectory elsewhere; select any key to edit its stored deltas directly (labeled absolute on the first key) with the resulting absolute pose shown. The car in the sample drives this way.
 2. Build shots: name, camera, frames, move, amount.
 3. Scrub to a frame, select an object in the main window, and **Capture
    keyframe**; repeat along the timeline. Click a key to jump the scrubber.

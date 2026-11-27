@@ -300,6 +300,24 @@ internal sealed partial class ComposerSceneSession
         }
     }
 
+    /// <summary>Captures an absolute pose as a keyframe, preserving the trajectory elsewhere.</summary>
+    public bool CaptureMotionKeyframe(int objectId, int frame, MotionPose absolute)
+    {
+        ArgumentNullException.ThrowIfNull(absolute);
+        sceneGate.Wait();
+        try
+        {
+            if (scene.GroupById(objectId) == null)
+                return false;
+            scene.GetOrAddMotionTrack(objectId).CaptureAt(frame, absolute);
+            return true;
+        }
+        finally
+        {
+            sceneGate.Release();
+        }
+    }
+
     /// <summary>Removes one motion keyframe. Returns true when one existed.</summary>
     public bool RemoveMotionKeyframe(int objectId, int frame)
     {

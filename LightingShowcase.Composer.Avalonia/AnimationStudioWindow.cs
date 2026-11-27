@@ -241,7 +241,6 @@ internal sealed class AnimationStudioWindow : Window
         mainPanel.Children.Add(scrubRow);
         mainPanel.Children.Add(new TextBlock
         {
-            Text = "Scrubbing poses the live scene and restores it when the Studio closes. Playing previews motion in the viewport.",
             TextWrapping = TextWrapping.Wrap,
             Opacity = 0.68,
             FontSize = 12
@@ -564,10 +563,24 @@ internal sealed class AnimationStudioWindow : Window
         RefreshScrubRange();
     }
 
-    /// <summary>Applies the scrub frame poses and requests a preview.</summary>
+    /// <summary>Applies the scrub frame camera and poses, then requests a preview.</summary>
     private void PoseScrubFrame()
     {
         poseSnapshot ??= session.CaptureStudioPoses();
+        state = session.GetStudioState();
+        try
+        {
+            IReadOnlyList<StudioFrame> frames = StudioTimeline.ResolveFrames(state.Cameras, state.Shots);
+            StudioFrame? frame = frames.FirstOrDefault(candidate => candidate.GlobalFrame == scrubFrame);
+            if (frame != null)
+                session.Camera.ApplyView(frame.Camera);
+        }
+        catch (ArgumentException)
+        {
+        }
+        catch (InvalidOperationException)
+        {
+        }
         Dictionary<int, MotionPose> effective = new(poseSnapshot);
         foreach ((int id, MotionPose pose) in StudioTimeline.SamplePoses(state.Tracks, scrubFrame))
             effective[id] = pose;

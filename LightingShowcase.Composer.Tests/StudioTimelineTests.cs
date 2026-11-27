@@ -116,7 +116,7 @@ public sealed class StudioTimelineTests
         MotionTrack track = new(7);
         Assert.Null(track.Sample(0));
         track.AddKey(new MotionKeyframe(0, new Vec3(0, 0, 0), Vec3.Zero, new Vec3(1, 1, 1)));
-        track.AddKey(new MotionKeyframe(10, new Vec3(10, 0, 0), Vec3.Zero, new Vec3(2, 2, 2)));
+        track.AddKey(new MotionKeyframe(10, new Vec3(10, 0, 0), Vec3.Zero, new Vec3(1, 1, 1)));
 
         Assert.Equal(new Vec3(0, 0, 0), track.Sample(-3)!.Position);
         Assert.Equal(new Vec3(5, 0, 0), track.Sample(5)!.Position);
@@ -127,7 +127,7 @@ public sealed class StudioTimelineTests
     public void MotionTrack_AddRemoveKeys()
     {
         MotionTrack track = new(7);
-        track.AddKey(new MotionKeyframe(10, new Vec3(1, 0, 0), Vec3.Zero, new Vec3(1, 1, 1)));
+        track.AddKey(new MotionKeyframe(10, new Vec3(1, 0, 0), Vec3.Zero, Vec3.Zero));
         track.AddKey(new MotionKeyframe(0, Vec3.Zero, Vec3.Zero, new Vec3(1, 1, 1)));
         Assert.Equal(new[] { 0, 10 }, track.Keys.Select(static k => k.Frame));
         track.AddKey(new MotionKeyframe(0, new Vec3(2, 0, 0), Vec3.Zero, new Vec3(1, 1, 1)));
@@ -137,6 +137,76 @@ public sealed class StudioTimelineTests
         Assert.False(track.RemoveKey(0));
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             track.AddKey(new MotionKeyframe(-1, Vec3.Zero, Vec3.Zero, new Vec3(1, 1, 1))));
+    }
+
+    [Fact]
+    public void MotionTrack_RelativeKeysRipple()
+    {
+        MotionTrack track = new(7);
+        track.AddKey(new MotionKeyframe(0, Vec3.Zero, Vec3.Zero, new Vec3(1, 1, 1)));
+        track.AddKey(new MotionKeyframe(10, new Vec3(10, 0, 0), Vec3.Zero, Vec3.Zero));
+        track.AddKey(new MotionKeyframe(20, new Vec3(10, 0, 0), Vec3.Zero, Vec3.Zero));
+
+        Assert.Equal(new Vec3(10, 0, 0), track.Sample(10)!.Position);
+        Assert.Equal(new Vec3(20, 0, 0), track.Sample(20)!.Position);
+
+        track.AddKey(new MotionKeyframe(10, new Vec3(20, 0, 0), Vec3.Zero, Vec3.Zero));
+        Assert.Equal(new Vec3(20, 0, 0), track.Sample(10)!.Position);
+        Assert.Equal(new Vec3(30, 0, 0), track.Sample(20)!.Position);
+    }
+
+    [Fact]
+    public void MotionTrack_RemoveKeyFoldsDeltaIntoNext()
+    {
+        MotionTrack track = new(7);
+        track.AddKey(new MotionKeyframe(0, Vec3.Zero, Vec3.Zero, new Vec3(1, 1, 1)));
+        track.AddKey(new MotionKeyframe(10, new Vec3(10, 0, 0), Vec3.Zero, Vec3.Zero));
+        track.AddKey(new MotionKeyframe(20, new Vec3(10, 0, 0), Vec3.Zero, Vec3.Zero));
+
+        Assert.True(track.RemoveKey(10));
+        Assert.Equal(2, track.Keys.Count);
+        Assert.Equal(new Vec3(20, 0, 0), track.Keys[1].Position);
+        Assert.Equal(new Vec3(20, 0, 0), track.Sample(20)!.Position);
+        Assert.Equal(new Vec3(10, 0, 0), track.Sample(10)!.Position);
+    }
+
+    [Fact]
+    public void MotionTrack_CaptureAtPreservesTrajectory()
+    {
+        MotionTrack track = new(7);
+        track.AddKey(new MotionKeyframe(0, Vec3.Zero, Vec3.Zero, new Vec3(1, 1, 1)));
+        track.AddKey(new MotionKeyframe(20, new Vec3(20, 0, 0), Vec3.Zero, Vec3.Zero));
+
+        track.CaptureAt(10, new MotionPose(new Vec3(4, 0, 0), Vec3.Zero, new Vec3(1, 1, 1)));
+
+        Assert.Equal(3, track.Keys.Count);
+        Assert.Equal(new Vec3(4, 0, 0), track.Sample(10)!.Position);
+        Assert.Equal(new Vec3(20, 0, 0), track.Sample(20)!.Position);
+        Assert.Equal(new Vec3(16, 0, 0), track.Keys[2].Position);
+    }
+
+    [Fact]
+    public void MotionTrack_ToRelativeRoundTripsAbsolutes()
+    {
+        List<MotionKeyframe> absolute = new()
+        {
+            new MotionKeyframe(20, new Vec3(3, 0, 0), new Vec3(0, 1, 0), new Vec3(2, 2, 2)),
+            new MotionKeyframe(0, new Vec3(1, 0, 0), Vec3.Zero, new Vec3(1, 1, 1)),
+        };
+
+        List<MotionKeyframe> relative = MotionTrack.ToRelative(absolute);
+        MotionTrack track = new(7);
+        foreach (MotionKeyframe key in relative)
+            track.AddKey(key);
+
+        List<(int Frame, MotionPose Pose)> poses = track.AbsolutePoses();
+        Assert.Equal(2, poses.Count);
+        Assert.Equal(0, poses[0].Frame);
+        Assert.Equal(new Vec3(1, 0, 0), poses[0].Pose.Position);
+        Assert.Equal(20, poses[1].Frame);
+        Assert.Equal(new Vec3(3, 0, 0), poses[1].Pose.Position);
+        Assert.Equal(new Vec3(0, 1, 0), poses[1].Pose.Rotation);
+        Assert.Equal(new Vec3(2, 2, 2), poses[1].Pose.Scale);
     }
 
     [Fact]
@@ -202,7 +272,7 @@ public sealed class StudioTimelineTests
             using (BinaryReader reader = new(header, System.Text.Encoding.UTF8, leaveOpen: false))
             {
                 Assert.Equal("LSCN", reader.ReadString());
-                Assert.Equal(15, reader.ReadInt32());
+                Assert.Equal(16, reader.ReadInt32());
             }
 
             Scene loaded = new();

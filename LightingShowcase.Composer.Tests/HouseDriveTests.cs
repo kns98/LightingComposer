@@ -65,4 +65,18 @@ public sealed class HouseDriveTests
         Assert.Equal(Math.PI, start.Rotation.Y, precision: 9);
         Assert.Equal(Math.PI / 2.0, end.Rotation.Y, precision: 9);
     }
+
+    [Fact]
+    public void HouseDrive_TrackStoresRelativeDeltas()
+    {
+        Scene scene = LoadMovie();
+
+        MotionTrack track = Assert.Single(scene.MotionTracks);
+        Assert.Equal(4, track.Keys.Count);
+        Assert.Equal(new Vec3(-11, track.Keys[0].Position.Y, 8), track.Keys[0].Position);
+        Assert.Equal(new Vec3(0, 0, -19), track.Keys[1].Position);
+        Assert.Equal(Vec3.Zero, track.Keys[1].Rotation);
+        Assert.Equal(-Math.PI / 2.0, track.Keys[2].Rotation.Y, precision: 9);
+        Assert.Equal(new Vec3(11, 0, 0), track.Keys[3].Position);
+    }
 }

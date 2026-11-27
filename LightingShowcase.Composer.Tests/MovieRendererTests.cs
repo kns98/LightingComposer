@@ -30,7 +30,7 @@ public sealed class MovieRendererTests
         scene.StudioShots.Add(new StudioShot("B", camera.Id, 2, StudioShotMove.Push, 0.5));
         MotionTrack track = scene.GetOrAddMotionTrack(boxId);
         track.AddKey(new MotionKeyframe(0, Vec3.Zero, Vec3.Zero, new Vec3(1, 1, 1)));
-        track.AddKey(new MotionKeyframe(3, new Vec3(1, 0, 0), Vec3.Zero, new Vec3(1, 1, 1)));
+        track.AddKey(new MotionKeyframe(3, new Vec3(1, 0, 0), Vec3.Zero, Vec3.Zero));
         MovieSettings settings = new() { Fps = 12, Width = 32, Height = 24, OutputName = "take" };
         return (StudioTimeline.ResolveFrames(scene.StudioCameras, scene.StudioShots), settings);
     }
