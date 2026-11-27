@@ -62,6 +62,8 @@ public sealed class RenderJobRunner
         Scene scene = LoadScene(input.ScenePath, request.Variant);
         if (scene.Triangles.Count == 0)
             throw new InvalidDataException("The scene contains no renderable triangles.");
+        if (request.Timeline)
+            return RunTimelineExclusive(scene, input, request, cancellationToken, stopwatch);
 
         CameraDefinition camera = BuildCamera(scene, request);
         HeadlessLighting.Resolve(scene, camera, request);
@@ -98,52 +100,8 @@ public sealed class RenderJobRunner
             image.SavePng(outputPath);
         }
 
-        RenderImage RenderFrame(CameraDefinition view)
-        {
-            return request.Backend switch
-            {
-                RenderBackend.VulkanGpu => VulkanSceneComputeRenderer.Render(
-                    scene,
-                    view.Position,
-                    view.ToBasis(),
-                    request.Width,
-                    request.Height,
-                    request.Bounces,
-                    0,
-                    request.Samples,
-                    cancellationToken,
-                    out details,
-                    progressCallback: null,
-                    settings: renderSettings,
-                    fieldOfViewDegrees: request.FieldOfViewDegrees),
-                RenderBackend.Cpu => CpuCommandLineRenderer.Render(
-                    scene, view, request, cancellationToken, out details),
-                RenderBackend.ShadowRasterPreview => ShadowRasterRenderer.Render(
-                    scene,
-                    view.Position,
-                    view.ToBasis(),
-                    request.Width,
-                    request.Height,
-                    cancellationToken,
-                    out details,
-                    backgroundTop: renderSettings.BackgroundTop,
-                    backgroundBottom: renderSettings.BackgroundBottom,
-                    exposure: request.Exposure),
-                RenderBackend.VulkanRasterPreview => VulkanRasterRenderer.Render(
-                    scene,
-                    view.Position,
-                    view.ToBasis(),
-                    request.Width,
-                    request.Height,
-                    cancellationToken,
-                    out details,
-                    backgroundTop: renderSettings.BackgroundTop,
-                    backgroundBottom: renderSettings.BackgroundBottom,
-                    exposure: request.Exposure),
-                _ => throw new ArgumentOutOfRangeException(
-                    nameof(request.Backend), request.Backend, "Unsupported command-line renderer."),
-            };
-        }
+        RenderImage RenderFrame(CameraDefinition view) =>
+            MovieFrameRenderer.RenderStill(scene, view, request, renderSettings, cancellationToken, out details);
 
         stopwatch.Stop();
         return new RenderJobResult(
@@ -164,6 +122,91 @@ public sealed class RenderJobRunner
             details,
             outputPath,
             frameTimes);
+    }
+
+    /// <summary>Renders the saved studio timeline to a PNG sequence plus an animated GIF.</summary>
+    private static RenderJobResult RunTimelineExclusive(
+        Scene scene,
+        ResolvedSceneInput input,
+        RenderRequest request,
+        CancellationToken cancellationToken,
+        Stopwatch stopwatch)
+    {
+        if (!SupportedSceneFormats.IsBinaryScenePath(input.ScenePath))
+            throw new ArgumentException("--timeline requires a Lighting Showcase scene (.lscene) with a saved timeline.");
+        if (scene.StudioShots.Count == 0)
+            throw new ArgumentException("The scene has no timeline shots. Add shots in the Animation Studio first.");
+        MovieSettings settings = scene.MovieSettings;
+        settings.Validate();
+        IReadOnlyList<StudioFrame> frames = StudioTimeline.ResolveFrames(scene.StudioCameras, scene.StudioShots);
+
+        request.Width = settings.Width;
+        request.Height = settings.Height;
+        request.Samples = settings.Samples;
+        request.Bounces = settings.Bounces;
+        request.Exposure = settings.Exposure;
+        request.Fps = settings.Fps;
+        request.Backend = settings.Backend;
+        request.Validate();
+
+        HeadlessLighting.Resolve(scene, frames[0].Camera, request);
+        RenderSettings renderSettings = request.ToRenderSettings();
+        // NOTE: no ReleaseEditorGeometryForHeadlessRender here — per-frame posing needs the live groups.
+
+        string outputDirectory;
+        MovieSettings effective = settings.Clone();
+        if (!string.IsNullOrWhiteSpace(request.Output))
+        {
+            string full = Path.GetFullPath(request.Output);
+            outputDirectory = Path.GetDirectoryName(full) ?? Environment.CurrentDirectory;
+            effective.OutputName = Path.GetFileNameWithoutExtension(full);
+        }
+        else
+        {
+            outputDirectory = Path.GetDirectoryName(input.ScenePath) ?? Environment.CurrentDirectory;
+        }
+
+        Console.WriteLine(
+            $"Rendering movie with {RenderRequest.BackendName(request.Backend)}: {scene.Triangles.Count:N0} triangles, " +
+            $"{scene.Lights.Count:N0} lights, {frames.Count} frames at {settings.Width}x{settings.Height}; " +
+            $"samples={settings.Samples}, bounces={settings.Bounces}, fps={settings.Fps}.");
+
+        RenderImage RenderMovieFrame(CameraDefinition view)
+        {
+            // The CPU backend reads field of view from the request, so each frame sets its own.
+            request.FieldOfViewDegrees = view.FieldOfViewDegrees;
+            return MovieFrameRenderer.RenderStill(scene, view, request, renderSettings, cancellationToken, out _);
+        }
+
+        MovieRenderResult movie = MovieRenderer.RenderTimeline(
+            scene,
+            frames,
+            scene.MotionTracks,
+            effective,
+            outputDirectory,
+            RenderMovieFrame,
+            (done, total, ms) => Console.WriteLine($"Frame {done}/{total}: {ms:0} ms"),
+            cancellationToken);
+
+        stopwatch.Stop();
+        return new RenderJobResult(
+            RenderRequest.BackendName(request.Backend),
+            Path.GetFileName(input.ScenePath),
+            input.AssetDirectory,
+            request.Width,
+            request.Height,
+            request.Samples,
+            request.Bounces,
+            frames[0].Camera.FieldOfViewDegrees,
+            request.Exposure,
+            request.AmbientStrength,
+            request.UseShadows,
+            scene.Triangles.Count,
+            scene.Lights.Count,
+            stopwatch.Elapsed.TotalSeconds,
+            movie.Details,
+            movie.GifPath,
+            movie.FrameTimes.ToList());
     }
 
     /// <summary>Renders one full camera orbit as an animated GIF with per-frame timings.</summary>

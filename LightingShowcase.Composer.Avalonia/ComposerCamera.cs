@@ -40,6 +40,19 @@ internal sealed class ComposerCamera
         };
     }
 
+    /// <summary>Moves the orbit camera to match the given view definition.</summary>
+    public void ApplyView(CameraDefinition view)
+    {
+        ArgumentNullException.ThrowIfNull(view);
+        target = view.Target;
+        Vec3 offset = view.Position - view.Target;
+        radius = Math.Max(0.05, offset.Length());
+        double horizontal = Math.Sqrt(offset.X * offset.X + offset.Z * offset.Z);
+        yaw = Math.Atan2(offset.X, -offset.Z);
+        pitch = Math.Clamp(Math.Atan2(offset.Y, horizontal), -1.45, 1.45);
+        FieldOfViewDegrees = view.FieldOfViewDegrees;
+    }
+
     /// <summary>Resets the orbit camera to the default view or frames the scene triangles.</summary>
     public void Reset(Scene scene)
     {

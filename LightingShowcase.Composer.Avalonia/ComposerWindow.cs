@@ -365,6 +365,7 @@ internal sealed class ComposerWindow : Window
             index => moveAxisBox.SelectedIndex = index,
             () => { OpenLightEditor(session.SelectedLightIndex); return Task.CompletedTask; },
             OpenRenderSettingsAsync,
+            () => { OpenAnimationStudio(); return Task.CompletedTask; },
             () => renderController.GetOptions(SelectedRenderer.Kind).Wireframe,
             ToggleWireframeAsync);
 
@@ -1272,6 +1273,17 @@ private async Task OpenRenderSettingsAsync()
             selectionController.LoadInspectorFromSelection,
             UpdateHistoryButtons,
             objectId => selectionController.RefreshObjectTree(objectId));
+    }
+
+    /// <summary>Opens the animation studio window.</summary>
+    private void OpenAnimationStudio()
+    {
+        dialogController.OpenStudioWindow(
+            () => pathText.Text = "Untitled composition (modified)",
+            () => _ = renderController.RequestRenderAsync(interactive: true),
+            busy => SetBusy(busy, busy ? "Rendering movie…" : null),
+            () => selectionController.ActiveObjectId,
+            () => renderController.GetOptions(SelectedRenderer.Kind));
     }
 
     /// <summary>Handles keyboard shortcuts for history, editing, selection modes, gizmos, and camera navigation.</summary>

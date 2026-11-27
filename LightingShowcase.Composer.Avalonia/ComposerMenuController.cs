@@ -60,6 +60,7 @@ internal sealed class ComposerMenuController
     private readonly MenuItem resetTransformMenuItem;
     private readonly MenuItem lightingEditorMenuItem;
     private readonly MenuItem renderSettingsMenuItem;
+    private readonly MenuItem studioMenuItem;
     private readonly MenuItem wireframeMenuItem;
     private readonly MenuItem[] primitiveMenuItems;
     private readonly MenuItem[] rendererMenuItems;
@@ -120,6 +121,7 @@ internal sealed class ComposerMenuController
         Action<int> selectAxis,
         Func<Task> lightingEditor,
         Func<Task> renderSettings,
+        Func<Task> animationStudio,
         Func<bool> isWireframeChecked,
         Func<Task> toggleWireframe)
     {
@@ -167,6 +169,7 @@ internal sealed class ComposerMenuController
         wireframeMenuItem.Click += async (_, _) => await toggleWireframe();
         lightingEditorMenuItem = MenuCommand("_Lighting…", lightingEditor);
         renderSettingsMenuItem = MenuCommand("_Settings…", renderSettings);
+        studioMenuItem = MenuCommand("_Animation Studio…", animationStudio);
 
         primitiveMenuItems = CreateCommands(primitiveLabels, addPrimitive);
         rendererMenuItems = CreateRadioItems(rendererLabels, "Renderer", selectRenderer);
@@ -205,7 +208,7 @@ internal sealed class ComposerMenuController
         MenuItem axisMenu = new() { Header = "Move _axis lock", ItemsSource = moveAxisMenuItems.Cast<object>().ToArray() };
         MenuItem modeMenu = new() { Header = "_Mode", ItemsSource = new object[] { selectionMenu, gizmoMenu, axisMenu } };
         MenuItem rendererMenu = new() { Header = "_Renderer", ItemsSource = rendererMenuItems.Cast<object>().ToArray() };
-        MenuItem renderMenu = new() { Header = "_Render", ItemsSource = new object[] { rendererMenu, new Separator(), wireframeMenuItem, lightingEditorMenuItem, renderSettingsMenuItem } };
+        MenuItem renderMenu = new() { Header = "_Render", ItemsSource = new object[] { rendererMenu, new Separator(), wireframeMenuItem, lightingEditorMenuItem, renderSettingsMenuItem, studioMenuItem } };
 
         return new Menu
         {

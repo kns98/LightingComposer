@@ -49,6 +49,12 @@
     <Compile Include="../Scene/SceneImportExportService.cs" Link="Scene/SceneImportExportService.cs" />
     <Compile Include="../Scene/SceneMaterials.cs" Link="Scene/SceneMaterials.cs" />
     <Compile Include="../Scene/SceneMaterialEntry.cs" Link="Scene/SceneMaterialEntry.cs" />
+    <Compile Include="../Scene/StudioTimeline.cs" Link="Scene/StudioTimeline.cs" />
+    <Compile Include="../Scene/StudioPosing.cs" Link="Scene/StudioPosing.cs" />
+    <Compile Include="../Scene/SceneCamera.cs" Link="Scene/SceneCamera.cs" />
+    <Compile Include="../Scene/StudioShot.cs" Link="Scene/StudioShot.cs" />
+    <Compile Include="../Scene/MotionTrack.cs" Link="Scene/MotionTrack.cs" />
+    <Compile Include="../Scene/MovieSettings.cs" Link="Scene/MovieSettings.cs" />
     <Compile Include="../Scene/SceneObjectGroup.cs" Link="Scene/SceneObjectGroup.cs" />
     <Compile Include="../Scene/ScenePrimitive.cs" Link="Scene/ScenePrimitive.cs" />
     <Compile Include="../Scene/ScenePrimitiveRegistry.cs" Link="Scene/ScenePrimitiveRegistry.cs" />

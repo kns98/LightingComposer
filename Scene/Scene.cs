@@ -7,6 +7,7 @@
 // understand the role of this file without opening external documentation.
 // -----------------------------------------------------------------------------
 
+using LightingShowcase.CameraSystem;
 using LightingShowcase.Math3D;
 using LightingShowcase.Rendering;
 using LightingShowcase.Lighting;
@@ -20,12 +21,17 @@ public sealed class Scene
     public List<SceneLight> Lights { get; } = new();
     public List<SceneObjectGroup> ObjectGroups { get; } = new();
     public List<SceneMaterialEntry> MaterialLibrary { get; } = new();
+    public List<SceneCamera> StudioCameras { get; } = new();
+    public List<StudioShot> StudioShots { get; } = new();
+    public List<MotionTrack> MotionTracks { get; } = new();
+    public MovieSettings MovieSettings { get; set; } = new();
 
     private readonly SceneMaterials materials = new();
     private BvhNode? bvhRoot;
     private readonly object accelerationGate = new();
     private readonly Stack<SceneObjectGroup> activeGroups = new();
     private int nextGroupId = 1;
+    private int nextCameraId = 1;
     private long revision;
 
     /// <summary>Monotonically increases whenever world geometry is rebuilt.</summary>
@@ -185,8 +191,13 @@ public sealed class Scene
         Lights.Clear();
         ObjectGroups.Clear();
         MaterialLibrary.Clear();
+        StudioCameras.Clear();
+        StudioShots.Clear();
+        MotionTracks.Clear();
+        MovieSettings = new MovieSettings();
         activeGroups.Clear();
         nextGroupId = 1;
+        nextCameraId = 1;
         InvalidateAccelerationStructure();
         Description = "Empty scene";
         Interlocked.Increment(ref revision);
@@ -204,6 +215,49 @@ public sealed class Scene
         SceneMaterialEntry entry = new(trimmed, material);
         MaterialLibrary.Add(entry);
         return entry;
+    }
+
+    /// <summary>Adds a named studio camera and returns it.</summary>
+    public SceneCamera AddStudioCamera(string name, CameraDefinition definition)
+    {
+        SceneCamera camera = new(nextCameraId++, name, definition);
+        StudioCameras.Add(camera);
+        return camera;
+    }
+
+    /// <summary>Adds a loaded studio camera with a persisted id, keeping the id counter ahead of it.</summary>
+    internal void AddLoadedStudioCamera(SceneCamera camera)
+    {
+        if (camera == null) throw new ArgumentNullException(nameof(camera));
+        StudioCameras.Add(camera);
+        nextCameraId = Math.Max(nextCameraId, camera.Id + 1);
+    }
+
+    /// <summary>Removes a studio camera and the shots that use it. Returns true when one existed.</summary>
+    public bool RemoveStudioCamera(int id)
+    {
+        int removed = StudioCameras.RemoveAll(camera => camera.Id == id);
+        StudioShots.RemoveAll(shot => shot.CameraId == id);
+        return removed > 0;
+    }
+
+    /// <summary>Returns the motion track for the given object, creating it when missing.</summary>
+    public MotionTrack GetOrAddMotionTrack(int objectId)
+    {
+        MotionTrack? track = MotionTracks.FirstOrDefault(candidate => candidate.ObjectId == objectId);
+        if (track == null)
+        {
+            track = new MotionTrack(objectId);
+            MotionTracks.Add(track);
+        }
+        return track;
+    }
+
+    /// <summary>Drops motion tracks whose objects no longer exist.</summary>
+    public void PruneMotionTracks()
+    {
+        HashSet<int> validIds = ObjectGroups.SelectMany(group => group.SelfAndDescendants()).Select(group => group.Id).ToHashSet();
+        MotionTracks.RemoveAll(track => !validIds.Contains(track.ObjectId));
     }
 
     /// <summary>Begins a recursive scene object group. Nested calls attach completed children to the active parent.</summary>
@@ -236,6 +290,18 @@ public sealed class Scene
     public SceneObjectGroup AddImportedGroup(string name, bool selectable = true)
     {
         SceneObjectGroup group = new(nextGroupId++, name, selectable);
+        if (activeGroups.Count > 0)
+            activeGroups.Peek().AddChild(group);
+        else
+            ObjectGroups.Add(group);
+        return group;
+    }
+
+    /// <summary>Adds an imported group with a persisted id, keeping the id counter ahead of it.</summary>
+    internal SceneObjectGroup AddImportedGroup(int id, string name, bool selectable)
+    {
+        SceneObjectGroup group = new(id, name, selectable);
+        nextGroupId = Math.Max(nextGroupId, id + 1);
         if (activeGroups.Count > 0)
             activeGroups.Peek().AddChild(group);
         else

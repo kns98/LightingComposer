@@ -19,6 +19,7 @@ internal sealed class ComposerDialogController : IDisposable
     private PrimitiveParametersWindow? primitiveParametersWindow;
     private MaterialEditorWindow? materialEditorWindow;
     private LightEditorWindow? lightEditorWindow;
+    private AnimationStudioWindow? studioWindow;
 
     /// <summary>Creates a controller that owns the composer editor windows and the render settings dialog.</summary>
     public ComposerDialogController(Window owner, ComposerSceneSession session)
@@ -29,7 +30,7 @@ internal sealed class ComposerDialogController : IDisposable
 
     /// <summary>Returns the currently open editor dialog, if any.</summary>
     internal Window? ActiveDialog() =>
-        (Window?)primitiveParametersWindow ?? (Window?)materialEditorWindow ?? (Window?)lightEditorWindow;
+        (Window?)primitiveParametersWindow ?? (Window?)materialEditorWindow ?? (Window?)lightEditorWindow ?? studioWindow;
 
     /// <summary>Returns true when the primitive parameters window is open for the given object.</summary>
     public bool HasPrimitiveEditorFor(int objectId) => primitiveParametersWindow?.ObjectId == objectId;
@@ -255,11 +256,53 @@ internal sealed class ComposerDialogController : IDisposable
         try { dialog.Close(); } catch { }
     }
 
+    /// <summary>Opens the animation studio window, activating the open window when present.</summary>
+    public void OpenStudioWindow(
+        Action markModified,
+        Action requestPreview,
+        Action<bool> setBusy,
+        Func<int?> activeObjectId,
+        Func<ComposerRenderOptions> currentOptions)
+    {
+        if (studioWindow != null)
+        {
+            studioWindow.Activate();
+            return;
+        }
+
+        AnimationStudioWindow? dialog = null;
+        dialog = new AnimationStudioWindow(
+            session,
+            markModified,
+            requestPreview,
+            setBusy,
+            activeObjectId,
+            currentOptions,
+            onClosed: () =>
+            {
+                if (ReferenceEquals(studioWindow, dialog))
+                    studioWindow = null;
+            });
+        studioWindow = dialog;
+        dialog.Show(owner);
+    }
+
+    /// <summary>Closes the open animation studio window.</summary>
+    public void CloseStudioWindow()
+    {
+        AnimationStudioWindow? dialog = studioWindow;
+        if (dialog == null)
+            return;
+        studioWindow = null;
+        try { dialog.Close(); } catch { }
+    }
+
     /// <summary>Closes the primitive parameters and material editor windows.</summary>
     public void CloseEditors()
     {
         ClosePrimitiveParameters();
         CloseMaterialEditor();
+        CloseStudioWindow();
     }
 
     /// <summary>Closes all editor windows owned by this controller.</summary>

@@ -12,7 +12,8 @@ internal sealed class CommandLineArguments
     private static readonly HashSet<string> FlagOptions = new(StringComparer.OrdinalIgnoreCase)
     {
         "help",
-        "no-shadows"
+        "no-shadows",
+        "timeline"
     };
 
     private readonly Dictionary<string, string> _values;

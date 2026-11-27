@@ -18,7 +18,7 @@ public sealed class RenderRequest
         "camera-position", "camera-target", "camera-up", "fov", "zoom", "light",
         "frames", "fps", "view", "variant",
         "exposure", "ambient", "background-top", "background-bottom",
-        "shadows", "no-shadows", "renderer", "help"
+        "shadows", "no-shadows", "renderer", "timeline", "help"
     ];
 
     public string? Input { get; set; }
@@ -43,6 +43,7 @@ public sealed class RenderRequest
     public string? BackgroundBottom { get; set; }
     public bool UseShadows { get; set; } = true;
     public RenderBackend Backend { get; set; } = RenderBackend.VulkanGpu;
+    public bool Timeline { get; set; }
 
     /// <summary>Builds a render request from parsed command-line arguments.</summary>
     internal static RenderRequest FromCommandLine(CommandLineArguments values)
@@ -56,8 +57,19 @@ public sealed class RenderRequest
         bool useShadows = values.GetBool("shadows", true);
         if (values.Has("no-shadows")) useShadows = false;
 
+        bool timeline = values.Has("timeline");
+        if (timeline)
+        {
+            foreach (string key in new[] { "frames", "fps", "width", "height", "renderer", "samples", "bounces", "exposure", "camera-position", "camera-target", "camera-up", "view", "zoom", "variant" })
+            {
+                if (values.Has(key))
+                    throw new ArgumentException($"--{key} cannot be combined with --timeline; the saved timeline drives it. Edit it in the Animation Studio.");
+            }
+        }
+
         RenderRequest request = new()
         {
+            Timeline = timeline,
             Input = values.Get("input") ?? values.Positionals.FirstOrDefault(),
             Output = values.Get("output"),
             Width = values.GetInt("width", 1920, 1, 32768),
@@ -145,6 +157,10 @@ public sealed class RenderRequest
         if (Fps is < 1 or > 50) throw new ArgumentOutOfRangeException(nameof(Fps), "Fps must be between 1 and 50.");
         if (Frames > 1 && !string.IsNullOrWhiteSpace(Output) && !Output.EndsWith(".gif", StringComparison.OrdinalIgnoreCase))
             throw new ArgumentException("Turntable animation output must end with .gif.");
+        if (Timeline && Frames != 1)
+            throw new ArgumentException("Timeline movies drive their own frame count; drop --frames.");
+        if (Timeline && !string.IsNullOrWhiteSpace(Output) && !Output.EndsWith(".gif", StringComparison.OrdinalIgnoreCase))
+            throw new ArgumentException("Timeline movie output must end with .gif.");
         if (!CameraViews.IsKnownView(View))
             throw new ArgumentException($"Unknown view '{View}'. Use auto, front, left, right, or top.");
         if (Exposure is < 0.01 or > 100.0) throw new ArgumentOutOfRangeException(nameof(Exposure), "Exposure must be between 0.01 and 100.");

@@ -10,6 +10,7 @@
 
 using System.IO.Compression;
 using System.Text;
+using LightingShowcase.CameraSystem;
 using LightingShowcase.Lighting;
 using LightingShowcase.Math3D;
 
@@ -28,7 +29,7 @@ public sealed class BinarySceneSaveOptions
 public static class BinarySceneFile
 {
     private const string Magic = "LSCN";
-    private const int Version = 14;
+    private const int Version = 15;
 
     private enum GeometryKind : byte
     {
@@ -107,6 +108,52 @@ public static class BinarySceneFile
                         WriteMaterial(writer, entry.Material, textureTable);
                     }
 
+                    writer.Write(scene.StudioCameras.Count);
+                    foreach (SceneCamera camera in scene.StudioCameras)
+                    {
+                        writer.Write(camera.Id);
+                        writer.Write(camera.Name ?? string.Empty);
+                        WriteVec3(writer, camera.Definition.Position);
+                        WriteVec3(writer, camera.Definition.Target);
+                        WriteVec3(writer, camera.Definition.Up);
+                        writer.Write(camera.Definition.FieldOfViewDegrees);
+                        writer.Write(camera.Definition.NearPlane);
+                        writer.Write(camera.Definition.FarPlane);
+                    }
+
+                    writer.Write(scene.StudioShots.Count);
+                    foreach (StudioShot shot in scene.StudioShots)
+                    {
+                        writer.Write(shot.Name ?? string.Empty);
+                        writer.Write(shot.CameraId);
+                        writer.Write(shot.FrameCount);
+                        writer.Write((byte)shot.Move);
+                        writer.Write(shot.MoveAmount);
+                    }
+
+                    writer.Write(scene.MotionTracks.Count);
+                    foreach (MotionTrack track in scene.MotionTracks)
+                    {
+                        writer.Write(track.ObjectId);
+                        writer.Write(track.Keys.Count);
+                        foreach (MotionKeyframe key in track.Keys)
+                        {
+                            writer.Write(key.Frame);
+                            WriteVec3(writer, key.Position);
+                            WriteVec3(writer, key.Rotation);
+                            WriteVec3(writer, key.Scale);
+                        }
+                    }
+
+                    writer.Write(scene.MovieSettings.Fps);
+                    writer.Write(scene.MovieSettings.Width);
+                    writer.Write(scene.MovieSettings.Height);
+                    writer.Write((byte)scene.MovieSettings.Backend);
+                    writer.Write(scene.MovieSettings.Samples);
+                    writer.Write(scene.MovieSettings.Bounces);
+                    writer.Write(scene.MovieSettings.Exposure);
+                    writer.Write(scene.MovieSettings.OutputName ?? string.Empty);
+
                     writer.Flush();
                 }
 
@@ -174,6 +221,66 @@ public static class BinarySceneFile
             }
         }
 
+        if (version >= 15)
+        {
+            int cameraCount = reader.ReadInt32();
+            for (int i = 0; i < cameraCount; i++)
+            {
+                int id = reader.ReadInt32();
+                string name = reader.ReadString();
+                CameraDefinition definition = new()
+                {
+                    Position = ReadVec3(reader),
+                    Target = ReadVec3(reader),
+                    Up = ReadVec3(reader),
+                    FieldOfViewDegrees = reader.ReadDouble(),
+                    NearPlane = reader.ReadDouble(),
+                    FarPlane = reader.ReadDouble()
+                };
+                scene.AddLoadedStudioCamera(new SceneCamera(id, name, definition));
+            }
+
+            int shotCount = reader.ReadInt32();
+            for (int i = 0; i < shotCount; i++)
+            {
+                scene.StudioShots.Add(new StudioShot(
+                    reader.ReadString(),
+                    reader.ReadInt32(),
+                    reader.ReadInt32(),
+                    (StudioShotMove)reader.ReadByte(),
+                    reader.ReadDouble()));
+            }
+
+            int trackCount = reader.ReadInt32();
+            for (int i = 0; i < trackCount; i++)
+            {
+                MotionTrack track = new(reader.ReadInt32());
+                int keyCount = reader.ReadInt32();
+                for (int k = 0; k < keyCount; k++)
+                {
+                    track.AddKey(new MotionKeyframe(
+                        reader.ReadInt32(),
+                        ReadVec3(reader),
+                        ReadVec3(reader),
+                        ReadVec3(reader)));
+                }
+                scene.MotionTracks.Add(track);
+            }
+            scene.PruneMotionTracks();
+
+            scene.MovieSettings = new MovieSettings
+            {
+                Fps = reader.ReadInt32(),
+                Width = reader.ReadInt32(),
+                Height = reader.ReadInt32(),
+                Backend = (RenderBackend)reader.ReadByte(),
+                Samples = reader.ReadInt32(),
+                Bounces = reader.ReadInt32(),
+                Exposure = reader.ReadDouble(),
+                OutputName = reader.ReadString()
+            };
+        }
+
         scene.RebuildWorldGeometry();
         return string.IsNullOrWhiteSpace(description) ? $"Binary scene: {Path.GetFileName(filePath)}" : description;
     }
@@ -215,6 +322,7 @@ public static class BinarySceneFile
     /// <summary>Writes an object group with its geometry and children to the binary writer.</summary>
     private static void WriteObject(BinaryWriter writer, SceneObjectGroup group, TextureWriteTable textureTable, MaterialWriteTable materialTable)
     {
+        writer.Write(group.Id);
         writer.Write(group.Name ?? string.Empty);
         writer.Write(group.IsSelectable);
         writer.Write(group.PrimitiveKind ?? string.Empty);
@@ -324,6 +432,7 @@ public static class BinarySceneFile
     /// <summary>Reads an object group with its geometry and children into the scene.</summary>
     private static SceneObjectGroup ReadObject(BinaryReader reader, Scene scene, SceneObjectGroup? parent, string sceneFilePath, int version, TextureReadTable? textureTable, MaterialReadTable? materialTable)
     {
+        int id = version >= 15 ? reader.ReadInt32() : -1;
         string name = reader.ReadString();
         bool selectable = reader.ReadBoolean();
         string primitiveKind = reader.ReadString();
@@ -334,7 +443,9 @@ public static class BinarySceneFile
         Vec3 scale = ReadVec3(reader);
         Material? colorOverride = ReadOptionalMaterial(reader, sceneFilePath, version, textureTable, materialTable);
 
-        SceneObjectGroup group = scene.AddImportedGroup(name, selectable);
+        SceneObjectGroup group = id >= 0
+            ? scene.AddImportedGroup(id, name, selectable)
+            : scene.AddImportedGroup(name, selectable);
         if (parent != null)
         {
             scene.ObjectGroups.Remove(group);
