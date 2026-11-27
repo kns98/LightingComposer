@@ -169,6 +169,26 @@ internal sealed class ComposerWindow : Window
     private bool leftPressed;
     private Point leftPressPoint;
     private LightGizmoDragState? lightGizmoDrag;
+
+    private sealed class CameraGizmoDragState
+    {
+        /// <summary>Initializes drag state with the camera start position, pointer point, and gizmo hit.</summary>
+        public CameraGizmoDragState(Vec3 startPosition, Point lastImagePoint, ComposerGizmoHit hit)
+        {
+            StartPosition = startPosition;
+            LastImagePoint = lastImagePoint;
+            Hit = hit;
+        }
+
+        public Vec3 StartPosition { get; }
+        public Point LastImagePoint { get; set; }
+        public ComposerGizmoHit Hit { get; }
+        public double AccumulatedGesture { get; set; }
+    }
+
+    private CameraGizmoDragState? cameraGizmoDrag;
+    private int? lastCameraClickId;
+    private DateTime lastCameraClickTime = DateTime.MinValue;
     private readonly DispatcherTimer hoverPulseTimer;
     private long lastHoverProbeTimestamp;
 
@@ -366,6 +386,8 @@ internal sealed class ComposerWindow : Window
             () => { OpenLightEditor(session.SelectedLightIndex); return Task.CompletedTask; },
             OpenRenderSettingsAsync,
             () => { OpenAnimationStudio(); return Task.CompletedTask; },
+            () => { OpenCameraManager(); return Task.CompletedTask; },
+            () => { OpenMotionManager(); return Task.CompletedTask; },
             () => renderController.GetOptions(SelectedRenderer.Kind).Wireframe,
             ToggleWireframeAsync);
 
@@ -539,6 +561,7 @@ internal sealed class ComposerWindow : Window
             navigationController.HandleCaptureLost();
             leftPressed = false;
             CancelLightGizmoDrag();
+            CancelCameraGizmoDrag();
             transformController.CancelActiveDrag();
             _ = renderController.RequestRenderAsync(interactive: false);
         };
@@ -712,6 +735,14 @@ private async Task OpenRenderSettingsAsync()
                 return;
             }
 
+            if (TryBeginCameraGizmoDrag(position))
+            {
+                ClearMeshHoverOverlay(requestRender: false);
+                e.Pointer.Capture(viewport);
+                e.Handled = true;
+                return;
+            }
+
             if (transformController.TryBeginGizmoDrag(position))
             {
                 ClearMeshHoverOverlay(requestRender: false);
@@ -741,6 +772,13 @@ private async Task OpenRenderSettingsAsync()
             return;
         }
 
+        if (cameraGizmoDrag != null)
+        {
+            UpdateCameraGizmoDrag(current, e.KeyModifiers);
+            e.Handled = true;
+            return;
+        }
+
         if (transformController.HasActiveDrag)
         {
             transformController.UpdateGizmoDrag(current, e.KeyModifiers);
@@ -757,6 +795,7 @@ private async Task OpenRenderSettingsAsync()
         if (SelectedSelectionMode == ComposerSelectionMode.Object ||
             leftPressed ||
             lightGizmoDrag != null ||
+            cameraGizmoDrag != null ||
             transformController.HasActiveDrag ||
             navigationController.IsNavigating)
         {
@@ -827,6 +866,14 @@ private async Task OpenRenderSettingsAsync()
             return;
         }
 
+        if (cameraGizmoDrag != null)
+        {
+            await CommitCameraGizmoDragAsync(releasePoint, e.KeyModifiers);
+            e.Pointer.Capture(null);
+            e.Handled = true;
+            return;
+        }
+
         if (transformController.HasActiveDrag)
         {
             bool handledTransform = await transformController.CommitActiveDragAsync(releasePoint, e.KeyModifiers);
@@ -857,8 +904,10 @@ private async Task OpenRenderSettingsAsync()
                         else
                         {
                             session.SetSelectedLight(null);
+                            session.SetSelectedCamera(null);
                             selectionController.DeselectObjectFromViewport();
                             dialogController.RefreshLightEditor();
+                            dialogController.RefreshCameraManager();
                             await renderController.RequestRenderAsync(interactive: false);
                         }
                     }
@@ -876,9 +925,19 @@ private async Task OpenRenderSettingsAsync()
                             normalizedY,
                             renderController.LastRenderWidth,
                             renderController.LastRenderHeight);
+                        int? cameraHit = session.PickCameraMarker(
+                            camera,
+                            normalizedX,
+                            normalizedY,
+                            renderController.LastRenderWidth,
+                            renderController.LastRenderHeight);
                         if (lightHit.HasValue)
                         {
                             SelectLight(lightHit.Value);
+                        }
+                        else if (cameraHit.HasValue)
+                        {
+                            SelectCamera(cameraHit.Value);
                         }
                         else
                         {
@@ -902,11 +961,13 @@ private async Task OpenRenderSettingsAsync()
                             }
                             else
                             {
-                                // A normal viewport click on empty space clears object/light
+                                // A normal viewport click on empty space clears object/light/camera
                                 // selection, matching common DCC viewport behavior.
                                 session.SetSelectedLight(null);
+                                session.SetSelectedCamera(null);
                                 selectionController.DeselectObjectFromViewport();
                                 dialogController.RefreshLightEditor();
+                                dialogController.RefreshCameraManager();
                                 await renderController.RequestRenderAsync(interactive: false);
                             }
                         }
@@ -1001,6 +1062,7 @@ private async Task OpenRenderSettingsAsync()
                 SelectSelectionMode(ComposerSelectionMode.Object);
             selectionController.DeselectObjectFromViewport();
             session.SetSelectedLight(index);
+            session.SetSelectedCamera(null);
             ComposerLightModel? light = session.GetLightInfo(index.Value);
             statusText.Text = light == null
                 ? "The selected light no longer exists."
@@ -1014,6 +1076,59 @@ private async Task OpenRenderSettingsAsync()
         dialogController.RefreshLightEditor();
         if (session.HasRenderableScene)
             _ = renderController.RequestRenderAsync(interactive: true);
+    }
+
+    /// <summary>Selects a studio camera from its viewport marker, switching views on double-click.</summary>
+    private void SelectCamera(int? id)
+    {
+        if (id.HasValue)
+        {
+            if (SelectedSelectionMode != ComposerSelectionMode.Object)
+                SelectSelectionMode(ComposerSelectionMode.Object);
+            selectionController.DeselectObjectFromViewport();
+            session.SetSelectedLight(null);
+            session.SetSelectedCamera(id);
+            dialogController.RefreshCameraManager();
+
+            DateTime now = DateTime.UtcNow;
+            if (lastCameraClickId == id && (now - lastCameraClickTime).TotalMilliseconds < 500)
+            {
+                lastCameraClickId = null;
+                SwitchToCameraView(id.Value);
+                return;
+            }
+            lastCameraClickId = id;
+            lastCameraClickTime = now;
+
+            SceneCamera? camera = session.GetStudioState().Cameras.FirstOrDefault(candidate => candidate.Id == id.Value);
+            statusText.Text = camera == null
+                ? "The selected camera no longer exists."
+                : $"Selected camera '{camera.Name}'. Drag the X/Y/Z gizmo to move it; double-click its marker to switch to its view.";
+        }
+        else
+        {
+            session.SetSelectedCamera(null);
+        }
+
+        dialogController.RefreshCameraManager();
+        if (session.HasRenderableScene)
+            _ = renderController.RequestRenderAsync(interactive: true);
+    }
+
+    /// <summary>Moves the viewport to the given studio camera.</summary>
+    private void SwitchToCameraView(int id)
+    {
+        SceneCamera? camera = session.GetStudioState().Cameras.FirstOrDefault(candidate => candidate.Id == id);
+        if (camera == null)
+        {
+            statusText.Text = "That camera no longer exists.";
+            return;
+        }
+        session.Camera.ApplyView(camera.Definition);
+        dialogController.RefreshCameraManager();
+        statusText.Text = $"Switched to view '{camera.Name}'.";
+        if (session.HasRenderableScene)
+            _ = renderController.RequestRenderAsync(interactive: false);
     }
 
     /// <summary>Starts a light gizmo drag when the pointer hits a translation axis, returning true on success.</summary>
@@ -1070,7 +1185,7 @@ private async Task OpenRenderSettingsAsync()
             worldDistance = Math.Round(worldDistance / increment) * increment;
         }
 
-        Vec3 updatedPosition = current.StartPosition + LightAxisVector(current.Hit.Axis) * worldDistance;
+        Vec3 updatedPosition = current.StartPosition + GizmoAxisVector(current.Hit.Axis) * worldDistance;
         if (!session.PreviewSelectedLightPosition(updatedPosition))
         {
             lightGizmoDrag = null;
@@ -1113,8 +1228,105 @@ private async Task OpenRenderSettingsAsync()
         dialogController.RefreshLightEditor();
     }
 
+    /// <summary>Starts a camera gizmo drag when the pointer hits a translation axis, returning true on success.</summary>
+    private bool TryBeginCameraGizmoDrag(Point viewportPoint)
+    {
+        if (SelectedSelectionMode != ComposerSelectionMode.Object ||
+            session.SelectedCameraId is not int cameraId ||
+            !transformController.TryViewportToImagePoint(viewportPoint, out Point imagePoint) ||
+            session.GetSelectedCameraGizmoBounds() is not Aabb bounds)
+        {
+            return false;
+        }
+
+        CameraDefinition camera = session.Camera.Snapshot();
+        if (!ComposerOverlayRenderer.TryHitTranslationAxis(
+                camera,
+                bounds,
+                renderController.LastRenderWidth,
+                renderController.LastRenderHeight,
+                imagePoint.X,
+                imagePoint.Y,
+                out ComposerGizmoHit hit))
+        {
+            return false;
+        }
+
+        SceneCamera? selected = session.BeginSelectedCameraMove();
+        if (selected == null)
+            return false;
+
+        cameraGizmoDrag = new CameraGizmoDragState(selected.Definition.Position, imagePoint, hit);
+        statusText.Text = $"Moving camera '{selected.Name}' on {hit.Axis}. Shift = precision; Ctrl = snap.";
+        return true;
+    }
+
+    /// <summary>Moves the selected camera along its gizmo axis following the pointer.</summary>
+    private void UpdateCameraGizmoDrag(Point viewportPoint, KeyModifiers modifiers)
+    {
+        CameraGizmoDragState? current = cameraGizmoDrag;
+        if (current == null || !transformController.TryViewportToImagePoint(viewportPoint, out Point imagePoint))
+            return;
+
+        double deltaX = imagePoint.X - current.LastImagePoint.X;
+        double deltaY = imagePoint.Y - current.LastImagePoint.Y;
+        double pixelStep = deltaX * current.Hit.ScreenDirectionX + deltaY * current.Hit.ScreenDirectionY;
+        double precision = modifiers.HasFlag(KeyModifiers.Shift) ? 0.20 : 1.0;
+        current.AccumulatedGesture += pixelStep * precision;
+        current.LastImagePoint = imagePoint;
+
+        double worldDistance = current.AccumulatedGesture * current.Hit.WorldUnitsPerPixel;
+        if (modifiers.HasFlag(KeyModifiers.Control))
+        {
+            double increment = Math.Max(0.01, current.Hit.WorldUnitsPerPixel * 10.0);
+            worldDistance = Math.Round(worldDistance / increment) * increment;
+        }
+
+        Vec3 updatedPosition = current.StartPosition + GizmoAxisVector(current.Hit.Axis) * worldDistance;
+        if (!session.PreviewSelectedCameraPosition(updatedPosition))
+        {
+            cameraGizmoDrag = null;
+            statusText.Text = "The selected camera no longer exists.";
+            return;
+        }
+
+        pathText.Text = "Untitled composition (modified)";
+        dialogController.RefreshCameraManager();
+        if (renderController.CanRenderContinuously(SelectedRenderer.Kind))
+            _ = renderController.RequestRenderAsync(interactive: true);
+    }
+
+    /// <summary>Commits the camera gizmo drag and requests a final render.</summary>
+    private async Task CommitCameraGizmoDragAsync(Point viewportPoint, KeyModifiers modifiers)
+    {
+        if (cameraGizmoDrag == null)
+            return;
+
+        UpdateCameraGizmoDrag(viewportPoint, modifiers);
+        bool changed = session.CommitSelectedCameraMove();
+        cameraGizmoDrag = null;
+        dialogController.RefreshCameraManager();
+        if (changed)
+        {
+            pathText.Text = "Untitled composition (modified)";
+            UpdateHistoryButtons();
+            statusText.Text = "Camera position updated.";
+        }
+        await renderController.RequestRenderAsync(interactive: false);
+    }
+
+    /// <summary>Cancels the active camera gizmo drag and restores the camera position.</summary>
+    private void CancelCameraGizmoDrag()
+    {
+        if (cameraGizmoDrag == null)
+            return;
+        session.CancelSelectedCameraMove();
+        cameraGizmoDrag = null;
+        dialogController.RefreshCameraManager();
+    }
+
     /// <summary>Returns the unit vector for the given gizmo axis.</summary>
-    private static Vec3 LightAxisVector(ComposerGizmoAxis axis) => axis switch
+    private static Vec3 GizmoAxisVector(ComposerGizmoAxis axis) => axis switch
     {
         ComposerGizmoAxis.X => new Vec3(1, 0, 0),
         ComposerGizmoAxis.Y => new Vec3(0, 1, 0),
@@ -1282,8 +1494,24 @@ private async Task OpenRenderSettingsAsync()
             () => pathText.Text = "Untitled composition (modified)",
             () => _ = renderController.RequestRenderAsync(interactive: true),
             busy => SetBusy(busy, busy ? "Rendering movie…" : null),
-            () => selectionController.ActiveObjectId,
-            () => renderController.GetOptions(SelectedRenderer.Kind));
+            () => renderController.GetOptions(SelectedRenderer.Kind),
+            () => OpenCameraManager(),
+            () => OpenMotionManager());
+    }
+
+    /// <summary>Opens the camera manager window.</summary>
+    private void OpenCameraManager()
+    {
+        dialogController.OpenCameraManagerWindow(
+            () => pathText.Text = "Untitled composition (modified)",
+            () => _ = renderController.RequestRenderAsync(interactive: true));
+    }
+
+    /// <summary>Opens the motion manager window.</summary>
+    private void OpenMotionManager()
+    {
+        dialogController.OpenMotionManagerWindow(
+            () => pathText.Text = "Untitled composition (modified)");
     }
 
     /// <summary>Handles keyboard shortcuts for history, editing, selection modes, gizmos, and camera navigation.</summary>

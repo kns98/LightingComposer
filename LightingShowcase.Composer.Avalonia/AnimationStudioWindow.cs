@@ -39,11 +39,11 @@ internal sealed class AnimationStudioWindow : Window
     private readonly Action markModified;
     private readonly Action requestPreview;
     private readonly Action<bool> setBusy;
-    private readonly Func<int?> activeObjectId;
     private readonly Func<ComposerRenderOptions> currentOptions;
+    private readonly Action openCameras;
+    private readonly Action openMotion;
     private readonly Action onClosed;
 
-    private readonly ListBox cameraList;
     private readonly ListBox shotList;
     private readonly TextBox shotNameBox;
     private readonly ComboBox shotCameraBox;
@@ -53,8 +53,6 @@ internal sealed class AnimationStudioWindow : Window
     private readonly Slider scrubSlider;
     private readonly TextBlock frameLabel;
     private readonly Button playButton;
-    private readonly TextBlock trackTargetLabel;
-    private readonly ListBox keyList;
     private readonly TextBox fpsBox;
     private readonly TextBox widthBox;
     private readonly TextBox heightBox;
@@ -87,16 +85,18 @@ internal sealed class AnimationStudioWindow : Window
         Action markModified,
         Action requestPreview,
         Action<bool> setBusy,
-        Func<int?> activeObjectId,
         Func<ComposerRenderOptions> currentOptions,
+        Action openCameras,
+        Action openMotion,
         Action onClosed)
     {
         this.session = session ?? throw new ArgumentNullException(nameof(session));
         this.markModified = markModified ?? (() => { });
         this.requestPreview = requestPreview ?? (() => { });
         this.setBusy = setBusy ?? (_ => { });
-        this.activeObjectId = activeObjectId ?? (() => null);
         this.currentOptions = currentOptions ?? throw new ArgumentNullException(nameof(currentOptions));
+        this.openCameras = openCameras ?? (() => { });
+        this.openMotion = openMotion ?? (() => { });
         this.onClosed = onClosed ?? (() => { });
 
         Title = "Animation Studio";
@@ -107,7 +107,6 @@ internal sealed class AnimationStudioWindow : Window
         CanResize = true;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
 
-        cameraList = new ListBox { MinHeight = 90, MaxHeight = 140 };
         shotList = new ListBox { MinHeight = 90, MaxHeight = 140 };
         shotNameBox = new TextBox { MinWidth = 140 };
         shotCameraBox = new ComboBox { MinWidth = 160 };
@@ -117,8 +116,6 @@ internal sealed class AnimationStudioWindow : Window
         scrubSlider = new Slider { Minimum = 0, Maximum = 0, MinWidth = 200 };
         frameLabel = new TextBlock { VerticalAlignment = VerticalAlignment.Center, MinWidth = 150 };
         playButton = NewButton("Play");
-        trackTargetLabel = new TextBlock { TextWrapping = TextWrapping.Wrap, Opacity = 0.76, FontSize = 12 };
-        keyList = new ListBox { MinHeight = 70, MaxHeight = 120 };
         fpsBox = SmallNumberBox();
         widthBox = SmallNumberBox();
         heightBox = SmallNumberBox();
@@ -185,21 +182,20 @@ internal sealed class AnimationStudioWindow : Window
             Opacity = 0.78
         });
 
-        mainPanel.Children.Add(Heading("Cameras"));
-        mainPanel.Children.Add(cameraList);
-        Grid cameraRow = ButtonRow();
-        Button addCamera = Tip(NewButton("Add from view"), "Saves the current viewport camera under a new name.");
-        addCamera.Click += (_, _) => AddCameraFromView();
-        Button previewCamera = Tip(NewButton("Preview"), "Moves the viewport to the selected camera.");
-        previewCamera.Click += (_, _) => PreviewSelectedCamera();
-        Button renameCamera = Tip(NewButton("Rename"), "Renames the selected camera.");
-        renameCamera.Click += async (_, _) => await RenameSelectedCameraAsync();
-        Button deleteCamera = Tip(NewButton("Delete"), "Deletes the selected camera and its shots.");
-        deleteCamera.Click += (_, _) => DeleteSelectedCamera();
-        AddRowButtons(cameraRow, addCamera, previewCamera, renameCamera, deleteCamera);
-        mainPanel.Children.Add(cameraRow);
-
         mainPanel.Children.Add(Heading("Shots"));
+        Grid cameraRow = new() { ColumnDefinitions = new ColumnDefinitions("*,Auto"), ColumnSpacing = 8 };
+        cameraRow.Children.Add(new TextBlock
+        {
+            Text = "Shots use the scene cameras.",
+            VerticalAlignment = VerticalAlignment.Center,
+            Opacity = 0.72,
+            FontSize = 12
+        });
+        Button manageCameras = Tip(NewButton("Manage cameras…"), "Opens the camera manager.");
+        manageCameras.Click += (_, _) => openCameras();
+        cameraRow.Children.Add(manageCameras);
+        Grid.SetColumn(manageCameras, 1);
+        mainPanel.Children.Add(cameraRow);
         mainPanel.Children.Add(shotList);
         shotList.SelectionChanged += (_, _) => LoadSelectedShot();
         Grid shotFields = new() { ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto,*"), ColumnSpacing = 8, RowSpacing = 6 };
@@ -252,16 +248,19 @@ internal sealed class AnimationStudioWindow : Window
         });
 
         mainPanel.Children.Add(Heading("Object motion"));
-        mainPanel.Children.Add(trackTargetLabel);
-        mainPanel.Children.Add(keyList);
-        keyList.SelectionChanged += (_, _) => JumpToSelectedKey();
-        Grid keyRow = ButtonRow();
-        Button captureKey = Tip(NewButton("Capture keyframe"), "Records the selected object's current transform at the scrub frame.");
-        captureKey.Click += (_, _) => CaptureKeyframe();
-        Button deleteKey = Tip(NewButton("Delete key"), "Deletes the selected keyframe.");
-        deleteKey.Click += (_, _) => DeleteKeyframe();
-        AddRowButtons(keyRow, captureKey, deleteKey);
-        mainPanel.Children.Add(keyRow);
+        Grid motionRow = new() { ColumnDefinitions = new ColumnDefinitions("*,Auto"), ColumnSpacing = 8 };
+        motionRow.Children.Add(new TextBlock
+        {
+            Text = "Motion is keyframed per object across the whole timeline.",
+            VerticalAlignment = VerticalAlignment.Center,
+            Opacity = 0.72,
+            FontSize = 12
+        });
+        Button manageMotion = Tip(NewButton("Manage motion…"), "Opens the motion manager.");
+        manageMotion.Click += (_, _) => openMotion();
+        motionRow.Children.Add(manageMotion);
+        Grid.SetColumn(manageMotion, 1);
+        mainPanel.Children.Add(motionRow);
 
         mainPanel.Children.Add(Heading("Movie settings"));
         Grid settings = new() { ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto,*"), ColumnSpacing = 8, RowSpacing = 6 };
@@ -372,11 +371,9 @@ internal sealed class AnimationStudioWindow : Window
     private void RefreshAll()
     {
         state = session.GetStudioState();
-        RefreshCameraList();
+        RefreshShotCameraPicker();
         RefreshShotList();
-        RefreshKeyframeList();
         RefreshScrubRange();
-        RefreshTargetLabel();
         RefreshOutputLabel();
         if (!settingsLoaded)
         {
@@ -385,15 +382,13 @@ internal sealed class AnimationStudioWindow : Window
         }
     }
 
-    /// <summary>Reloads the camera list and the shot camera picker.</summary>
-    private void RefreshCameraList()
+    /// <summary>Reloads the shot camera picker.</summary>
+    private void RefreshShotCameraPicker()
     {
-        int? keep = (cameraList.SelectedItem as SceneCamera)?.Id;
-        cameraList.ItemsSource = state.Cameras.ToArray();
-        cameraList.SelectedItem = state.Cameras.FirstOrDefault(camera => camera.Id == keep) ?? state.Cameras.FirstOrDefault();
+        int? keep = (shotCameraBox.SelectedItem as SceneCamera)?.Id;
         shotCameraBox.ItemsSource = state.Cameras.ToArray();
-        if (shotCameraBox.SelectedItem == null)
-            shotCameraBox.SelectedIndex = state.Cameras.Count > 0 ? 0 : -1;
+        shotCameraBox.SelectedItem = state.Cameras.FirstOrDefault(camera => camera.Id == keep)
+            ?? state.Cameras.FirstOrDefault();
     }
 
     /// <summary>Reloads the shot list and the duration label.</summary>
@@ -406,18 +401,7 @@ internal sealed class AnimationStudioWindow : Window
             shotList.SelectedIndex = 0;
     }
 
-    /// <summary>Reloads the keyframe list for the active object.</summary>
-    private void RefreshKeyframeList()
-    {
-        int? target = activeObjectId();
-        MotionTrack? track = target.HasValue ? state.Tracks.FirstOrDefault(candidate => candidate.ObjectId == target.Value) : null;
-        int keep = (keyList.SelectedItem as KeyframeChoice)?.Key.Frame ?? -1;
-        KeyframeChoice[] choices = track?.Keys.Select(static key => new KeyframeChoice(key)).ToArray() ?? Array.Empty<KeyframeChoice>();
-        keyList.ItemsSource = choices;
-        keyList.SelectedItem = choices.FirstOrDefault(choice => choice.Key.Frame == keep);
-    }
-
-    /// <summary>Updates the scrub range, frame label, and target label.</summary>
+    /// <summary>Updates the scrub range and frame label.</summary>
     private void RefreshScrubRange()
     {
         int total = state.Shots.Sum(static shot => Math.Max(0, shot.FrameCount));
@@ -430,16 +414,6 @@ internal sealed class AnimationStudioWindow : Window
         frameLabel.Text = total == 0
             ? "No frames — add a shot."
             : $"Frame {scrubFrame + 1}/{total} ({seconds:0.0}s at {state.Settings.Fps} fps)";
-    }
-
-    /// <summary>Updates the motion target label from the active object.</summary>
-    private void RefreshTargetLabel()
-    {
-        int? target = activeObjectId();
-        ComposerObjectState? objectState = target.HasValue ? session.GetObjectState(target.Value) : null;
-        trackTargetLabel.Text = objectState == null
-            ? "Select an object in the main window, then capture its transform at the scrub frame."
-            : $"Keys for: {objectState.Name}";
     }
 
     /// <summary>Updates the output folder label.</summary>
@@ -469,64 +443,6 @@ internal sealed class AnimationStudioWindow : Window
                 }
             }
         }
-    }
-
-    /// <summary>Saves the viewport camera under a new name.</summary>
-    private void AddCameraFromView()
-    {
-        CameraDefinition definition = session.Camera.Snapshot();
-        int number = state.Cameras.Count + 1;
-        string name = $"Camera {number}";
-        while (state.Cameras.Any(camera => camera.Name == name))
-            name = $"Camera {++number}";
-        session.AddStudioCamera(name, definition);
-        markModified();
-        RefreshAll();
-        cameraList.SelectedItem = state.Cameras.FirstOrDefault(camera => camera.Name == name);
-        statusText.Text = $"Camera '{name}' saved from the current view.";
-    }
-
-    /// <summary>Moves the viewport to the selected camera.</summary>
-    private void PreviewSelectedCamera()
-    {
-        if (cameraList.SelectedItem is not SceneCamera camera)
-        {
-            statusText.Text = "Add a camera first.";
-            return;
-        }
-        session.Camera.ApplyView(camera.Definition);
-        requestPreview();
-        statusText.Text = $"Previewing '{camera.Name}'.";
-    }
-
-    /// <summary>Renames the selected camera.</summary>
-    private async Task RenameSelectedCameraAsync()
-    {
-        if (cameraList.SelectedItem is not SceneCamera camera)
-        {
-            statusText.Text = "Select a camera first.";
-            return;
-        }
-        string? name = await TextPromptDialog.AskAsync(this, "Rename camera", "Camera name:", "Rename");
-        if (string.IsNullOrWhiteSpace(name) || name.Trim() == camera.Name)
-            return;
-        session.RenameStudioCamera(camera.Id, name);
-        markModified();
-        RefreshAll();
-    }
-
-    /// <summary>Deletes the selected camera and its shots.</summary>
-    private void DeleteSelectedCamera()
-    {
-        if (cameraList.SelectedItem is not SceneCamera camera)
-        {
-            statusText.Text = "Select a camera first.";
-            return;
-        }
-        session.RemoveStudioCamera(camera.Id);
-        markModified();
-        RefreshAll();
-        statusText.Text = $"Camera '{camera.Name}' and its shots were deleted.";
     }
 
     /// <summary>Loads the selected shot into the editor fields.</summary>
@@ -708,48 +624,6 @@ internal sealed class AnimationStudioWindow : Window
         scrubFrame++;
         PoseScrubFrame();
         RefreshScrubRange();
-    }
-
-    /// <summary>Jumps the scrubber to the selected keyframe.</summary>
-    private void JumpToSelectedKey()
-    {
-        if (keyList.SelectedItem is not KeyframeChoice choice)
-            return;
-        scrubFrame = choice.Key.Frame;
-        PoseScrubFrame();
-        RefreshScrubRange();
-    }
-
-    /// <summary>Records the active object's transform at the scrub frame.</summary>
-    private void CaptureKeyframe()
-    {
-        int? target = activeObjectId();
-        ComposerObjectState? objectState = target.HasValue ? session.GetObjectState(target.Value) : null;
-        if (objectState == null)
-        {
-            statusText.Text = "Select an object in the main window first.";
-            return;
-        }
-        session.AddMotionKeyframe(
-            objectState.Id,
-            new MotionKeyframe(scrubFrame, objectState.Position, objectState.Rotation, objectState.Scale));
-        markModified();
-        RefreshAll();
-        statusText.Text = $"Keyframe captured for '{objectState.Name}' at frame {scrubFrame + 1}.";
-    }
-
-    /// <summary>Deletes the selected keyframe.</summary>
-    private void DeleteKeyframe()
-    {
-        int? target = activeObjectId();
-        if (!target.HasValue || keyList.SelectedItem is not KeyframeChoice choice)
-        {
-            statusText.Text = "Select a keyframe first.";
-            return;
-        }
-        session.RemoveMotionKeyframe(target.Value, choice.Key.Frame);
-        markModified();
-        RefreshAll();
     }
 
     /// <summary>Reads and validates the movie settings editors.</summary>

@@ -162,6 +162,94 @@ internal static class ComposerOverlayRenderer
         }
     }
 
+    /// <summary>Draws editor-only camera markers and the selected camera move gizmo.</summary>
+    public static void DrawCameras(
+        RenderImage image,
+        CameraDefinition camera,
+        IReadOnlyList<SceneCamera> cameras,
+        int? selectedCameraId)
+    {
+        if (image == null) throw new ArgumentNullException(nameof(image));
+        if (camera == null) throw new ArgumentNullException(nameof(camera));
+        if (cameras == null) throw new ArgumentNullException(nameof(cameras));
+
+        for (int i = 0; i < cameras.Count; i++)
+        {
+            SceneCamera stored = cameras[i];
+            if (!TryProject(stored.Definition.Position, camera, image.Width, image.Height, out ProjectedPoint projected))
+                continue;
+            DrawCameraMarker(image, camera, stored.Definition, projected, selectedCameraId == stored.Id);
+        }
+
+        SceneCamera? selected = null;
+        if (selectedCameraId.HasValue)
+            selected = cameras.FirstOrDefault(candidate => candidate.Id == selectedCameraId.Value);
+        if (selected != null)
+        {
+            Aabb pointBounds = new(selected.Definition.Position, selected.Definition.Position);
+            if (TryCreateAxisGeometry(camera, pointBounds, image.Width, image.Height, out AxisGeometry geometry))
+                DrawTranslationGizmo(image, geometry, ComposerGizmoAxis.None);
+        }
+    }
+
+    /// <summary>Returns the nearest visible studio camera marker under an image-space pointer.</summary>
+    public static bool TryPickCameraMarker(
+        IReadOnlyList<SceneCamera> cameras,
+        CameraDefinition camera,
+        int width,
+        int height,
+        double imageX,
+        double imageY,
+        out int cameraId)
+    {
+        cameraId = -1;
+        double bestDistance = 14.0;
+        double bestDepth = double.PositiveInfinity;
+        for (int i = 0; i < cameras.Count; i++)
+        {
+            if (!TryProject(cameras[i].Definition.Position, camera, width, height, out ProjectedPoint projected))
+                continue;
+            double distance = Distance(imageX, imageY, projected.X, projected.Y);
+            if (distance < bestDistance || (Math.Abs(distance - bestDistance) < 0.5 && projected.Depth < bestDepth))
+            {
+                bestDistance = distance;
+                bestDepth = projected.Depth;
+                cameraId = cameras[i].Id;
+            }
+        }
+        return cameraId >= 0;
+    }
+
+    /// <summary>Draws an editor marker for one studio camera with its view-direction tick.</summary>
+    private static void DrawCameraMarker(
+        RenderImage image,
+        CameraDefinition camera,
+        CameraDefinition definition,
+        ProjectedPoint center,
+        bool selected)
+    {
+        const uint markerColor = 0xffff4dffu;
+        uint outline = selected ? BoundsColor : 0xfff0f0f0u;
+        int cx = (int)Math.Round(center.X);
+        int cy = (int)Math.Round(center.Y);
+
+        DrawCircleOutline(image, center.X, center.Y, selected ? 10 : 8, outline, 2);
+        DrawDisc(image, cx, cy, 4, markerColor);
+        DrawDisc(image, cx, cy, 1, 0xffffffffu);
+
+        if (TryProject(definition.Target, camera, image.Width, image.Height, out ProjectedPoint target))
+        {
+            double dx = target.X - center.X;
+            double dy = target.Y - center.Y;
+            double length = Math.Sqrt(dx * dx + dy * dy);
+            if (length > 1e-6)
+            {
+                double scale = 16.0 / length;
+                DrawLine(image, center.X, center.Y, center.X + dx * scale, center.Y + dy * scale, markerColor, 2);
+            }
+        }
+    }
+
     /// <summary>Returns the nearest visible editor light marker under an image-space pointer.</summary>
     public static bool TryPickLightMarker(
         IReadOnlyList<SceneLight> lights,

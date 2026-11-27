@@ -1246,8 +1246,13 @@ internal sealed partial class ComposerSceneSession : IDisposable
             SyncSelectionSetWithActive();
             lightMoveBefore = null;
             lightMoveIndex = null;
+            cameraMoveBeforeCameras = null;
+            cameraMoveBeforeShots = null;
+            cameraMoveId = null;
             if (selectedLightIndex is int undoLight && (undoLight < 0 || undoLight >= scene.Lights.Count))
                 selectedLightIndex = scene.Lights.Count == 0 ? null : scene.Lights.Count - 1;
+            if (selectedCameraId.HasValue && scene.StudioCameras.All(camera => camera.Id != selectedCameraId.Value))
+                selectedCameraId = null;
             ApplySelectionHighlightAndRebuild();
             selectedTriangleGroupId = null;
             selectedTriangleIndex = null;
@@ -1285,8 +1290,13 @@ internal sealed partial class ComposerSceneSession : IDisposable
             SyncSelectionSetWithActive();
             lightMoveBefore = null;
             lightMoveIndex = null;
+            cameraMoveBeforeCameras = null;
+            cameraMoveBeforeShots = null;
+            cameraMoveId = null;
             if (selectedLightIndex is int redoLight && (redoLight < 0 || redoLight >= scene.Lights.Count))
                 selectedLightIndex = scene.Lights.Count == 0 ? null : scene.Lights.Count - 1;
+            if (selectedCameraId.HasValue && scene.StudioCameras.All(camera => camera.Id != selectedCameraId.Value))
+                selectedCameraId = null;
             ApplySelectionHighlightAndRebuild();
             selectedTriangleGroupId = null;
             selectedTriangleIndex = null;
@@ -1658,6 +1668,8 @@ internal sealed partial class ComposerSceneSession : IDisposable
 
             if (showLightMarkers)
                 ComposerOverlayRenderer.DrawLights(image, camera, scene.Lights, selectedLightIndex);
+            if (showCameraMarkers)
+                ComposerOverlayRenderer.DrawCameras(image, camera, scene.StudioCameras, selectedCameraId);
 
             stopwatch.Stop();
             return new ComposerFrame(image, stopwatch.Elapsed.TotalMilliseconds, details);

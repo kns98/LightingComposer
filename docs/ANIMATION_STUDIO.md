@@ -6,9 +6,13 @@ to a PNG sequence plus an animated GIF.
 
 ## Concepts
 
-- **Cameras** are named viewpoints (position, target, field of view). Add one
-  from the current viewport, preview it (the viewport jumps to it), rename it,
-  or delete it. Deleting a camera deletes its shots.
+- **Cameras** are named viewpoints (position, target, field of view) managed
+  in **Render → Cameras…** (add from view, preview, update from view, rename,
+  delete, numeric transform, marker toggle) and picked up by shots. Deleting
+  a camera deletes its shots. Cameras also live in the viewport like lights:
+  magenta markers with a view-direction tick, click to select, drag the axis
+  gizmo to move (position and target travel together), double-click a marker
+  to switch to its view. Camera edits participate in undo.
 - **Shots** each use one camera for N frames with a move: **Static** holds the
   framing, **Orbit** sweeps a yaw arc in degrees around the shot target, and
   **Push** dollies toward the target (amount is the end radius as a fraction
@@ -24,7 +28,8 @@ to a PNG sequence plus an animated GIF.
 
 ## Workflow
 
-1. Frame the viewport, open the Studio, and **Add from view** for each camera.
+1. Frame the viewport and define each camera in **Render → Cameras…**, then open the Studio.
+2. Keyframe motion in **Render → Motion…**: pick an object, pose it in the main window, enter a frame, and Capture. The car in the sample drives this way.
 2. Build shots: name, camera, frames, move, amount.
 3. Scrub to a frame, select an object in the main window, and **Capture
    keyframe**; repeat along the timeline. Click a key to jump the scrubber.

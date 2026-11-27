@@ -20,6 +20,8 @@ internal sealed class ComposerDialogController : IDisposable
     private MaterialEditorWindow? materialEditorWindow;
     private LightEditorWindow? lightEditorWindow;
     private AnimationStudioWindow? studioWindow;
+    private CameraManagerWindow? cameraManagerWindow;
+    private MotionManagerWindow? motionManagerWindow;
 
     /// <summary>Creates a controller that owns the composer editor windows and the render settings dialog.</summary>
     public ComposerDialogController(Window owner, ComposerSceneSession session)
@@ -30,7 +32,7 @@ internal sealed class ComposerDialogController : IDisposable
 
     /// <summary>Returns the currently open editor dialog, if any.</summary>
     internal Window? ActiveDialog() =>
-        (Window?)primitiveParametersWindow ?? (Window?)materialEditorWindow ?? (Window?)lightEditorWindow ?? studioWindow;
+        (Window?)primitiveParametersWindow ?? (Window?)materialEditorWindow ?? (Window?)lightEditorWindow ?? (Window?)studioWindow ?? (Window?)cameraManagerWindow ?? (Window?)motionManagerWindow;
 
     /// <summary>Returns true when the primitive parameters window is open for the given object.</summary>
     public bool HasPrimitiveEditorFor(int objectId) => primitiveParametersWindow?.ObjectId == objectId;
@@ -256,13 +258,85 @@ internal sealed class ComposerDialogController : IDisposable
         try { dialog.Close(); } catch { }
     }
 
+    /// <summary>Opens the camera manager window, activating the open window when present.</summary>
+    public void OpenCameraManagerWindow(Action markModified, Action requestPreview)
+    {
+        if (cameraManagerWindow != null)
+        {
+            cameraManagerWindow.Activate();
+            return;
+        }
+
+        CameraManagerWindow? dialog = null;
+        dialog = new CameraManagerWindow(
+            session,
+            markModified,
+            requestPreview,
+            onClosed: () =>
+            {
+                if (ReferenceEquals(cameraManagerWindow, dialog))
+                    cameraManagerWindow = null;
+            });
+        cameraManagerWindow = dialog;
+        dialog.Show(owner);
+    }
+
+    /// <summary>Refreshes the open camera manager from the current selection.</summary>
+    public void RefreshCameraManager()
+    {
+        cameraManagerWindow?.RefreshFromSelection(session.SelectedCameraId);
+    }
+
+    /// <summary>Closes the open camera manager window.</summary>
+    public void CloseCameraManagerWindow()
+    {
+        CameraManagerWindow? dialog = cameraManagerWindow;
+        if (dialog == null)
+            return;
+        cameraManagerWindow = null;
+        try { dialog.Close(); } catch { }
+    }
+
+    /// <summary>Opens the motion manager window, activating the open window when present.</summary>
+    public void OpenMotionManagerWindow(Action markModified)
+    {
+        if (motionManagerWindow != null)
+        {
+            motionManagerWindow.Activate();
+            return;
+        }
+
+        MotionManagerWindow? dialog = null;
+        dialog = new MotionManagerWindow(
+            session,
+            markModified,
+            onClosed: () =>
+            {
+                if (ReferenceEquals(motionManagerWindow, dialog))
+                    motionManagerWindow = null;
+            });
+        motionManagerWindow = dialog;
+        dialog.Show(owner);
+    }
+
+    /// <summary>Closes the open motion manager window.</summary>
+    public void CloseMotionManagerWindow()
+    {
+        MotionManagerWindow? dialog = motionManagerWindow;
+        if (dialog == null)
+            return;
+        motionManagerWindow = null;
+        try { dialog.Close(); } catch { }
+    }
+
     /// <summary>Opens the animation studio window, activating the open window when present.</summary>
     public void OpenStudioWindow(
         Action markModified,
         Action requestPreview,
         Action<bool> setBusy,
-        Func<int?> activeObjectId,
-        Func<ComposerRenderOptions> currentOptions)
+        Func<ComposerRenderOptions> currentOptions,
+        Action openCameras,
+        Action openMotion)
     {
         if (studioWindow != null)
         {
@@ -276,8 +350,9 @@ internal sealed class ComposerDialogController : IDisposable
             markModified,
             requestPreview,
             setBusy,
-            activeObjectId,
             currentOptions,
+            openCameras,
+            openMotion,
             onClosed: () =>
             {
                 if (ReferenceEquals(studioWindow, dialog))
@@ -303,6 +378,8 @@ internal sealed class ComposerDialogController : IDisposable
         ClosePrimitiveParameters();
         CloseMaterialEditor();
         CloseStudioWindow();
+        CloseCameraManagerWindow();
+        CloseMotionManagerWindow();
     }
 
     /// <summary>Closes all editor windows owned by this controller.</summary>

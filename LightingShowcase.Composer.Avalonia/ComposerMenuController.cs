@@ -61,6 +61,8 @@ internal sealed class ComposerMenuController
     private readonly MenuItem lightingEditorMenuItem;
     private readonly MenuItem renderSettingsMenuItem;
     private readonly MenuItem studioMenuItem;
+    private readonly MenuItem cameraMenuItem;
+    private readonly MenuItem motionMenuItem;
     private readonly MenuItem wireframeMenuItem;
     private readonly MenuItem[] primitiveMenuItems;
     private readonly MenuItem[] rendererMenuItems;
@@ -122,6 +124,8 @@ internal sealed class ComposerMenuController
         Func<Task> lightingEditor,
         Func<Task> renderSettings,
         Func<Task> animationStudio,
+        Func<Task> cameraManager,
+        Func<Task> motionManager,
         Func<bool> isWireframeChecked,
         Func<Task> toggleWireframe)
     {
@@ -170,6 +174,8 @@ internal sealed class ComposerMenuController
         lightingEditorMenuItem = MenuCommand("_Lighting…", lightingEditor);
         renderSettingsMenuItem = MenuCommand("_Settings…", renderSettings);
         studioMenuItem = MenuCommand("_Animation Studio…", animationStudio);
+        cameraMenuItem = MenuCommand("_Cameras…", cameraManager);
+        motionMenuItem = MenuCommand("_Motion…", motionManager);
 
         primitiveMenuItems = CreateCommands(primitiveLabels, addPrimitive);
         rendererMenuItems = CreateRadioItems(rendererLabels, "Renderer", selectRenderer);
@@ -208,7 +214,7 @@ internal sealed class ComposerMenuController
         MenuItem axisMenu = new() { Header = "Move _axis lock", ItemsSource = moveAxisMenuItems.Cast<object>().ToArray() };
         MenuItem modeMenu = new() { Header = "_Mode", ItemsSource = new object[] { selectionMenu, gizmoMenu, axisMenu } };
         MenuItem rendererMenu = new() { Header = "_Renderer", ItemsSource = rendererMenuItems.Cast<object>().ToArray() };
-        MenuItem renderMenu = new() { Header = "_Render", ItemsSource = new object[] { rendererMenu, new Separator(), wireframeMenuItem, lightingEditorMenuItem, renderSettingsMenuItem, studioMenuItem } };
+        MenuItem renderMenu = new() { Header = "_Render", ItemsSource = new object[] { rendererMenu, new Separator(), wireframeMenuItem, lightingEditorMenuItem, renderSettingsMenuItem, studioMenuItem, cameraMenuItem, motionMenuItem } };
 
         return new Menu
         {
