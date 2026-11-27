@@ -34,7 +34,7 @@ public sealed class HouseDriveTests
 
         Assert.Equal(new[] { "Establishing", "Tracking", "Arrival" }, scene.StudioCameras.Select(static c => c.Name));
         Assert.Equal(3, scene.StudioShots.Count);
-        Assert.Equal(40, scene.StudioShots.Sum(static s => s.FrameCount));
+        Assert.Equal(48, scene.StudioShots.Sum(static s => s.FrameCount));
         Assert.Equal(12, scene.MovieSettings.Fps);
         Assert.Equal("housedrive", scene.MovieSettings.OutputName);
 
@@ -54,15 +54,15 @@ public sealed class HouseDriveTests
         Scene scene = LoadMovie();
 
         IReadOnlyList<StudioFrame> frames = StudioTimeline.ResolveFrames(scene.StudioCameras, scene.StudioShots);
-        Assert.Equal(40, frames.Count);
+        Assert.Equal(48, frames.Count);
 
         MotionTrack track = Assert.Single(scene.MotionTracks);
         MotionPose? start = track.Sample(0);
-        MotionPose? end = track.Sample(39);
+        MotionPose? end = track.Sample(47);
         Assert.NotNull(start);
         Assert.NotNull(end);
         Assert.True(Math.Abs(start.Position.X - end.Position.X) > 5.0);
-        Assert.Equal(0.0, start.Rotation.Y, precision: 9);
-        Assert.Equal(-Math.PI / 2.0, end.Rotation.Y, precision: 9);
+        Assert.Equal(Math.PI, start.Rotation.Y, precision: 9);
+        Assert.Equal(Math.PI / 2.0, end.Rotation.Y, precision: 9);
     }
 }

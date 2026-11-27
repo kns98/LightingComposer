@@ -52,3 +52,5 @@ light flags still apply. Movies are capped at 360 frames.
 `models/HouseDrive/HouseDrive.lscene` stages a toy car driving up to the
 house: three cameras, three shots (orbit, locked-off tracking, push-in), and
 one four-keyframe track whose mid-timeline yaw snap hides inside a cut.
+The rendered `models/HouseDrive/housedrive.gif` next to it shows the expected
+result; re-render it with `render models/HouseDrive/HouseDrive.lscene --timeline`.
