@@ -1,4 +1,6 @@
+using LightingShowcase.CameraSystem;
 using LightingShowcase.Math3D;
+using LightingShowcase.Rendering;
 using LightingShowcase.SceneGraph;
 using Xunit;
 
@@ -78,5 +80,25 @@ public sealed class HouseDriveTests
         Assert.Equal(Vec3.Zero, track.Keys[1].Rotation);
         Assert.Equal(-Math.PI / 2.0, track.Keys[2].Rotation.Y, precision: 9);
         Assert.Equal(new Vec3(11, 0, 0), track.Keys[3].Position);
+    }
+
+    [Fact]
+    public void HouseDrive_ShadowedFloorHasNoAcneBanding()
+    {
+        Scene scene = LoadMovie();
+        CameraDefinition view = new() { Position = new Vec3(-16, 2.2, -1.5), Target = new Vec3(-11, 1, -2) };
+        RenderImage image = ShadowRasterRenderer.Render(scene, view.Position, view.ToBasis(), 480, 360,
+            CancellationToken.None, out string details);
+
+        Assert.Contains("shadowMaps=3", details, StringComparison.Ordinal);
+        int min = 255;
+        int max = 0;
+        for (int x = 2; x <= 36; x++)
+        {
+            int green = (int)((image.PackedRgba32[180 * 480 + x] >> 8) & 0xFF);
+            min = Math.Min(min, green);
+            max = Math.Max(max, green);
+        }
+        Assert.True(max - min <= 4, $"Road banding detected: green ranged {min}..{max}.");
     }
 }

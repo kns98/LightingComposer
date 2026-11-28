@@ -45,6 +45,18 @@ internal readonly struct ShadowProjection
         return new ShadowProjection(origin, f, r, u, true, 1.0, Math.Tan(fovRadians * 0.5), farPlane, bias);
     }
 
+    /// <summary>Computes a slope-scaled depth bias for one surface normal and depth.</summary>
+    public double DepthBias(Vec3 normal, double depth, int size)
+    {
+        double texel = perspective
+            ? 2.0 * Math.Max(depth, 1e-6) * tanHalfFov / Math.Max(1, size)
+            : 2.0 * halfExtent / Math.Max(1, size);
+        double facing = Math.Abs(normal.Dot(forward));
+        double lateral = Math.Max(Math.Abs(normal.Dot(right)), Math.Abs(normal.Dot(up)));
+        double slope = lateral / Math.Max(facing, 0.25);
+        return Bias + texel * slope * 2.0;
+    }
+
     /// <summary>Projects one world point into shadow map coordinates.</summary>
     public bool TryProject(Vec3 point, int width, int height, out ProjectedVertex projected)
     {

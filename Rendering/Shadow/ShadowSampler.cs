@@ -23,7 +23,8 @@ internal static class ShadowSampler
             return 1.0;
 
         double storedDepth = map.Depth[sy * map.Size + sx];
-        double visibility = (!double.IsFinite(storedDepth) || p.Z <= storedDepth + map.Projection.Bias) ? 1.0 : 0.0;
+        double bias = map.Projection.DepthBias(normal, p.Z, map.Size);
+        double visibility = (!double.IsFinite(storedDepth) || p.Z <= storedDepth + bias) ? 1.0 : 0.0;
         return 0.30 + visibility * 0.70;
     }
 
@@ -39,6 +40,7 @@ internal static class ShadowSampler
 
         int centerX = (int)Math.Round(p.X);
         int centerY = (int)Math.Round(p.Y);
+        double bias = map.Projection.DepthBias(normal, p.Z, map.Size);
         double lit = 0.0;
         double samples = 0.0;
         for (int oy = -1; oy <= 1; oy++)
@@ -53,7 +55,7 @@ internal static class ShadowSampler
                     continue;
 
                 double storedDepth = map.Depth[sy * map.Size + sx];
-                if (!double.IsFinite(storedDepth) || p.Z <= storedDepth + map.Projection.Bias)
+                if (!double.IsFinite(storedDepth) || p.Z <= storedDepth + bias)
                     lit += 1.0;
                 samples += 1.0;
             }
