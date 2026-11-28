@@ -26,6 +26,20 @@ Model licenses: StainedGlassLamp under CC-BY 4.0 (Wayfair); ToyCar public domain
 
 Texture licenses: the `textures/` material library ships CC0 1K maps from Poly Haven (brick, concrete, wood, marble, denim, metal); see `textures/TEXTURES_LICENSES.md` for per-file credits.
 
+### Animation Studio sample — HouseDrive
+
+![▶ Toy car driving up to the house, Animation Studio sample movie](models/HouseDrive/housedrive.gif)
+
+A 48-frame movie at 12 fps rendered from `models/HouseDrive/HouseDrive.lscene`: a toy car drives up the road to the house across three shots — an establishing orbit, a locked-off tracking shot that holds steady while the car passes, and an arrival push-in. The car's motion is one four-keyframe track (drive forward, snap turn hidden in a cut, final drive), with later keys stored as deltas from the previous key so early keys ripple through the motion.
+
+Define cameras in **Render → Cameras…** (positionable in the viewport like lights), keyframe motion in **Render → Motion…**, assemble shots and render from **Render → Animation Studio…** to a PNG sequence plus GIF. Re-render headless with:
+
+```bash
+./run.sh render ./models/HouseDrive/HouseDrive.lscene --timeline
+```
+
+See [Animation Studio](docs/ANIMATION_STUDIO.md) for the full workflow.
+
 ### Render times
 
 AMD Ryzen 3 7320U (8 threads), AMD Radeon integrated graphics, 8 GB RAM, Windows 11, .NET 10. Steady-state time per frame (median; first frame excluded as one-time scene upload).
@@ -66,4 +80,4 @@ Requires the .NET 10 SDK and, for Vulkan modes, a Vulkan-capable driver. When a 
 
 ## Docs
 
-[Primitives](docs/PARAMETERIZED_PRIMITIVES.md) · [Materials](docs/MATERIAL_EDITING.md) · [Lighting](docs/LIGHTING_EDITOR.md) · [Mesh editing](docs/MESH_EDITING.md) · [Transform preview](docs/GIZMO_TRANSFORM_PREVIEW.md)
+[Primitives](docs/PARAMETERIZED_PRIMITIVES.md) · [Materials](docs/MATERIAL_EDITING.md) · [Lighting](docs/LIGHTING_EDITOR.md) · [Mesh editing](docs/MESH_EDITING.md) · [Transform preview](docs/GIZMO_TRANSFORM_PREVIEW.md) · [Animation Studio](docs/ANIMATION_STUDIO.md)
